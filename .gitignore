@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+backend/.env
+backend/.venv
 
 # Dependencies and build
 node_modules

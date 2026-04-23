@@ -1,0 +1,1 @@
+"""Shopify dashboard FastAPI backend."""
