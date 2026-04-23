@@ -4,6 +4,8 @@
 .env.*.local
 backend/.env
 backend/.venv
+__pycache__/
+*.py[cod]
 
 # Dependencies and build
 node_modules
