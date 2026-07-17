@@ -24,13 +24,13 @@ export function DashboardLayout() {
           <div className="flex min-w-0 items-center gap-3">
             <img
               src={LOGO_SRC}
-              alt="Training Systems"
+              alt="Future Garment Group"
               className="h-10 w-10 shrink-0 object-contain"
               decoding="async"
             />
             <div className="min-w-0">
               <h1 className="truncate text-base font-semibold text-gray-900 sm:text-lg">
-                Training Systems
+                Future Garment Group
               </h1>
               <p className="truncate text-xs text-gray-500 sm:text-sm">Employee Knowledge Base</p>
             </div>
