@@ -13,12 +13,14 @@ import { BrandHubDetail } from "./components/BrandHubDetail";
 import { CreativeAssetsPage } from "./components/CreativeAssetsPage";
 import { TrainingCenterPage } from "./components/TrainingCenterPage";
 import { TrainingModuleDetail } from "./components/TrainingModuleDetail";
+import { NotFoundPage, RouteErrorPage } from "./components/RouteErrorPage";
 
 export const router = createBrowserRouter([
-  { path: "/admin", Component: AdminPage },
+  { path: "/admin", Component: AdminPage, errorElement: <RouteErrorPage /> },
   {
     path: "/",
     Component: DashboardLayout,
+    errorElement: <RouteErrorPage />,
     children: [
       { index: true, Component: SystemsOverview },
       { path: "sops/create", Component: CreateSOP },
@@ -32,6 +34,8 @@ export const router = createBrowserRouter([
       { path: "our-mission", Component: MissionPage },
       { path: "system/:id", Component: SystemDetail },
       { path: "create", Component: CreateSystem },
+      { path: "*", Component: NotFoundPage },
     ],
   },
+  { path: "*", Component: NotFoundPage },
 ]);

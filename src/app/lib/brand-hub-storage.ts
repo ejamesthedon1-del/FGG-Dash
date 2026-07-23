@@ -88,7 +88,14 @@ export function getBrands(): BrandProfile[] {
 
 export function getBrandBySlug(slug: string | undefined): BrandProfile | undefined {
   if (!slug) return undefined;
-  return getBrands().find((b) => b.id === slug);
+  const key = slug.trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    livdon: "live-don",
+    "liv-don": "live-don",
+    sinners: "sinners-testimony",
+  };
+  const id = aliases[key] ?? key;
+  return getBrands().find((b) => b.id === id);
 }
 
 /** Persist partial updates for a catalog id (future admin UI). */
