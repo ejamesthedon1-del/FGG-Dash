@@ -47,8 +47,9 @@ import {
 } from "../lib/shopify-dashboard";
 import {
   getCostsForBrand,
+  fetchProductCostsForBrand,
+  persistProductCostsForBrand,
   productionCostForUnits,
-  saveProductCostsForBrand,
   type ProductUnitCost,
   unitProductionCost,
 } from "../lib/brand-hub-product-costs";
@@ -273,6 +274,18 @@ export function BrandHubDetail() {
   useEffect(() => {
     reloadBrand();
   }, [reloadBrand]);
+
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    setProductCosts(getCostsForBrand(slug));
+    void fetchProductCostsForBrand(slug).then((costs) => {
+      if (!cancelled) setProductCosts(costs);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   useEffect(() => {
     window.addEventListener("fgg-storage-sync", reloadBrand);
@@ -540,9 +553,9 @@ export function BrandHubDetail() {
       },
     };
     setProductCosts(next);
-    if (!saveProductCostsForBrand(slug, next)) {
-      toast.error("Could not save product costs — storage may be full.");
-    }
+    void persistProductCostsForBrand(slug, next).then((ok) => {
+      if (!ok) toast.error("Could not save product costs to the server.");
+    });
   };
 
   const productionToday = productionCostForUnits(dailySoldItems, productCosts);

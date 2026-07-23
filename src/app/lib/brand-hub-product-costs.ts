@@ -1,4 +1,5 @@
 import { writeLocalAndSync } from "@/lib/synced-storage";
+import { apiUrl } from "./api-base";
 
 export const PRODUCT_COSTS_KEY = "brand-hub-product-costs-v1";
 
@@ -54,6 +55,55 @@ export function saveProductCostsForBrand(
 
 export function getCostsForBrand(brandSlug: string): Record<string, ProductUnitCost> {
   return { ...(loadProductCosts()[brandSlug] ?? {}) };
+}
+
+/** Load costs from Railway (source of truth), fall back to local cache. */
+export async function fetchProductCostsForBrand(
+  brandSlug: string,
+): Promise<Record<string, ProductUnitCost>> {
+  try {
+    const res = await fetch(
+      apiUrl(`/api/product-costs?brand=${encodeURIComponent(brandSlug)}`),
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = (await res.json()) as {
+      costs?: Record<string, { garmentCost?: number; laborCost?: number }>;
+    };
+    const remote = body.costs ?? {};
+    const normalized: Record<string, ProductUnitCost> = {};
+    for (const [title, cost] of Object.entries(remote)) {
+      normalized[title] = {
+        garmentCost: Number(cost?.garmentCost) || 0,
+        laborCost: Number(cost?.laborCost) || 0,
+      };
+    }
+    saveProductCostsForBrand(brandSlug, normalized);
+    return normalized;
+  } catch {
+    return getCostsForBrand(brandSlug);
+  }
+}
+
+/** Persist to Railway + local cache. */
+export async function persistProductCostsForBrand(
+  brandSlug: string,
+  costs: Record<string, ProductUnitCost>,
+): Promise<boolean> {
+  const localOk = saveProductCostsForBrand(brandSlug, costs);
+  try {
+    const res = await fetch(
+      apiUrl(`/api/product-costs?brand=${encodeURIComponent(brandSlug)}`),
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ costs }),
+      },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return true;
+  } catch {
+    return localOk;
+  }
 }
 
 export type SoldUnits = { name: string; units: number };

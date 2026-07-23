@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -21,3 +21,12 @@ class ShopifyqlRequest(BaseModel):
     """Raw ShopifyQL string; requires read_reports on the app."""
 
     query: str = Field(..., min_length=1, description="e.g. FROM sales SHOW total_sales SINCE today")
+
+
+class ProductUnitCostBody(BaseModel):
+    garmentCost: float = 0
+    laborCost: float = 0
+
+
+class ProductCostsPutRequest(BaseModel):
+    costs: Dict[str, ProductUnitCostBody] = Field(default_factory=dict)

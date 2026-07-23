@@ -6,10 +6,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .schemas import ProductCreateRequest, ProductRenameRequest, ShopifyqlRequest
+from .schemas import (
+    ProductCostsPutRequest,
+    ProductCreateRequest,
+    ProductRenameRequest,
+    ShopifyqlRequest,
+)
 from .shopify import ShopifyGraphQLError, get_shopify_client
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
+from . import product_costs_store
 
 app = FastAPI(title="Shopify Dashboard Backend")
 
@@ -63,6 +69,25 @@ def local_date_str(dt: datetime, tz: ZoneInfo) -> str:
 @app.get("/health")
 async def health() -> dict:
     return {"ok": True}
+
+
+@app.get("/api/product-costs")
+async def get_product_costs(brand: str = "live-don") -> dict:
+    """Persistent garment+labor costs per product title (shared across all users/devices)."""
+    brand_key = resolve_brand(brand)
+    costs = product_costs_store.load_brand(brand_key)
+    return {"brand": brand_key, "costs": costs}
+
+
+@app.put("/api/product-costs")
+async def put_product_costs(body: ProductCostsPutRequest, brand: str = "live-don") -> dict:
+    brand_key = resolve_brand(brand)
+    payload = {
+        title: {"garmentCost": c.garmentCost, "laborCost": c.laborCost}
+        for title, c in body.costs.items()
+    }
+    saved = product_costs_store.save_brand(brand_key, payload)
+    return {"brand": brand_key, "costs": saved}
 
 
 @app.post("/api/slack/test")

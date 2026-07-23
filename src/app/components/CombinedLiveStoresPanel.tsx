@@ -28,7 +28,7 @@ import {
   type ShopifyBrandKpis,
 } from "../lib/shopify-dashboard";
 import {
-  getCostsForBrand,
+  fetchProductCostsForBrand,
   productionCostForUnits,
 } from "../lib/brand-hub-product-costs";
 import { cn } from "./ui/utils";
@@ -65,8 +65,8 @@ function money(n: number, currency = "USD") {
   return formatShopifyMoney(n, currency);
 }
 
-function buildSlice(slug: string, data: ShopifyBrandKpis): BrandSlice {
-  const costs = getCostsForBrand(slug);
+async function buildSlice(slug: string, data: ShopifyBrandKpis): Promise<BrandSlice> {
+  const costs = await fetchProductCostsForBrand(slug);
   const productionMonth = productionCostForUnits(data.monthItems ?? [], costs).total;
   const productionToday = productionCostForUnits(data.dailyItems ?? [], costs).total;
   const monthFees = Number(data.monthFees) || 0;
@@ -184,7 +184,7 @@ export function CombinedLiveStoresPanel() {
         slugs.map(async (slug) => {
           try {
             const data = await fetchShopifyBrandKpis(slug);
-            return buildSlice(slug, data);
+            return await buildSlice(slug, data);
           } catch (err) {
             return {
               slug,
