@@ -1,3 +1,5 @@
+import { apiUrl } from "./api-base";
+
 /** Brands whose Brand Hub KPIs pull from the Shopify backend. */
 export const SHOPIFY_LIVE_BRAND_SLUGS = new Set(["live-don", "sinners-testimony"]);
 
@@ -87,7 +89,9 @@ export function formatDailyItems(
 }
 
 export async function fetchShopifyBrandKpis(brand: string): Promise<ShopifyBrandKpis> {
-  const res = await fetch(`/api/shopify/brand-kpis?brand=${encodeURIComponent(brand)}`);
+  const res = await fetch(
+    apiUrl(`/api/shopify/brand-kpis?brand=${encodeURIComponent(brand)}`),
+  );
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -102,7 +106,9 @@ export async function fetchShopifyBrandKpis(brand: string): Promise<ShopifyBrand
 }
 
 export async function fetchShopifyProducts(brand: string): Promise<ShopifyProduct[]> {
-  const res = await fetch(`/api/shopify/products?brand=${encodeURIComponent(brand)}`);
+  const res = await fetch(
+    apiUrl(`/api/shopify/products?brand=${encodeURIComponent(brand)}`),
+  );
   if (!res.ok) {
     throw new Error(`Products request failed (${res.status})`);
   }
