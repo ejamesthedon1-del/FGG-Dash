@@ -1,6 +1,6 @@
 import { Outlet, Link, NavLink, useLocation } from "react-router";
 import { Button } from "./ui/button";
-import { BookOpen, ClipboardList, LayoutDashboard, Plus, Shield, Sparkles, Target } from "lucide-react";
+import { BookOpen, ClipboardList, FolderOpen, LayoutDashboard, Plus, Shield, Sparkles, Target } from "lucide-react";
 import { cn } from "./ui/utils";
 
 const LOGO_SRC = "/logo.svg";
@@ -102,6 +102,17 @@ export function DashboardLayout() {
             >
               <Sparkles className="h-4 w-4 shrink-0 opacity-80" />
               Brand Hub
+            </NavLink>
+            <NavLink
+              to="/creative-assets"
+              className={({ isActive }) =>
+                sidebarNavClass({
+                  isActive: isActive || pathname.startsWith("/creative-assets/"),
+                })
+              }
+            >
+              <FolderOpen className="h-4 w-4 shrink-0 opacity-80" />
+              Creative Assets
             </NavLink>
             <NavLink
               to="/training-center"

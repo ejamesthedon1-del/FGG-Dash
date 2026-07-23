@@ -96,8 +96,7 @@ export const BRAND_CATALOG: BrandProfile[] = [
   {
     id: "live-don",
     name: "Liv Don",
-    shortDescription:
-      "Performance-meets-lifestyle line with tighter drop cadence — prioritize speed, accuracy, and premium unboxing.",
+    shortDescription: "",
     status: "Active",
     positioningAudience:
       "Fans of artist-led drops and limited runs; expect higher touch on social and post-purchase comms.",

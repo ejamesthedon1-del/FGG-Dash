@@ -10,6 +10,7 @@ import { MissionPage } from "./components/MissionPage";
 import { AdminPage } from "./components/AdminPage";
 import { BrandHubPage } from "./components/BrandHubPage";
 import { BrandHubDetail } from "./components/BrandHubDetail";
+import { CreativeAssetsPage } from "./components/CreativeAssetsPage";
 import { TrainingCenterPage } from "./components/TrainingCenterPage";
 import { TrainingModuleDetail } from "./components/TrainingModuleDetail";
 
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: "sops", Component: SOPsPage },
       { path: "brand-hub", Component: BrandHubPage },
       { path: "brand-hub/:slug", Component: BrandHubDetail },
+      { path: "creative-assets", Component: CreativeAssetsPage },
       { path: "training-center", Component: TrainingCenterPage },
       { path: "training-center/:moduleId", Component: TrainingModuleDetail },
       { path: "our-mission", Component: MissionPage },

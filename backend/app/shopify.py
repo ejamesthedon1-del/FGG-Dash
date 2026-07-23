@@ -13,14 +13,17 @@ class ShopifyGraphQLError(RuntimeError):
 
 
 class ShopifyClient:
-    def __init__(self) -> None:
+    def __init__(self, store_domain: str, client_id: str, client_secret: str, api_version: str) -> None:
+        self.store_domain = store_domain.strip().removeprefix("https://").rstrip("/")
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.api_version = api_version
         self._access_token: Optional[str] = None
         self._expires_at: Optional[datetime] = None
 
     def _urls(self) -> tuple[str, str, str]:
-        s = get_settings()
-        base = f"https://{s.shopify_store_domain}"
-        graphql = f"{base}/admin/api/{s.shopify_api_version}/graphql.json"
+        base = f"https://{self.store_domain}"
+        graphql = f"{base}/admin/api/{self.api_version}/graphql.json"
         token = f"{base}/admin/oauth/access_token"
         return base, graphql, token
 
@@ -31,15 +34,14 @@ class ShopifyClient:
             return self._access_token
 
         _, _, token_url = self._urls()
-        s = get_settings()
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 token_url,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 data={
                     "grant_type": "client_credentials",
-                    "client_id": s.shopify_client_id,
-                    "client_secret": s.shopify_client_secret,
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
                 },
             )
             response.raise_for_status()
@@ -82,10 +84,6 @@ class ShopifyClient:
         return data
 
     async def run_shopifyql(self, shopifyql: str) -> Dict[str, Any]:
-        """
-        Run a ShopifyQL report via Admin GraphQL. Requires read_reports (and often Shopify Plus
-        for some datasets). Use for analytics-aligned dashboard cards.
-        """
         gql = """
         query RunShopifyql($shopifyQl: String!) {
           shopifyqlQuery(query: $shopifyQl) {
@@ -111,4 +109,56 @@ class ShopifyClient:
         return block
 
 
-shopify_client = ShopifyClient()
+_BRAND_CLIENTS: Dict[str, ShopifyClient] = {}
+
+
+def _normalize_domain(v: str) -> str:
+    v = v.strip()
+    if v.startswith("https://"):
+        v = v[len("https://") :]
+    return v.rstrip("/")
+
+
+def get_shopify_client(brand: str = "live-don") -> ShopifyClient:
+    """Return a Shopify Admin client for the given Brand Hub slug."""
+    key = (brand or "live-don").strip().lower()
+    if key in _BRAND_CLIENTS:
+        return _BRAND_CLIENTS[key]
+
+    s = get_settings()
+    if key in {"live-don", "livdon", "default", ""}:
+        client = ShopifyClient(
+            store_domain=s.shopify_store_domain,
+            client_id=s.shopify_client_id,
+            client_secret=s.shopify_client_secret,
+            api_version=s.shopify_api_version,
+        )
+    elif key in {"sinners-testimony", "sinners"}:
+        if not (
+            s.shopify_sinners_store_domain
+            and s.shopify_sinners_client_id
+            and s.shopify_sinners_client_secret
+        ):
+            raise RuntimeError(
+                "Sinners Testimony Shopify is not configured "
+                "(SHOPIFY_SINNERS_STORE_DOMAIN / CLIENT_ID / CLIENT_SECRET)"
+            )
+        client = ShopifyClient(
+            store_domain=_normalize_domain(s.shopify_sinners_store_domain),
+            client_id=s.shopify_sinners_client_id,
+            client_secret=s.shopify_sinners_client_secret,
+            api_version=s.shopify_api_version,
+        )
+    else:
+        raise RuntimeError(f"Unknown Shopify brand key: {brand}")
+
+    _BRAND_CLIENTS[key] = client
+    return client
+
+
+# Backward-compatible default (Liv Don)
+shopify_client = None  # set after settings load via get_shopify_client
+
+
+def default_shopify_client() -> ShopifyClient:
+    return get_shopify_client("live-don")

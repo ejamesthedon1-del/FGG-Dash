@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -6,7 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .schemas import ProductCreateRequest, ProductRenameRequest, ShopifyqlRequest
-from .shopify import ShopifyGraphQLError, shopify_client
+from .shopify import ShopifyGraphQLError, get_shopify_client
+from .meta import MetaAdsError, meta_ads_client
+from .slack import SlackError, slack_client
 
 app = FastAPI(title="Shopify Dashboard Backend")
 
@@ -18,10 +21,184 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+BRAND_LABELS = {
+    "live-don": "Liv Don",
+    "sinners-testimony": "Sinners Testimony",
+}
+
+
+def resolve_brand(brand: str | None) -> str:
+    key = (brand or "live-don").strip().lower()
+    if key in {"livdon", "default", ""}:
+        return "live-don"
+    if key in {"sinners"}:
+        return "sinners-testimony"
+    return key
+
+
+async def shop_timezone(brand: str = "live-don") -> ZoneInfo:
+    client = get_shopify_client(brand)
+    data = await client.graphql(
+        """
+        query ShopTimezone {
+          shop {
+            ianaTimezone
+          }
+        }
+        """
+    )
+    tz_name = (data.get("shop") or {}).get("ianaTimezone") or "UTC"
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return ZoneInfo("UTC")
+
+
+def local_date_str(dt: datetime, tz: ZoneInfo) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(tz).date().isoformat()
+
 
 @app.get("/health")
 async def health() -> dict:
     return {"ok": True}
+
+
+@app.post("/api/slack/test")
+async def slack_test() -> dict:
+    """Send a simple test message to the configured Slack webhook."""
+    if not slack_client.configured():
+        raise HTTPException(status_code=503, detail="SLACK_WEBHOOK_URL is not set")
+    try:
+        await slack_client.post_text("✅ FGG Order Alerts connected — Slack webhook is working.")
+        return {"ok": True}
+    except SlackError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/slack/notify-todays-orders")
+async def slack_notify_todays_orders(brand: str = "live-don") -> dict:
+    """Pull today's Shopify orders and post a summary to Slack for ops."""
+    if not slack_client.configured():
+        raise HTTPException(status_code=503, detail="SLACK_WEBHOOK_URL is not set")
+
+    brand_key = resolve_brand(brand)
+    label = BRAND_LABELS.get(brand_key, brand_key)
+
+    try:
+        client = get_shopify_client(brand_key)
+        tz = await shop_timezone(brand_key)
+        now_local = datetime.now(timezone.utc).astimezone(tz)
+        today = now_local.date().isoformat()
+
+        query = """
+        query TodayOrders($queryString: String!) {
+          orders(first: 100, sortKey: CREATED_AT, reverse: true, query: $queryString) {
+            edges {
+              node {
+                name
+                createdAt
+                lineItems(first: 20) {
+                  edges {
+                    node {
+                      title
+                      name
+                      quantity
+                      variantTitle
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+        data = await client.graphql(query, {"queryString": f"created_at:>={today}"})
+        orders_out: list[dict] = []
+
+        for edge in (data.get("orders") or {}).get("edges") or []:
+            node = edge["node"]
+            created_dt = datetime.fromisoformat((node.get("createdAt") or "").replace("Z", "+00:00"))
+            if local_date_str(created_dt, tz) < today:
+                continue
+            items = []
+            for li in (node.get("lineItems") or {}).get("edges") or []:
+                item = li["node"]
+                title = (item.get("title") or item.get("name") or "Item").strip()
+                size = (item.get("variantTitle") or "").strip()
+                # variantTitle is often "Default Title" for one-size products
+                if size.lower() in {"", "default title"}:
+                    # Fallback: parse "PRODUCT - Size" from name
+                    full_name = (item.get("name") or "").strip()
+                    if " - " in full_name:
+                        maybe_size = full_name.rsplit(" - ", 1)[-1].strip()
+                        if maybe_size and maybe_size.lower() != title.lower():
+                            size = maybe_size
+                        else:
+                            size = ""
+                    else:
+                        size = ""
+                items.append(
+                    {
+                        "title": title,
+                        "size": size,
+                        "quantity": int(item.get("quantity") or 0),
+                    }
+                )
+            orders_out.append(
+                {
+                    "name": node.get("name"),
+                    "items": items,
+                }
+            )
+
+        payload = slack_client.format_orders_message(
+            brand=label,
+            date_label=today,
+            orders=orders_out,
+        )
+        await slack_client.post_payload(payload)
+        return {
+            "ok": True,
+            "brand": brand_key,
+            "orderCount": len(orders_out),
+            "date": today,
+            "orders": orders_out,
+        }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ShopifyGraphQLError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except SlackError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/meta/ads-spend-today")
+async def get_meta_ads_spend_today(brand: str = "live-don") -> dict:
+    """Meta ads spend for today. Pass ?brand=live-don or ?brand=sinners-testimony."""
+    brand_key = normalize_brand(brand)
+    if not meta_ads_client.configured(brand_key):
+        raise HTTPException(
+            status_code=503,
+            detail="Meta ads not configured for this brand (token / ad account missing).",
+        )
+    try:
+        # Prefer Shopify shop timezone so “today” matches Brand Hub sales day.
+        try:
+            tz = await shop_timezone(brand_key)
+            day = datetime.now(timezone.utc).astimezone(tz).date()
+        except Exception:
+            day = datetime.now(timezone.utc).date()
+        return await meta_ads_client.daily_spend(day, brand=brand_key)
+    except MetaAdsError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"Meta HTTP error: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.get("/api/shopify/daily-sales")
@@ -52,7 +229,7 @@ async def get_daily_sales() -> dict:
     query_string = f"created_at:>={today}"
 
     try:
-        data = await shopify_client.graphql(query, {"queryString": query_string})
+        data = await get_shopify_client("live-don").graphql(query, {"queryString": query_string})
         orders = data.get("orders", {}).get("edges") or []
 
         total_sales = 0.0
@@ -86,6 +263,240 @@ async def get_daily_sales() -> dict:
             "orderCount": order_count,
             "orders": rows,
         }
+    except ShopifyGraphQLError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"Shopify HTTP error: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/shopify/brand-kpis")
+async def get_brand_kpis(brand: str = "live-don") -> dict:
+    """Today + month-to-date KPIs. Pass ?brand=live-don or ?brand=sinners-testimony."""
+    brand_key = resolve_brand(brand)
+    try:
+        client = get_shopify_client(brand_key)
+        tz = await shop_timezone(brand_key)
+        now_local = datetime.now(timezone.utc).astimezone(tz)
+        today = now_local.date().isoformat()
+        month_start = now_local.date().replace(day=1).isoformat()
+
+        query = """
+        query BrandKpiOrders($queryString: String!, $cursor: String) {
+          orders(first: 100, after: $cursor, sortKey: CREATED_AT, reverse: true, query: $queryString) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            edges {
+              node {
+                createdAt
+                currentTotalPriceSet {
+                  shopMoney {
+                    amount
+                    currencyCode
+                  }
+                }
+                totalShippingPriceSet {
+                  shopMoney {
+                    amount
+                    currencyCode
+                  }
+                }
+                name
+                lineItems(first: 50) {
+                  edges {
+                    node {
+                      name
+                      title
+                      quantity
+                    }
+                  }
+                }
+                transactions(first: 20) {
+                  status
+                  kind
+                  fees {
+                    amount {
+                      amount
+                      currencyCode
+                    }
+                    type
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+
+        # Shopify order search dates are evaluated in shop timezone.
+        query_string = f"created_at:>={month_start}"
+
+        currency = "USD"
+        daily_sales = 0.0
+        month_sales = 0.0
+        daily_orders = 0
+        month_orders = 0
+        daily_fees = 0.0
+        month_fees = 0.0
+        daily_shipping = 0.0
+        month_shipping = 0.0
+        units_by_product: dict[str, int] = {}
+        daily_units_by_product: dict[str, int] = {}
+        daily_order_shipping: list[dict] = []
+
+        cursor = None
+        pages = 0
+        while pages < 20:
+            variables: dict = {"queryString": query_string}
+            if cursor:
+                variables["cursor"] = cursor
+
+            data = await client.graphql(query, variables)
+            block = data.get("orders") or {}
+            edges = block.get("edges") or []
+            page_info = block.get("pageInfo") or {}
+
+            for edge in edges:
+                node = edge["node"]
+                created_raw = node.get("createdAt") or ""
+                created_dt = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+                created_local = local_date_str(created_dt, tz)
+                is_today = created_local >= today
+
+                shop = ((node.get("currentTotalPriceSet") or {}).get("shopMoney")) or {}
+                amount = float(shop.get("amount") or 0)
+                currency = shop.get("currencyCode") or currency
+
+                ship = ((node.get("totalShippingPriceSet") or {}).get("shopMoney")) or {}
+                shipping_amount = float(ship.get("amount") or 0)
+
+                order_fees = 0.0
+                for txn in node.get("transactions") or []:
+                    if (txn.get("status") or "").upper() != "SUCCESS":
+                        continue
+                    for fee in txn.get("fees") or []:
+                        fee_amt = float(((fee.get("amount") or {}).get("amount")) or 0)
+                        order_fees += fee_amt
+
+                month_sales += amount
+                month_orders += 1
+                month_fees += order_fees
+                month_shipping += shipping_amount
+                if is_today:
+                    daily_sales += amount
+                    daily_orders += 1
+                    daily_fees += order_fees
+                    daily_shipping += shipping_amount
+                    daily_order_shipping.append(
+                        {
+                            "name": node.get("name") or "",
+                            "shipping": round(shipping_amount, 2),
+                            "orderTotal": round(amount, 2),
+                        }
+                    )
+
+                for li in (node.get("lineItems") or {}).get("edges") or []:
+                    item = li["node"]
+                    label = (item.get("title") or item.get("name") or "Unknown").strip()
+                    qty = int(item.get("quantity") or 0)
+                    if label and qty:
+                        units_by_product[label] = units_by_product.get(label, 0) + qty
+                        if is_today:
+                            daily_units_by_product[label] = (
+                                daily_units_by_product.get(label, 0) + qty
+                            )
+
+            pages += 1
+            if not page_info.get("hasNextPage"):
+                break
+            cursor = page_info.get("endCursor")
+            if not cursor:
+                break
+
+        top_name = None
+        top_units = 0
+        for name, units in units_by_product.items():
+            if units > top_units:
+                top_name = name
+                top_units = units
+
+        daily_items = [
+            {"name": name, "units": units}
+            for name, units in sorted(
+                daily_units_by_product.items(), key=lambda kv: (-kv[1], kv[0])
+            )
+        ]
+        month_items = [
+            {"name": name, "units": units}
+            for name, units in sorted(
+                units_by_product.items(), key=lambda kv: (-kv[1], kv[0])
+            )
+        ]
+        daily_item_units = sum(daily_units_by_product.values())
+        month_item_units = sum(units_by_product.values())
+
+        ads_spend_today = None
+        ads_spend_month = None
+        ads_error = None
+        if meta_ads_client.configured(brand_key):
+            try:
+                ads_today = await meta_ads_client.daily_spend(
+                    now_local.date(), brand=brand_key
+                )
+                ads_spend_today = {
+                    "spend": round(float(ads_today["spend"]), 2),
+                    "currency": ads_today.get("currency") or "USD",
+                    "impressions": ads_today.get("impressions") or 0,
+                    "clicks": ads_today.get("clicks") or 0,
+                    "date": ads_today.get("date"),
+                }
+                ads_month = await meta_ads_client.spend_range(
+                    now_local.date().replace(day=1),
+                    now_local.date(),
+                    brand=brand_key,
+                )
+                ads_spend_month = {
+                    "spend": round(float(ads_month["spend"]), 2),
+                    "currency": ads_month.get("currency") or "USD",
+                    "impressions": ads_month.get("impressions") or 0,
+                    "clicks": ads_month.get("clicks") or 0,
+                    "since": ads_month.get("since"),
+                    "until": ads_month.get("until"),
+                }
+            except MetaAdsError as exc:
+                ads_error = str(exc)
+
+        return {
+            "brand": brand_key,
+            "date": today,
+            "monthStart": month_start,
+            "timezone": str(tz),
+            "currency": currency,
+            "dailySales": round(daily_sales, 2),
+            "dailyOrderCount": daily_orders,
+            "monthSales": round(month_sales, 2),
+            "monthOrderCount": month_orders,
+            "dailyFees": round(daily_fees, 2),
+            "monthFees": round(month_fees, 2),
+            "dailyShipping": round(daily_shipping, 2),
+            "monthShipping": round(month_shipping, 2),
+            "dailyOrderShipping": daily_order_shipping,
+            "dailyItems": daily_items,
+            "dailyItemUnits": daily_item_units,
+            "monthItems": month_items,
+            "monthItemUnits": month_item_units,
+            "topProduct": (
+                {"name": top_name, "units": top_units} if top_name else None
+            ),
+            "adsSpendToday": ads_spend_today,
+            "adsSpendMonth": ads_spend_month,
+            "adsError": ads_error,
+        }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ShopifyGraphQLError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except httpx.HTTPStatusError as exc:
@@ -128,7 +539,7 @@ async def get_orders() -> dict:
     """
 
     try:
-        data = await shopify_client.graphql(query)
+        data = await get_shopify_client("live-don").graphql(query)
         orders_out = []
 
         for edge in data.get("orders", {}).get("edges") or []:
@@ -160,7 +571,12 @@ async def get_orders() -> dict:
 
 
 @app.get("/api/shopify/products")
-async def get_products() -> dict:
+async def get_products(brand: str = "live-don") -> dict:
+    brand_key = resolve_brand(brand)
+    try:
+        client = get_shopify_client(brand_key)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     query = """
     query ProductsList {
       products(first: 50, sortKey: UPDATED_AT, reverse: true) {
@@ -179,7 +595,7 @@ async def get_products() -> dict:
     """
 
     try:
-        data = await shopify_client.graphql(query)
+        data = await client.graphql(query)
         products = [edge["node"] for edge in data.get("products", {}).get("edges") or []]
         return {"products": products}
     except ShopifyGraphQLError as exc:
@@ -224,7 +640,7 @@ async def create_product(payload: ProductCreateRequest) -> dict:
         product_input["tags"] = payload.tags
 
     try:
-        data = await shopify_client.graphql(mutation, {"product": product_input})
+        data = await get_shopify_client("live-don").graphql(mutation, {"product": product_input})
         result = data.get("productCreate") or {}
         errors = result.get("userErrors") or []
         if errors:
@@ -261,7 +677,7 @@ async def rename_product(payload: ProductRenameRequest) -> dict:
     """
 
     try:
-        data = await shopify_client.graphql(
+        data = await get_shopify_client("live-don").graphql(
             mutation,
             {"product": {"id": payload.product_id, "title": payload.new_title}},
         )
@@ -288,7 +704,7 @@ async def analytics_shopifyql(body: ShopifyqlRequest) -> dict:
     {"query": "FROM sales SHOW total_sales, orders SINCE today"}
     """
     try:
-        block = await shopify_client.run_shopifyql(body.query)
+        block = await get_shopify_client("live-don").run_shopifyql(body.query)
         return {
             "tableData": block.get("tableData"),
             "parseErrors": block.get("parseErrors") or [],
@@ -308,7 +724,7 @@ async def analytics_daily_sales_default() -> dict:
     """Default ShopifyQL aligned with Shopify Analytics-style totals (when scope/store allows)."""
     default_ql = "FROM sales SHOW total_sales, orders SINCE today"
     try:
-        block = await shopify_client.run_shopifyql(default_ql)
+        block = await get_shopify_client("live-don").run_shopifyql(default_ql)
         return {
             "query": default_ql,
             "tableData": block.get("tableData"),
