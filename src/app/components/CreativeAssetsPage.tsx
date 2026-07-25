@@ -629,7 +629,7 @@ export function CreativeAssetsPage() {
             ) : null}
             <Button
               size="sm"
-              className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+              className="gap-1.5"
               onClick={() => {
                 setAddName("");
                 setAddOpen(true);
@@ -686,7 +686,7 @@ export function CreativeAssetsPage() {
                   </Button>
                   <Button
                     size="sm"
-                    className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+                    className="gap-1.5"
                     onClick={() => {
                       setAddName("");
                       setAddOpen(true);

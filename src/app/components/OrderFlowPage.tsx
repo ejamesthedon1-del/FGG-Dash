@@ -608,7 +608,7 @@ export function OrderFlowPage() {
               Tip: in the print dialog, choose “Save as PDF” if you do not need paper.
             </p>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => setBlanksSlipOpen(false)}>
+              <Button type="button" variant="tertiary" onClick={() => setBlanksSlipOpen(false)}>
                 Close
               </Button>
               <Button

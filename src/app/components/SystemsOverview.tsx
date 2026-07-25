@@ -279,9 +279,9 @@ export function SystemsOverview() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="secondary"
+              variant="tertiary"
               size="sm"
-              className="gap-2 bg-white text-slate-900 hover:bg-slate-100"
+              className="gap-2 border-white/30 bg-white text-slate-900 hover:bg-slate-100"
               onClick={() => void loadFlow()}
               disabled={flowLoading}
             >
@@ -289,7 +289,7 @@ export function SystemsOverview() {
               Refresh live data
             </Button>
             <Link to="/order-flow">
-              <Button size="sm" className="gap-2 bg-blue-500 hover:bg-blue-400">
+              <Button size="sm" className="gap-2">
                 Open Order Flow
                 <ArrowRight className="h-4 w-4" />
               </Button>

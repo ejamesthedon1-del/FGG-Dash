@@ -264,13 +264,10 @@ export function SOPsPage() {
         </div>
         {isAdmin ? (
           <Link to="/sops/create">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-            >
+            <Button type="button" className="gap-2">
               <Plus className="h-4 w-4" />
               Create New SOP
-            </button>
+            </Button>
           </Link>
         ) : (
           <p className="text-sm text-gray-500">Sign in as admin to edit areas and sections.</p>
@@ -849,7 +846,7 @@ export function SOPsPage() {
             )}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setHubEdit(null)}>
+            <Button type="button" variant="tertiary" onClick={() => setHubEdit(null)}>
               Cancel
             </Button>
             <Button type="button" onClick={applyHubEdit}>

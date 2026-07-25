@@ -450,7 +450,7 @@ export function SOPForm({ mode, initialSOP }: SOPFormProps) {
         <Button onClick={handleSave} className="flex-1">
           {mode === "create" ? "Save procedure" : "Save changes"}
         </Button>
-        <Button variant="outline" onClick={() => navigate("/sops")}>
+        <Button variant="tertiary" onClick={() => navigate("/sops")}>
           Cancel
         </Button>
       </div>

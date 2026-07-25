@@ -331,7 +331,7 @@ export function CreateSystem() {
         <Button onClick={handleSave} className="flex-1">
           Create Training System
         </Button>
-        <Button variant="outline" onClick={() => navigate("/")}>
+        <Button variant="tertiary" onClick={() => navigate("/")}>
           Cancel
         </Button>
       </div>
