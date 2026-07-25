@@ -15,15 +15,26 @@ import { Textarea } from "./ui/textarea";
 import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
 import {
+  AlertTriangle,
   ArrowLeft,
+  ArrowLeftRight,
+  BookOpen,
+  Box,
   ChevronRight,
+  ClipboardCheck,
   ClipboardList,
   FileText,
   FolderOpen,
+  LifeBuoy,
   Maximize2,
   MoreVertical,
+  Package,
   Plus,
   Search,
+  ShieldAlert,
+  Sparkles,
+  Store,
+  type LucideIcon,
 } from "lucide-react";
 import { SOPsStorage, type SOP } from "../lib/storage";
 import { resolveSopNavPlacement } from "../lib/sop-structure";
@@ -53,66 +64,44 @@ type HubEditTarget =
   | { kind: "categoryBlurb"; categoryId: string }
   | { kind: "menuItemSubtitle"; categoryId: string; itemId: string };
 
-/** Cover art + emoji for Hexagon-style Knowledge Base cards (3-col grid). */
-const CATEGORY_VISUALS: Record<string, { emoji: string; coverClass: string }> = {
-  "start-here": {
-    emoji: "✈️",
-    coverClass:
-      "bg-[radial-gradient(ellipse_at_30%_20%,#d4d4d8_0%,transparent_50%),linear-gradient(145deg,#e8e8ec_0%,#b8b8c0_45%,#9ca3af_100%)]",
-  },
-  "daily-tasks": {
-    emoji: "📋",
-    coverClass:
-      "bg-[linear-gradient(160deg,#1e3a5f_0%,#3b82f6_40%,#93c5fd_100%)]",
-  },
-  fulfillment: {
-    emoji: "📦",
-    coverClass:
-      "bg-[linear-gradient(135deg,#0f766e_0%,#14b8a6_50%,#99f6e4_100%)]",
-  },
-  "customer-support": {
-    emoji: "💬",
-    coverClass:
-      "bg-[linear-gradient(145deg,#4c1d95_0%,#7c3aed_45%,#c4b5fd_100%)]",
-  },
-  "returns-refunds": {
-    emoji: "↩️",
-    coverClass:
-      "bg-[linear-gradient(150deg,#9a3412_0%,#ea580c_40%,#fdba74_100%)]",
-  },
-  inventory: {
-    emoji: "📚",
-    coverClass:
-      "bg-[url('data:image/svg+xml,%3Csvg width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cg fill=%22%239ca3af%22 fill-opacity=%220.35%22%3E%3Cpath d=%22M0 40L40 0H20L0 20M40 40V20L20 40%22/%3E%3C/g%3E%3C/svg%3E'),linear-gradient(180deg,#f5f0e8_0%,#d6cfc4_100%)]",
-  },
-  "store-operations": {
-    emoji: "🏪",
-    coverClass:
-      "bg-[linear-gradient(120deg,#1e293b_0%,#475569_40%,#cbd5e1_100%)]",
-  },
-  "fraud-risk-review": {
-    emoji: "🛡️",
-    coverClass:
-      "bg-[linear-gradient(160deg,#7f1d1d_0%,#dc2626_40%,#fca5a5_100%)]",
-  },
-  escalations: {
-    emoji: "🚨",
-    coverClass:
-      "bg-[linear-gradient(145deg,#713f12_0%,#d97706_45%,#fde68a_100%)]",
-  },
-  "brand-notes": {
-    emoji: "✨",
-    coverClass:
-      "bg-[linear-gradient(135deg,#831843_0%,#db2777_40%,#fbcfe8_100%)]",
-  },
+/** Light-gray cover + brand-blue icon (style 1 from the KB mock). */
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  "start-here": BookOpen,
+  "daily-tasks": ClipboardCheck,
+  fulfillment: Package,
+  "customer-support": LifeBuoy,
+  "returns-refunds": ArrowLeftRight,
+  inventory: Box,
+  "store-operations": Store,
+  "fraud-risk-review": ShieldAlert,
+  escalations: AlertTriangle,
+  "brand-notes": Sparkles,
 };
 
-function categoryVisual(categoryId: string) {
+function categoryIcon(categoryId: string): LucideIcon {
+  return CATEGORY_ICONS[categoryId] ?? FolderOpen;
+}
+
+function CategoryCover({
+  categoryId,
+  className,
+  menu,
+}: {
+  categoryId: string;
+  className?: string;
+  menu?: React.ReactNode;
+}) {
+  const Icon = categoryIcon(categoryId);
   return (
-    CATEGORY_VISUALS[categoryId] ?? {
-      emoji: "📁",
-      coverClass: "bg-[linear-gradient(145deg,#e5e7eb_0%,#9ca3af_100%)]",
-    }
+    <div
+      className={cn(
+        "relative flex w-full items-center justify-center bg-[#F3F4F6]",
+        className,
+      )}
+    >
+      <Icon className="h-10 w-10 text-brand sm:h-11 sm:w-11" strokeWidth={1.5} aria-hidden />
+      {menu}
+    </div>
   );
 }
 
@@ -561,7 +550,7 @@ export function SOPsPage() {
                   </Button>
                   <h3
                     className={cn(
-                      "text-2xl font-semibold text-gray-900",
+                      "flex items-center gap-2 text-2xl font-semibold text-gray-900",
                       isAdmin && "cursor-text select-text",
                     )}
                     onDoubleClick={
@@ -574,7 +563,10 @@ export function SOPsPage() {
                         : undefined
                     }
                   >
-                    <span className="mr-2">{categoryVisual(selectedCategory.id).emoji}</span>
+                    {(() => {
+                      const Icon = categoryIcon(selectedCategory.id);
+                      return <Icon className="h-6 w-6 text-brand" strokeWidth={1.75} aria-hidden />;
+                    })()}
                     {selectedCategory.title}
                   </h3>
                   <p
@@ -611,7 +603,7 @@ export function SOPsPage() {
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {selectedCategory.items.map((item) => {
                     const count = sopCountInSection(selectedCategory.id, item.id);
-                    const visual = categoryVisual(selectedCategory.id);
+                    const Icon = categoryIcon(selectedCategory.id);
                     return (
                       <button
                         key={item.id}
@@ -619,30 +611,34 @@ export function SOPsPage() {
                         className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-left shadow-sm transition-shadow hover:shadow-md"
                         onClick={() => scheduleNav(() => goToSops(selectedCategory.id, item.id))}
                       >
-                        <div className={cn("relative h-36 w-full", visual.coverClass)}>
-                          {isAdmin ? (
-                            <span
-                              role="presentation"
-                              className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-gray-600 shadow-sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openHubEdit(
-                                  {
-                                    kind: "menuItemTitle",
-                                    categoryId: selectedCategory.id,
-                                    itemId: item.id,
-                                  },
-                                  item.title,
-                                );
-                              }}
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </span>
-                          ) : null}
-                        </div>
+                        <CategoryCover
+                          categoryId={selectedCategory.id}
+                          className="h-36"
+                          menu={
+                            isAdmin ? (
+                              <span
+                                role="presentation"
+                                className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-gray-600 shadow-sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openHubEdit(
+                                    {
+                                      kind: "menuItemTitle",
+                                      categoryId: selectedCategory.id,
+                                      itemId: item.id,
+                                    },
+                                    item.title,
+                                  );
+                                }}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </span>
+                            ) : undefined
+                          }
+                        />
                         <div className="flex flex-1 flex-col gap-1 px-4 pb-4 pt-3">
-                          <p className="text-base font-semibold text-gray-900">
-                            <span className="mr-1.5">{visual.emoji}</span>
+                          <p className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                            <Icon className="h-4 w-4 shrink-0 text-brand" strokeWidth={1.75} aria-hidden />
                             {item.title}
                           </p>
                           <p className="line-clamp-2 text-sm leading-relaxed text-gray-500">
@@ -669,7 +665,7 @@ export function SOPsPage() {
                   {filteredStructure.map((category) => {
                     const count = sopCountInCategory(category.id);
                     const blurb = resolveCategoryBlurb(structure, category.id);
-                    const visual = categoryVisual(category.id);
+                    const Icon = categoryIcon(category.id);
                     const sections = category.items.length;
                     return (
                       <button
@@ -678,27 +674,31 @@ export function SOPsPage() {
                         className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-left shadow-sm transition-shadow hover:shadow-md"
                         onClick={() => scheduleNav(() => goToSections(category.id))}
                       >
-                        <div className={cn("relative h-40 w-full sm:h-44", visual.coverClass)}>
-                          {isAdmin ? (
-                            <span
-                              role="presentation"
-                              className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-gray-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openHubEdit(
-                                  { kind: "categoryTitle", categoryId: category.id },
-                                  category.title,
-                                );
-                              }}
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </span>
-                          ) : null}
-                        </div>
+                        <CategoryCover
+                          categoryId={category.id}
+                          className="h-40 sm:h-44"
+                          menu={
+                            isAdmin ? (
+                              <span
+                                role="presentation"
+                                className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-gray-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openHubEdit(
+                                    { kind: "categoryTitle", categoryId: category.id },
+                                    category.title,
+                                  );
+                                }}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </span>
+                            ) : undefined
+                          }
+                        />
                         <div className="flex flex-1 flex-col gap-1.5 px-4 pb-4 pt-3">
                           <p
                             className={cn(
-                              "text-base font-semibold text-gray-900",
+                              "flex items-center gap-2 text-base font-semibold text-gray-900",
                               isAdmin && "cursor-text select-text",
                             )}
                             onClick={isAdmin ? (e) => e.stopPropagation() : undefined}
@@ -715,7 +715,7 @@ export function SOPsPage() {
                                 : undefined
                             }
                           >
-                            <span className="mr-1.5">{visual.emoji}</span>
+                            <Icon className="h-4 w-4 shrink-0 text-brand" strokeWidth={1.75} aria-hidden />
                             {category.title}
                           </p>
                           <p
