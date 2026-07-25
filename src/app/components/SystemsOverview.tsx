@@ -57,9 +57,20 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
   const dueToday = orders.filter(
     (o) => o.stage !== "shipped" && o.deadlineState === "due_today",
   ).length;
+  const highPriority = orders.filter((o) => o.highPriority).length;
 
   const items: FocusItem[] = [];
 
+  if (highPriority > 0) {
+    items.push({
+      id: "high-priority",
+      title: "7+ day orders",
+      detail: "Open orders older than 7 days — red high priority on Order Flow.",
+      tone: "critical",
+      to: "/order-flow",
+      count: highPriority,
+    });
+  }
   if (overdue > 0) {
     items.push({
       id: "overdue",

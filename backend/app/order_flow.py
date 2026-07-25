@@ -132,6 +132,15 @@ def _expected_ship_date(node: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _order_age_days(order_date: Optional[str], today: str) -> int:
+    if not order_date:
+        return 0
+    try:
+        return (datetime.fromisoformat(today).date() - datetime.fromisoformat(order_date[:10]).date()).days
+    except Exception:
+        return 0
+
+
 def _deadline_state(expected: Optional[str], stage: str, today: str) -> str:
     if stage == "shipped" or not expected:
         return "none"
@@ -263,6 +272,10 @@ def merge_order(
     summary = _primary_item_summary(items)
     expected = _expected_ship_date(node)
     money = ((node.get("currentTotalPriceSet") or {}).get("shopMoney")) or {}
+    order_date = str(node.get("createdAt") or "")[:10]
+    age_days = _order_age_days(order_date, today)
+    # Open orders older than 7 days are high priority (red).
+    high_priority = stage != "shipped" and age_days > 7
 
     return {
         "id": shopify_id,
@@ -278,8 +291,10 @@ def merge_order(
         "size": summary.get("size") or "—",
         "quantity": summary.get("quantity") or 0,
         "lineItems": items,
-        "orderDate": str(node.get("createdAt") or "")[:10],
+        "orderDate": order_date,
         "orderDateTime": node.get("createdAt"),
+        "orderAgeDays": age_days,
+        "highPriority": high_priority,
         "expectedShipDate": expected,
         "deadlineState": _deadline_state(expected, stage, today),
         "stage": stage,
@@ -347,12 +362,13 @@ async def build_order_flow(
                     pass
             orders.append(merged)
 
-    # Sort: overdue first, then upcoming, then by expected ship / order date
+    # Sort: open first, then 7+ day high priority, then ship deadline, then dates
     priority = {"overdue": 0, "due_today": 1, "upcoming": 2, "ok": 3, "none": 4}
 
     def sort_key(o: Dict[str, Any]):
         return (
             0 if o["stage"] != "shipped" else 1,
+            0 if o.get("highPriority") else 1,
             priority.get(o["deadlineState"], 9),
             o.get("expectedShipDate") or "9999-99-99",
             o.get("orderDateTime") or "",

@@ -65,7 +65,15 @@ function deadlineClass(state: OrderFlowOrder["deadlineState"]) {
 }
 
 function deadlineBadge(order: OrderFlowOrder) {
-  if (order.stage === "shipped" || !order.expectedShipDate) return null;
+  if (order.stage === "shipped") return null;
+  if (order.highPriority) {
+    return (
+      <Badge variant="outline" className="border-rose-400 bg-rose-100 text-rose-900 font-semibold">
+        High priority · {order.orderAgeDays ?? 7}+ days
+      </Badge>
+    );
+  }
+  if (!order.expectedShipDate) return null;
   if (order.deadlineState === "overdue") {
     return (
       <Badge variant="outline" className="border-rose-300 bg-rose-50 text-rose-800">
@@ -457,11 +465,13 @@ export function OrderFlowPage() {
                       key={key}
                       className={cn(
                         "border-b border-gray-100 hover:bg-gray-50/80",
-                        order.deadlineState === "overdue" && order.stage !== "shipped"
-                          ? "bg-rose-50/40"
-                          : order.deadlineState === "due_today" && order.stage !== "shipped"
-                            ? "bg-amber-50/40"
-                            : "",
+                        order.highPriority
+                          ? "bg-rose-50/70"
+                          : order.deadlineState === "overdue" && order.stage !== "shipped"
+                            ? "bg-rose-50/40"
+                            : order.deadlineState === "due_today" && order.stage !== "shipped"
+                              ? "bg-amber-50/40"
+                              : "",
                       )}
                     >
                       <td className="px-2 py-2.5">
@@ -488,11 +498,28 @@ export function OrderFlowPage() {
                       <td className="px-2 py-2.5 text-gray-700">{order.color}</td>
                       <td className="px-2 py-2.5 text-gray-700">{order.size}</td>
                       <td className="px-2 py-2.5 tabular-nums text-gray-800">{order.quantity}</td>
-                      <td className="px-2 py-2.5 tabular-nums text-gray-700">{order.orderDate}</td>
+                      <td
+                        className={cn(
+                          "px-2 py-2.5 tabular-nums",
+                          order.highPriority ? "font-semibold text-rose-800" : "text-gray-700",
+                        )}
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span>{order.orderDate}</span>
+                          {order.highPriority ? (
+                            <Badge
+                              variant="outline"
+                              className="w-fit border-rose-400 bg-rose-100 text-rose-900 font-semibold"
+                            >
+                              High priority
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className={cn("px-2 py-2.5 tabular-nums", deadlineClass(order.deadlineState))}>
                         <div className="flex flex-col gap-1">
                           <span>{order.expectedShipDate || "—"}</span>
-                          {deadlineBadge(order)}
+                          {!order.highPriority ? deadlineBadge(order) : null}
                         </div>
                       </td>
                       <td className="px-2 py-2.5">
@@ -616,14 +643,25 @@ export function OrderFlowPage() {
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Order date</p>
-                    <p className="mt-1 text-gray-900">{detail.orderDate}</p>
+                    <p
+                      className={cn(
+                        "mt-1",
+                        detail.highPriority ? "font-semibold text-rose-800" : "text-gray-900",
+                      )}
+                    >
+                      {detail.orderDate}
+                      {detail.highPriority && detail.orderAgeDays != null
+                        ? ` · ${detail.orderAgeDays} days ago`
+                        : ""}
+                    </p>
+                    {detail.highPriority ? deadlineBadge(detail) : null}
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Expected ship</p>
                     <p className={cn("mt-1", deadlineClass(detail.deadlineState))}>
                       {detail.expectedShipDate || "—"}
                     </p>
-                    {deadlineBadge(detail)}
+                    {!detail.highPriority ? deadlineBadge(detail) : null}
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Shopify financial</p>
