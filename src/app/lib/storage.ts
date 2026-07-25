@@ -48,7 +48,8 @@ export interface SOP {
 export class SOPsStorage {
   static getSOPs(): SOP[] {
     const stored = localStorage.getItem(SOPS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const list: SOP[] = stored ? JSON.parse(stored) : [];
+    return ensureSeededKnowledgeDocs(list);
   }
 
   static getSOPById(id: string): SOP | undefined {
@@ -67,6 +68,52 @@ export class SOPsStorage {
   static deleteSOP(id: string): void {
     writeLocalAndSync(SOPS_STORAGE_KEY, JSON.stringify(this.getSOPs().filter((s) => s.id !== id)));
   }
+}
+
+/** Built-in Knowledge Base PDFs shipped with the app (public/). */
+const SEEDED_KNOWLEDGE_DOCS: SOP[] = [
+  {
+    id: "seed-production-guide",
+    title: "Ordering DTF gang sheets",
+    description: "How to order DTF gang sheets for production.",
+    status: "Active",
+    tags: ["production", "dtf", "gang-sheets"],
+    pdfUrl: "/knowledge-base/production-guide.pdf",
+    pdfFileName: "production-guide.pdf",
+    categoryId: "production",
+    menuItemId: "floor-guides",
+    createdAt: "2026-07-25T00:00:00.000Z",
+    updatedAt: "2026-07-25T00:00:00.000Z",
+  },
+];
+
+function ensureSeededKnowledgeDocs(list: SOP[]): SOP[] {
+  let changed = false;
+  const next = [...list];
+  for (const seed of SEEDED_KNOWLEDGE_DOCS) {
+    const existingIdx = next.findIndex((s) => s.id === seed.id);
+    if (existingIdx < 0) {
+      next.push(seed);
+      changed = true;
+      continue;
+    }
+    // Keep seeded title/description in sync when the shipped doc is renamed.
+    const existing = next[existingIdx];
+    if (existing.title !== seed.title || existing.description !== seed.description) {
+      next[existingIdx] = {
+        ...existing,
+        title: seed.title,
+        description: seed.description,
+        tags: seed.tags,
+        updatedAt: seed.updatedAt,
+      };
+      changed = true;
+    }
+  }
+  if (changed) {
+    tryLocalStorageSetItem(SOPS_STORAGE_KEY, JSON.stringify(next));
+  }
+  return next;
 }
 
 export class SystemsStorage {

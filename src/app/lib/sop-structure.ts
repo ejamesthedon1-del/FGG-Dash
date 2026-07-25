@@ -32,6 +32,14 @@ export const SOP_NAV_STRUCTURE: SOPCategoryDef[] = [
     ],
   },
   {
+    id: "production",
+    title: "Production",
+    items: [
+      { id: "floor-guides", title: "Floor guides" },
+      { id: "print-finish", title: "Print & finish" },
+    ],
+  },
+  {
     id: "fulfillment",
     title: "Fulfillment",
     items: [
@@ -104,6 +112,7 @@ export const SOP_LEGACY_MENU_ITEM_ID = "welcome-how-to-use";
 export const SOP_CATEGORY_BLURBS: Record<string, string> = {
   "start-here": "Orientation, expectations, and where to go first.",
   "daily-tasks": "Recurring work every shift should cover.",
+  production: "Floor procedures, print, and finishing standards.",
   fulfillment: "Warehouse flow from order to outbound.",
   "customer-support": "How we talk to customers and resolve issues.",
   "returns-refunds": "Returns intake, approvals, and money back.",
@@ -119,7 +128,7 @@ export const SOP_LEGACY_CATEGORY_ROUTE: Record<string, { categoryId: string; men
   "order-fulfilment": { categoryId: "fulfillment", menuItemId: "pick-pack" },
   "customer-service": { categoryId: "customer-support", menuItemId: "inbound-requests" },
   "shopify-store-operations": { categoryId: "store-operations", menuItemId: "store-admin-basics" },
-  production: { categoryId: "daily-tasks", menuItemId: "shift-open-close" },
+  production: { categoryId: "production", menuItemId: "floor-guides" },
   "marketing-operations": { categoryId: "brand-notes", menuItemId: "brand-voice" },
   /** Older single bucket before Returns & Refunds was split out */
   returns: { categoryId: "returns-refunds", menuItemId: "return-intake" },

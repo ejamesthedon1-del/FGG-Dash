@@ -77,7 +77,7 @@ export function DashboardLayout() {
               }
             >
               <LayoutDashboard className="h-4 w-4 shrink-0 opacity-80" />
-              Daily Brief
+              Dashboard
             </NavLink>
             <NavLink
               to="/order-flow"

@@ -30,6 +30,7 @@ import {
   MoreVertical,
   Package,
   Plus,
+  Scissors,
   Search,
   ShieldAlert,
   Sparkles,
@@ -68,6 +69,7 @@ type HubEditTarget =
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
   "start-here": BookOpen,
   "daily-tasks": ClipboardCheck,
+  production: Scissors,
   fulfillment: Package,
   "customer-support": LifeBuoy,
   "returns-refunds": ArrowLeftRight,

@@ -21,21 +21,50 @@ function seedDefaults(): NavCategory[] {
   }));
 }
 
-/** True when stored nav is missing canonical FGG roots (e.g. only custom areas) — merge, do not wipe. */
-function needsCanonicalMerge(p: unknown): p is NavCategory[] {
-  if (!Array.isArray(p) || p.length === 0) return false;
-  return !p.some((c) => c && typeof c === "object" && (c as NavCategory).id === "start-here");
-}
-
-/** Prepend any default library categories that are missing, preserving user-defined areas and edits. */
+/** Prepend any default library categories that are missing, preserving user-defined areas and edits.
+ * Also fills missing default sections inside an existing canonical category.
+ */
 function mergeMissingCanonicalCategories(existing: NavCategory[]): NavCategory[] {
   const seed = seedDefaults();
-  const existingIds = new Set(existing.map((c) => c.id));
-  const missing = seed.filter((c) => !existingIds.has(c.id));
-  if (missing.length === 0) return existing;
-  const merged = [...missing, ...existing];
-  writeLocalAndSync(KEY, JSON.stringify(merged));
-  return merged;
+  const byId = new Map(existing.map((c) => [c.id, c]));
+  let changed = false;
+
+  for (const seedCat of seed) {
+    const current = byId.get(seedCat.id);
+    if (!current) {
+      byId.set(seedCat.id, seedCat);
+      changed = true;
+      continue;
+    }
+    const itemIds = new Set(current.items.map((i) => i.id));
+    const missingItems = seedCat.items.filter((i) => !itemIds.has(i.id));
+    if (missingItems.length > 0) {
+      byId.set(seedCat.id, {
+        ...current,
+        items: [...current.items, ...missingItems],
+      });
+      changed = true;
+    }
+  }
+
+  if (!changed) return existing;
+
+  // Keep existing order; append newly added canonical categories after seed order for missing ones.
+  const ordered: NavCategory[] = [];
+  const seen = new Set<string>();
+  for (const seedCat of seed) {
+    const cat = byId.get(seedCat.id);
+    if (cat) {
+      ordered.push(cat);
+      seen.add(cat.id);
+    }
+  }
+  for (const cat of existing) {
+    if (!seen.has(cat.id)) ordered.push(cat);
+  }
+
+  writeLocalAndSync(KEY, JSON.stringify(ordered));
+  return ordered;
 }
 
 function parseNav(raw: string | null): NavCategory[] | null {
@@ -53,10 +82,8 @@ export function getNavStructure(): NavCategory[] {
     const rawCurrent = localStorage.getItem(KEY);
     const parsedCurrent = parseNav(rawCurrent);
     if (parsedCurrent && parsedCurrent.length > 0) {
-      if (needsCanonicalMerge(parsedCurrent)) {
-        return mergeMissingCanonicalCategories(parsedCurrent);
-      }
-      return parsedCurrent;
+      // Always merge any new canonical areas (e.g. Production) without wiping edits.
+      return mergeMissingCanonicalCategories(parsedCurrent);
     }
 
     const s = seedDefaults();

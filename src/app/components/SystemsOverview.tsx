@@ -222,7 +222,7 @@ export function SystemsOverview() {
             Floor · {weekday} · {timeLabel}
           </p>
           <h2 className="mt-2 text-[1.75rem] font-semibold tracking-tight text-gray-950">
-            Daily Brief
+            Dashboard
           </h2>
           <p className="mt-1.5 max-w-xl text-sm text-gray-500">
             Live production status for the shift. Work the queue, then open Order Flow.
