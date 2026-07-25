@@ -240,16 +240,14 @@ export function SystemsOverview() {
   return (
     <div className="space-y-6">
       {/* Morning header */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 px-5 py-6 text-white sm:px-7 sm:py-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-200">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
               Ops / Productions · Morning brief
             </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-              Start the day in control
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-slate-200 sm:text-base">
+            <h2 className="mt-1 text-2xl font-semibold text-gray-900">Start the day in control</h2>
+            <p className="mt-1 text-gray-600">
               {weekday}. Check what needs blanks, what&apos;s on the floor, and what must ship —
               then run the day without waiting for instructions.
             </p>
@@ -257,9 +255,9 @@ export function SystemsOverview() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="tertiary"
+              variant="outline"
               size="sm"
-              className="gap-2 border-white/30 bg-white text-slate-900 hover:bg-slate-100"
+              className="gap-2"
               onClick={() => void loadFlow()}
               disabled={flowLoading}
             >
@@ -275,28 +273,28 @@ export function SystemsOverview() {
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-slate-300">Open orders</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Open orders</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">
               {flowLoading ? "…" : openOrders}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-slate-300">Needs blanks</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Needs blanks</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">
               {flowLoading ? "…" : countFor(stages, "needs_blanks")}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-slate-300">In production</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">In production</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">
               {flowLoading ? "…" : countFor(stages, "in_production")}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-slate-300">Ready to ship</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Ready to ship</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">
               {flowLoading ? "…" : countFor(stages, "ready_to_ship")}
             </p>
           </div>
