@@ -134,6 +134,8 @@ async def post_order_flow_status(body: OrderFlowStatusUpdateRequest) -> dict:
         updated = order_flow_store.bulk_upsert_stage(items, stage, actor="ops")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not save stage: {exc}") from exc
     return {"ok": True, "stage": stage, "updated": updated}
 
 

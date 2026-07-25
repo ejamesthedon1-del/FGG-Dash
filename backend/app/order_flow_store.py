@@ -102,47 +102,54 @@ def _record_to_row(record: Dict[str, Any], record_id: str) -> Dict[str, Any]:
     }
 
 
-def _supabase_headers(key: str) -> Dict[str, str]:
-    return {
+def _upsert_supabase(url: str, key: str, record: Dict[str, Any], record_id: str) -> Dict[str, Any]:
+    # PostgREST upsert requires on_conflict=<pk> with merge-duplicates.
+    endpoint = f"{url}/rest/v1/order_flow_stages?on_conflict=id"
+    row = _record_to_row(record, record_id)
+    headers = {
         "apikey": key,
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
-        "Prefer": "return=representation",
+        "Prefer": "resolution=merge-duplicates,return=representation",
     }
+    with httpx.Client(timeout=30.0) as client:
+        response = client.post(endpoint, headers=headers, json=row)
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Supabase upsert failed ({response.status_code}): {response.text[:500]}"
+            )
+        body = response.json()
+    if isinstance(body, list) and body:
+        return _row_to_record(body[0])
+    if isinstance(body, dict) and body.get("id"):
+        return _row_to_record(body)
+    return record
 
 
 def _load_all_supabase(url: str, key: str) -> Dict[str, Any]:
     endpoint = f"{url}/rest/v1/order_flow_stages?select=*"
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
     with httpx.Client(timeout=30.0) as client:
-        response = client.get(endpoint, headers=_supabase_headers(key))
-        response.raise_for_status()
+        response = client.get(endpoint, headers=headers)
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Supabase load failed ({response.status_code}): {response.text[:500]}"
+            )
         rows = response.json()
     orders: Dict[str, Any] = {}
     if isinstance(rows, list):
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            rid = row.get("id") or _record_key(str(row.get("brand") or ""), str(row.get("shopify_order_id") or ""))
+            rid = row.get("id") or _record_key(
+                str(row.get("brand") or ""), str(row.get("shopify_order_id") or "")
+            )
             orders[rid] = _row_to_record(row)
     return {"orders": orders}
-
-
-def _upsert_supabase(url: str, key: str, record: Dict[str, Any], record_id: str) -> Dict[str, Any]:
-    endpoint = f"{url}/rest/v1/order_flow_stages"
-    row = _record_to_row(record, record_id)
-    headers = {
-        **_supabase_headers(key),
-        "Prefer": "resolution=merge-duplicates,return=representation",
-    }
-    with httpx.Client(timeout=30.0) as client:
-        response = client.post(endpoint, headers=headers, json=row)
-        response.raise_for_status()
-        body = response.json()
-    if isinstance(body, list) and body:
-        return _row_to_record(body[0])
-    if isinstance(body, dict):
-        return _row_to_record(body)
-    return record
 
 
 def _load_all_file() -> Dict[str, Any]:

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import {
   fetchOrderFlow,
   nextStage,
@@ -99,8 +100,16 @@ function stageSelectOptions(current: OrderFlowStage) {
 }
 
 export function OrderFlowPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stageFromUrl = searchParams.get("stage");
+  const initialStage: StageFilter =
+    stageFromUrl &&
+    (stageFromUrl === "all" || (ORDER_FLOW_STAGES as readonly string[]).includes(stageFromUrl))
+      ? (stageFromUrl as StageFilter)
+      : "all";
+
   const [brand, setBrand] = useState<BrandFilter>("all");
-  const [stage, setStage] = useState<StageFilter>("all");
+  const [stage, setStage] = useState<StageFilter>(initialStage);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [stages, setStages] = useState<OrderFlowStageCount[]>([]);
@@ -119,12 +128,16 @@ export function OrderFlowPage() {
       let data = await fetchOrderFlow({ brand, stage: "all", days: 90 });
       rememberOrdersFromServer(data.orders);
 
-      // If Railway lost stage data (redeploy without volume), restore from browser/cloud backup.
-      const restored = await restoreStagesToServer(data.orders);
-      if (restored > 0) {
-        data = await fetchOrderFlow({ brand, stage: "all", days: 90 });
-        rememberOrdersFromServer(data.orders);
-        toast.success(`Restored ${restored} saved order stage${restored === 1 ? "" : "s"}`);
+      // Restore is best-effort — never block the board if backup sync fails.
+      try {
+        const restored = await restoreStagesToServer(data.orders);
+        if (restored > 0) {
+          data = await fetchOrderFlow({ brand, stage: "all", days: 90 });
+          rememberOrdersFromServer(data.orders);
+          toast.success(`Restored ${restored} saved order stage${restored === 1 ? "" : "s"}`);
+        }
+      } catch (restoreErr) {
+        console.warn("[order-flow] restore skipped", restoreErr);
       }
 
       setStages(data.stages);
@@ -151,6 +164,23 @@ export function OrderFlowPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (
+      stageFromUrl &&
+      (stageFromUrl === "all" || (ORDER_FLOW_STAGES as readonly string[]).includes(stageFromUrl))
+    ) {
+      setStage(stageFromUrl as StageFilter);
+    }
+  }, [stageFromUrl]);
+
+  const setStageAndUrl = (next: StageFilter) => {
+    setStage(next);
+    const params = new URLSearchParams(searchParams);
+    if (next === "all") params.delete("stage");
+    else params.set("stage", next);
+    setSearchParams(params, { replace: true });
+  };
 
   const visibleOrders = useMemo(() => {
     if (stage === "all") return orders;
@@ -207,7 +237,7 @@ export function OrderFlowPage() {
       const keepSelected: Record<string, boolean> = {};
       for (const o of list) keepSelected[`${o.brand}::${o.id}`] = true;
       setSelected(keepSelected);
-      setStage(target);
+      setStageAndUrl(target);
 
       toast.success(
         list.length === 1
@@ -302,7 +332,7 @@ export function OrderFlowPage() {
             <button
               key={s.id}
               type="button"
-              onClick={() => setStage(s.id as StageFilter)}
+              onClick={() => setStageAndUrl(s.id as StageFilter)}
               className={cn(
                 "rounded-xl border px-3 py-3 text-left transition-colors",
                 active
