@@ -478,7 +478,7 @@ export function OrderFlowPage() {
                     <tr
                       key={key}
                       className={cn(
-                        "border-b border-gray-100 hover:bg-gray-50/80",
+                        "border-b border-gray-100",
                         order.highPriority
                           ? "bg-rose-50/70"
                           : order.earlyWarning
@@ -487,7 +487,7 @@ export function OrderFlowPage() {
                               ? "bg-rose-50/40"
                               : order.deadlineState === "due_today" && order.stage !== "shipped"
                                 ? "bg-amber-50/40"
-                                : "",
+                                : "hover:bg-gray-50/80",
                       )}
                     >
                       <td className="px-2 py-2.5">
