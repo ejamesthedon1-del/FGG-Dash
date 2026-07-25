@@ -752,7 +752,7 @@ export function SOPsPage() {
                                   <li key={item.id}>
                                     <button
                                       type="button"
-                                      className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-950"
+                                      className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm text-brand underline decoration-brand/40 underline-offset-2 transition-colors hover:text-brand/80 hover:decoration-brand/70"
                                       onClick={() =>
                                         scheduleNav(() => goToSops(category.id, item.id))
                                       }
@@ -773,14 +773,10 @@ export function SOPsPage() {
                                           : undefined
                                       }
                                     >
-                                      <ChevronRight
-                                        className="h-3.5 w-3.5 shrink-0 text-gray-300"
-                                        aria-hidden
-                                      />
                                       <span className="min-w-0 flex-1 truncate font-medium">
                                         {item.title}
                                       </span>
-                                      <span className="shrink-0 text-xs tabular-nums text-gray-400">
+                                      <span className="shrink-0 text-xs tabular-nums text-gray-400 no-underline">
                                         {sectionCount}
                                       </span>
                                     </button>
