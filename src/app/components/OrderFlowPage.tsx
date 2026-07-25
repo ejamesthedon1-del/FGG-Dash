@@ -46,7 +46,20 @@ import {
 } from "./ui/dialog";
 import { cn } from "./ui/utils";
 import { buildBlanksPrintHtml, printBlanksSlip } from "../lib/blanks-print-slip";
-import { Loader2, Printer, RefreshCw } from "lucide-react";
+import {
+  Calendar,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  Loader2,
+  Package,
+  Printer,
+  RefreshCw,
+  Shirt,
+  Tag,
+  Truck,
+  User,
+} from "lucide-react";
 import { toast } from "sonner";
 
 type BrandFilter = "all" | "live-don" | "sinners-testimony";
@@ -113,6 +126,39 @@ function deadlineBadge(order: OrderFlowOrder) {
   return null;
 }
 
+function stageBadgeClass(stage: OrderFlowStage) {
+  switch (stage) {
+    case "needs_blanks":
+      return "border-amber-200 bg-amber-50 text-amber-900";
+    case "in_production":
+      return "border-blue-200 bg-blue-50 text-blue-800";
+    case "ready_to_ship":
+      return "border-violet-200 bg-violet-50 text-violet-900";
+    case "shipped":
+      return "border-emerald-200 bg-emerald-50 text-emerald-900";
+    default:
+      return "border-gray-200 bg-gray-50 text-gray-700";
+  }
+}
+
+function DetailMetaRow({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[1.25rem_6.5rem_1fr] items-start gap-3 text-sm">
+      <Icon className="mt-0.5 h-4 w-4 text-gray-400" aria-hidden />
+      <span className="pt-0.5 text-gray-500">{label}</span>
+      <div className="min-w-0 text-gray-900">{children}</div>
+    </div>
+  );
+}
+
 function stageSelectOptions(current: OrderFlowStage) {
   return ORDER_FLOW_STAGES.map((s) => ({
     id: s,
@@ -138,6 +184,7 @@ export function OrderFlowPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [detail, setDetail] = useState<OrderFlowOrder | null>(null);
+  const [detailTab, setDetailTab] = useState<"overview" | "activity" | "notes">("overview");
   const [notesDraft, setNotesDraft] = useState("");
   const [blanksSlipOpen, setBlanksSlipOpen] = useState(false);
   const [blanksSlipHtml, setBlanksSlipHtml] = useState("");
@@ -273,6 +320,7 @@ export function OrderFlowPage() {
   const openDetail = (order: OrderFlowOrder) => {
     setDetail(order);
     setNotesDraft(order.notes || "");
+    setDetailTab("overview");
   };
 
   const saveNotes = async () => {
@@ -610,101 +658,119 @@ export function OrderFlowPage() {
       </Dialog>
 
       <Sheet open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetContent className="flex w-full flex-col gap-0 overflow-hidden border-l border-gray-200 bg-white p-0 sm:max-w-md">
           {detail ? (
             <>
-              <SheetHeader>
-                <SheetTitle>
-                  {detail.orderNumber} · {detail.brandLabel}
-                </SheetTitle>
-                <SheetDescription>
-                  Shopify order details with FGG production status.
+              <SheetHeader className="space-y-0 border-b border-gray-100 px-5 pb-4 pt-5 pr-12 text-left">
+                <SheetDescription className="sr-only">
+                  Order details for {detail.orderNumber}
                 </SheetDescription>
+                <p className="text-xs font-medium text-gray-500">{detail.brandLabel}</p>
+                <SheetTitle className="mt-1 text-2xl font-semibold tracking-tight text-gray-900">
+                  {detail.orderNumber}
+                </SheetTitle>
+                <p className="mt-1 text-sm text-gray-500">{detail.customer}</p>
               </SheetHeader>
 
-              <div className="mt-6 space-y-5 px-1">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Customer</p>
-                    <p className="mt-1 text-gray-900">{detail.customer}</p>
-                    {detail.email ? <p className="text-gray-600">{detail.email}</p> : null}
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">FGG stage</p>
-                    <p className="mt-1 font-medium text-gray-900">{detail.stageLabel}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Order date</p>
-                    <p
-                      className={cn(
-                        "mt-1",
-                        detail.highPriority
-                          ? "font-semibold text-rose-800"
-                          : detail.earlyWarning
-                            ? "font-semibold text-amber-900"
-                            : "text-gray-900",
-                      )}
+              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+                <div className="space-y-3.5">
+                  <DetailMetaRow icon={Tag} label="Stage">
+                    <Badge
+                      variant="outline"
+                      className={cn("font-medium", stageBadgeClass(detail.stage))}
                     >
-                      {detail.orderDate}
-                      {detail.orderAgeDays != null && (detail.highPriority || detail.earlyWarning)
-                        ? ` · ${detail.orderAgeDays} days ago`
-                        : ""}
-                    </p>
-                    {agePriorityBadge(detail)}
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Expected ship</p>
-                    <p className={cn("mt-1", deadlineClass(detail.deadlineState))}>
-                      {detail.expectedShipDate || "—"}
-                    </p>
-                    {!detail.highPriority && !detail.earlyWarning ? deadlineBadge(detail) : null}
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Shopify financial</p>
-                    <p className="mt-1 text-gray-900">{detail.shopifyFinancialStatus || "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Shopify fulfillment</p>
-                    <p className="mt-1 text-gray-900">{detail.shopifyFulfillmentStatus || "—"}</p>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Products</p>
-                  <ul className="mt-2 space-y-2">
-                    {(detail.lineItems?.length ? detail.lineItems : [
-                      {
-                        product: detail.product,
-                        color: detail.color,
-                        size: detail.size,
-                        quantity: detail.quantity,
-                        variant: detail.variant,
-                      },
-                    ]).map((item, idx) => (
-                      <li
-                        key={`${item.product}-${idx}`}
-                        className="rounded-lg border border-gray-100 px-3 py-2 text-sm"
+                      {detail.stageLabel}
+                    </Badge>
+                  </DetailMetaRow>
+                  <DetailMetaRow icon={User} label="Customer">
+                    <div>
+                      <p className="font-medium">{detail.customer}</p>
+                      {detail.email ? <p className="text-xs text-gray-500">{detail.email}</p> : null}
+                    </div>
+                  </DetailMetaRow>
+                  <DetailMetaRow icon={Calendar} label="Ordered">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          detail.highPriority
+                            ? "font-semibold text-rose-800"
+                            : detail.earlyWarning
+                              ? "font-semibold text-amber-900"
+                              : "",
+                        )}
                       >
-                        <p className="font-medium text-gray-900">{item.product}</p>
-                        <p className="text-gray-600">
-                          {item.color} · {item.size} · qty {item.quantity}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
+                        {detail.orderDate}
+                        {detail.orderAgeDays != null ? ` · ${detail.orderAgeDays}d` : ""}
+                      </span>
+                      {agePriorityBadge(detail)}
+                    </div>
+                  </DetailMetaRow>
+                  <DetailMetaRow icon={Truck} label="Ship by">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={deadlineClass(detail.deadlineState)}>
+                        {detail.expectedShipDate || "—"}
+                      </span>
+                      {!detail.highPriority && !detail.earlyWarning ? deadlineBadge(detail) : null}
+                    </div>
+                  </DetailMetaRow>
+                  <DetailMetaRow icon={CreditCard} label="Payment">
+                    {detail.shopifyFinancialStatus || "—"}
+                  </DetailMetaRow>
+                  <DetailMetaRow icon={Package} label="Fulfillment">
+                    {detail.shopifyFulfillmentStatus || "—"}
+                  </DetailMetaRow>
+                  <DetailMetaRow icon={CheckCircle2} label="Qty">
+                    {detail.quantity}
+                  </DetailMetaRow>
                 </div>
 
                 <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Move stage
-                  </p>
+                  <p className="mb-2 text-sm font-medium text-gray-900">Products</p>
+                  <div className="space-y-2 rounded-xl bg-gray-50 px-3 py-3">
+                    {(detail.lineItems?.length
+                      ? detail.lineItems
+                      : [
+                          {
+                            product: detail.product,
+                            color: detail.color,
+                            size: detail.size,
+                            quantity: detail.quantity,
+                            variant: detail.variant,
+                          },
+                        ]
+                    ).map((item, idx) => (
+                      <div key={`${item.product}-${idx}`} className="flex gap-2 text-sm">
+                        <Shirt className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900">{item.product}</p>
+                          <p className="text-gray-500">
+                            {item.color} · {item.size} · qty {item.quantity}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {detail.shopifyNote ? (
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-gray-900">Shopify note</p>
+                    <p className="rounded-xl bg-gray-50 px-3 py-3 text-sm leading-relaxed text-gray-700">
+                      {detail.shopifyNote}
+                    </p>
+                  </div>
+                ) : null}
+
+                <div>
+                  <p className="mb-2 text-sm font-medium text-gray-900">Move stage</p>
                   <div className="flex flex-wrap gap-2">
                     {ORDER_FLOW_STAGES.map((s) => (
                       <Button
                         key={s}
                         type="button"
                         size="sm"
-                        variant={detail.stage === s ? "default" : "outline"}
+                        shape="pill"
+                        variant={detail.stage === s ? "default" : "tertiary"}
                         disabled={saving || detail.stage === s}
                         onClick={() => void applyStage(s, [detail])}
                       >
@@ -715,56 +781,86 @@ export function OrderFlowPage() {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Internal notes
-                  </p>
-                  <Textarea
-                    rows={4}
-                    value={notesDraft}
-                    onChange={(e) => setNotesDraft(e.target.value)}
-                    placeholder="Blank vendor, PO #, production notes…"
-                  />
-                  <Button
-                    type="button"
-                    className="mt-2"
-                    size="sm"
-                    disabled={saving}
-                    onClick={() => void saveNotes()}
-                  >
-                    Save notes
-                  </Button>
-                </div>
-
-                {detail.shopifyNote ? (
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                      Shopify note
-                    </p>
-                    <p className="mt-1 text-sm text-gray-700">{detail.shopifyNote}</p>
+                  <div className="flex gap-4 border-b border-gray-200">
+                    {(
+                      [
+                        { id: "overview", label: "Overview" },
+                        { id: "activity", label: "Activity" },
+                        { id: "notes", label: "Notes" },
+                      ] as const
+                    ).map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={cn(
+                          "border-b-2 pb-2.5 text-sm font-medium transition-colors",
+                          detailTab === tab.id
+                            ? "border-brand text-brand"
+                            : "border-transparent text-gray-500 hover:text-gray-800",
+                        )}
+                        onClick={() => setDetailTab(tab.id)}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
                   </div>
-                ) : null}
 
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Status history
-                  </p>
-                  {detail.history?.length ? (
-                    <ul className="space-y-1.5 text-sm text-gray-700">
-                      {[...detail.history].reverse().map((h, i) => (
-                        <li key={`${h.at}-${i}`} className="rounded-md border border-gray-100 px-2 py-1.5">
-                          <span className="font-medium">
-                            {STAGE_LABELS[normalizeOrderFlowStage(h.stage)] || h.stage}
-                          </span>
-                          <span className="text-gray-500">
-                            {" "}
-                            · {new Date(h.at).toLocaleString()} · {h.by || "ops"}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-gray-500">No stage changes recorded yet.</p>
-                  )}
+                  <div className="pt-4">
+                    {detailTab === "overview" ? (
+                      <p className="text-sm leading-relaxed text-gray-600">
+                        Track blanks, production, and ship status for this order. Use Activity for
+                        stage history and Notes for floor comments.
+                      </p>
+                    ) : null}
+
+                    {detailTab === "activity" ? (
+                      detail.history?.length ? (
+                        <ul className="space-y-4">
+                          {[...detail.history].reverse().map((h, i) => (
+                            <li key={`${h.at}-${i}`} className="flex gap-3">
+                              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
+                                <Clock className="h-3.5 w-3.5" aria-hidden />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm text-gray-900">
+                                  <span className="font-medium">{h.by || "ops"}</span>
+                                  {" moved to "}
+                                  <span className="font-medium">
+                                    {STAGE_LABELS[normalizeOrderFlowStage(h.stage)] || h.stage}
+                                  </span>
+                                </p>
+                                <p className="mt-0.5 text-xs text-gray-500">
+                                  {new Date(h.at).toLocaleString()}
+                                </p>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-gray-500">No stage changes recorded yet.</p>
+                      )
+                    ) : null}
+
+                    {detailTab === "notes" ? (
+                      <div className="space-y-3">
+                        <Textarea
+                          rows={5}
+                          value={notesDraft}
+                          onChange={(e) => setNotesDraft(e.target.value)}
+                          placeholder="Blank vendor, PO #, production notes…"
+                          className="rounded-xl border-gray-200 bg-gray-50"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={saving}
+                          onClick={() => void saveNotes()}
+                        >
+                          Save notes
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </>
