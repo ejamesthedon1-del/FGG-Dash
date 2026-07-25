@@ -50,7 +50,7 @@ import { Loader2, Printer, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 type BrandFilter = "all" | "live-don" | "sinners-testimony";
-type StageFilter = "all" | OrderFlowStage;
+type StageFilter = OrderFlowStage;
 
 function deadlineClass(state: OrderFlowOrder["deadlineState"]) {
   switch (state) {
@@ -125,12 +125,9 @@ function stageSelectOptions(current: OrderFlowStage) {
 export function OrderFlowPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const stageFromUrl = searchParams.get("stage");
-  const initialStage: StageFilter =
-    stageFromUrl === "all"
-      ? "all"
-      : stageFromUrl
-        ? normalizeOrderFlowStage(stageFromUrl)
-        : "all";
+  const initialStage: StageFilter = stageFromUrl
+    ? normalizeOrderFlowStage(stageFromUrl)
+    : "needs_blanks";
 
   const [brand, setBrand] = useState<BrandFilter>("all");
   const [stage, setStage] = useState<StageFilter>(initialStage);
@@ -190,20 +187,18 @@ export function OrderFlowPage() {
   }, [load]);
 
   useEffect(() => {
-    if (stageFromUrl === "all") setStage("all");
-    else if (stageFromUrl) setStage(normalizeOrderFlowStage(stageFromUrl));
+    if (stageFromUrl) setStage(normalizeOrderFlowStage(stageFromUrl));
+    else setStage("needs_blanks");
   }, [stageFromUrl]);
 
   const setStageAndUrl = (next: StageFilter) => {
     setStage(next);
     const params = new URLSearchParams(searchParams);
-    if (next === "all") params.delete("stage");
-    else params.set("stage", next);
+    params.set("stage", next);
     setSearchParams(params, { replace: true });
   };
 
   const visibleOrders = useMemo(() => {
-    if (stage === "all") return orders;
     return orders.filter((o) => o.stage === stage);
   }, [orders, stage]);
 
@@ -335,17 +330,14 @@ export function OrderFlowPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {(stages.length
-          ? stages
-          : [
-              { id: "all", label: "All Orders", count: 0 },
-              ...ORDER_FLOW_STAGES.map((id) => ({
-                id,
-                label: STAGE_LABELS[id],
-                count: 0,
-              })),
-            ]
+          ? stages.filter((s) => s.id !== "all")
+          : ORDER_FLOW_STAGES.map((id) => ({
+              id,
+              label: STAGE_LABELS[id],
+              count: 0,
+            }))
         ).map((s) => {
           const active = stage === s.id;
           return (
@@ -429,7 +421,7 @@ export function OrderFlowPage() {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base">
-              {stage === "all" ? "All Orders" : STAGE_LABELS[stage as OrderFlowStage]}
+              {STAGE_LABELS[stage]}
             </CardTitle>
             <p className="text-sm text-gray-500">
               {loading ? "Loading…" : `${visibleOrders.length} order(s)`}

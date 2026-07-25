@@ -380,7 +380,6 @@ async def build_order_flow(
     orders.sort(key=sort_key)
 
     counts = {stage: 0 for stage in order_flow_store.STAGES}
-    counts["all"] = len(orders)
     for o in orders:
         counts[o["stage"]] = counts.get(o["stage"], 0) + 1
 
@@ -391,11 +390,12 @@ async def build_order_flow(
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "today": today,
         "stages": [
-            {"id": "all", "label": "All Orders", "count": counts["all"]},
-            *[
-                {"id": s, "label": STAGE_LABELS[s], "count": counts.get(s, 0)}
-                for s in order_flow_store.STAGES
-            ],
+            {
+                "id": s,
+                "label": STAGE_LABELS[s],
+                "count": counts.get(s, 0),
+            }
+            for s in order_flow_store.STAGES
         ],
         "orders": orders,
         "errors": errors,

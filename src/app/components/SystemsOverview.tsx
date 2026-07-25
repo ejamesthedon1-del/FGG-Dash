@@ -225,7 +225,10 @@ export function SystemsOverview() {
 
   const showCeoFinance = !authLoading && isCeo;
   const focusItems = useMemo(() => buildLiveFocus(orders, stages), [orders, stages]);
-  const openOrders = countFor(stages, "all") - countFor(stages, "shipped");
+  const openOrders =
+    countFor(stages, "needs_blanks") +
+    countFor(stages, "in_production") +
+    countFor(stages, "ready_to_ship");
   const criticalCount = focusItems.filter((i) => i.tone === "critical").length;
 
   const weekday = new Intl.DateTimeFormat("en-US", {
