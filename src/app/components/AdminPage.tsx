@@ -196,7 +196,7 @@ export function AdminPage() {
                     </p>
                   ) : null}
                 </div>
-                <Button type="button" variant="outline" className="w-full" onClick={handleSignOut} disabled={isSubmitting}>
+                <Button type="button" variant="tertiary" className="w-full" onClick={handleSignOut} disabled={isSubmitting}>
                   {isSubmitting ? "Signing out..." : "Sign out"}
                 </Button>
               </div>
