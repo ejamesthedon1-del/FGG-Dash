@@ -477,18 +477,7 @@ export function OrderFlowPage() {
                   return (
                     <tr
                       key={key}
-                      className={cn(
-                        "border-b border-gray-100",
-                        order.highPriority
-                          ? "bg-rose-50/70"
-                          : order.earlyWarning
-                            ? "bg-amber-50/50"
-                            : order.deadlineState === "overdue" && order.stage !== "shipped"
-                              ? "bg-rose-50/40"
-                              : order.deadlineState === "due_today" && order.stage !== "shipped"
-                                ? "bg-amber-50/40"
-                                : "hover:bg-gray-50/80",
-                      )}
+                      className="border-b border-gray-100 hover:bg-gray-50/80"
                     >
                       <td className="px-2 py-2.5">
                         <Checkbox
@@ -518,9 +507,9 @@ export function OrderFlowPage() {
                         className={cn(
                           "px-2 py-2.5 tabular-nums",
                           order.highPriority
-                            ? "font-semibold text-rose-800"
+                            ? "bg-rose-50 font-semibold text-rose-800"
                             : order.earlyWarning
-                              ? "font-semibold text-amber-900"
+                              ? "bg-amber-50 font-semibold text-amber-900"
                               : "text-gray-700",
                         )}
                       >
