@@ -22,7 +22,6 @@ import {
   FolderOpen,
   Maximize2,
   MoreVertical,
-  Pencil,
   Plus,
   Search,
 } from "lucide-react";
