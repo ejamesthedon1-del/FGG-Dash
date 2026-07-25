@@ -58,6 +58,7 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
     (o) => o.stage !== "shipped" && o.deadlineState === "due_today",
   ).length;
   const highPriority = orders.filter((o) => o.highPriority).length;
+  const earlyWarning = orders.filter((o) => o.earlyWarning).length;
 
   const items: FocusItem[] = [];
 
@@ -69,6 +70,16 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
       tone: "critical",
       to: "/order-flow",
       count: highPriority,
+    });
+  }
+  if (earlyWarning > 0) {
+    items.push({
+      id: "early-warning",
+      title: "Approaching late",
+      detail: "3+ days since order — move these before they hit 7-day high priority.",
+      tone: "action",
+      to: "/order-flow",
+      count: earlyWarning,
     });
   }
   if (overdue > 0) {

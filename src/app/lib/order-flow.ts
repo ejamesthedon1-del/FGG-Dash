@@ -48,6 +48,8 @@ export type OrderFlowOrder = {
   orderDateTime?: string;
   orderAgeDays?: number;
   highPriority?: boolean;
+  /** Day 3–7 open orders — approaching the 7-day late/high priority. */
+  earlyWarning?: boolean;
   expectedShipDate: string | null;
   deadlineState: DeadlineState;
   stage: OrderFlowStage;
@@ -92,7 +94,7 @@ export function nextStage(stage: OrderFlowStage): OrderFlowStage | null {
   return ORDER_FLOW_STAGES[i + 1];
 }
 
-/** Open orders older than 7 days are high priority (works even if API hasn't deployed yet). */
+/** Age-based priority flags (works even if API hasn't deployed yet). */
 export function withOrderPriority(order: OrderFlowOrder, todayIso?: string): OrderFlowOrder {
   const today = todayIso || new Date().toISOString().slice(0, 10);
   let age = order.orderAgeDays;
@@ -103,12 +105,17 @@ export function withOrderPriority(order: OrderFlowOrder, todayIso?: string): Ord
       ? Math.max(0, Math.round((end - start) / 86_400_000))
       : 0;
   }
-  const highPriority =
-    order.stage !== "shipped" && (order.highPriority === true || (age != null && age > 7));
+  const open = order.stage !== "shipped";
+  const highPriority = open && (order.highPriority === true || (age != null && age > 7));
+  const earlyWarning =
+    open &&
+    !highPriority &&
+    (order.earlyWarning === true || (age != null && age >= 3));
   return {
     ...order,
     orderAgeDays: age ?? order.orderAgeDays,
     highPriority,
+    earlyWarning,
   };
 }
 
@@ -127,6 +134,9 @@ function sortByPriority(orders: OrderFlowOrder[]): OrderFlowOrder[] {
     const aHp = a.highPriority ? 0 : 1;
     const bHp = b.highPriority ? 0 : 1;
     if (aHp !== bHp) return aHp - bHp;
+    const aEw = a.earlyWarning ? 0 : 1;
+    const bEw = b.earlyWarning ? 0 : 1;
+    if (aEw !== bEw) return aEw - bEw;
     const aDl = deadlineRank[a.deadlineState] ?? 9;
     const bDl = deadlineRank[b.deadlineState] ?? 9;
     if (aDl !== bDl) return aDl - bDl;

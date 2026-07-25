@@ -274,8 +274,11 @@ def merge_order(
     money = ((node.get("currentTotalPriceSet") or {}).get("shopMoney")) or {}
     order_date = str(node.get("createdAt") or "")[:10]
     age_days = _order_age_days(order_date, today)
+    open_order = stage != "shipped"
     # Open orders older than 7 days are high priority (red).
-    high_priority = stage != "shipped" and age_days > 7
+    high_priority = open_order and age_days > 7
+    # Day 3–7: early warning before late/high priority.
+    early_warning = open_order and not high_priority and age_days >= 3
 
     return {
         "id": shopify_id,
@@ -295,6 +298,7 @@ def merge_order(
         "orderDateTime": node.get("createdAt"),
         "orderAgeDays": age_days,
         "highPriority": high_priority,
+        "earlyWarning": early_warning,
         "expectedShipDate": expected,
         "deadlineState": _deadline_state(expected, stage, today),
         "stage": stage,
@@ -362,13 +366,14 @@ async def build_order_flow(
                     pass
             orders.append(merged)
 
-    # Sort: open first, then 7+ day high priority, then ship deadline, then dates
+    # Sort: open first, then 7+ day high priority, then 3+ day early warning, then deadlines
     priority = {"overdue": 0, "due_today": 1, "upcoming": 2, "ok": 3, "none": 4}
 
     def sort_key(o: Dict[str, Any]):
         return (
             0 if o["stage"] != "shipped" else 1,
             0 if o.get("highPriority") else 1,
+            0 if o.get("earlyWarning") else 1,
             priority.get(o["deadlineState"], 9),
             o.get("expectedShipDate") or "9999-99-99",
             o.get("orderDateTime") or "",

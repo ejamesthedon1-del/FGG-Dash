@@ -64,15 +64,29 @@ function deadlineClass(state: OrderFlowOrder["deadlineState"]) {
   }
 }
 
-function deadlineBadge(order: OrderFlowOrder) {
+function agePriorityBadge(order: OrderFlowOrder) {
   if (order.stage === "shipped") return null;
   if (order.highPriority) {
     return (
-      <Badge variant="outline" className="border-rose-400 bg-rose-100 text-rose-900 font-semibold">
+      <Badge variant="outline" className="w-fit border-rose-400 bg-rose-100 text-rose-900 font-semibold">
         High priority · {order.orderAgeDays ?? 7}+ days
       </Badge>
     );
   }
+  if (order.earlyWarning) {
+    const daysLeft = Math.max(0, 7 - (order.orderAgeDays ?? 3));
+    return (
+      <Badge variant="outline" className="w-fit border-amber-400 bg-amber-50 text-amber-950 font-semibold">
+        Early warning · {daysLeft}d to late
+      </Badge>
+    );
+  }
+  return null;
+}
+
+function deadlineBadge(order: OrderFlowOrder) {
+  if (order.stage === "shipped") return null;
+  if (order.highPriority || order.earlyWarning) return agePriorityBadge(order);
   if (!order.expectedShipDate) return null;
   if (order.deadlineState === "overdue") {
     return (
@@ -467,11 +481,13 @@ export function OrderFlowPage() {
                         "border-b border-gray-100 hover:bg-gray-50/80",
                         order.highPriority
                           ? "bg-rose-50/70"
-                          : order.deadlineState === "overdue" && order.stage !== "shipped"
-                            ? "bg-rose-50/40"
-                            : order.deadlineState === "due_today" && order.stage !== "shipped"
-                              ? "bg-amber-50/40"
-                              : "",
+                          : order.earlyWarning
+                            ? "bg-amber-50/50"
+                            : order.deadlineState === "overdue" && order.stage !== "shipped"
+                              ? "bg-rose-50/40"
+                              : order.deadlineState === "due_today" && order.stage !== "shipped"
+                                ? "bg-amber-50/40"
+                                : "",
                       )}
                     >
                       <td className="px-2 py-2.5">
@@ -501,25 +517,22 @@ export function OrderFlowPage() {
                       <td
                         className={cn(
                           "px-2 py-2.5 tabular-nums",
-                          order.highPriority ? "font-semibold text-rose-800" : "text-gray-700",
+                          order.highPriority
+                            ? "font-semibold text-rose-800"
+                            : order.earlyWarning
+                              ? "font-semibold text-amber-900"
+                              : "text-gray-700",
                         )}
                       >
                         <div className="flex flex-col gap-1">
                           <span>{order.orderDate}</span>
-                          {order.highPriority ? (
-                            <Badge
-                              variant="outline"
-                              className="w-fit border-rose-400 bg-rose-100 text-rose-900 font-semibold"
-                            >
-                              High priority
-                            </Badge>
-                          ) : null}
+                          {agePriorityBadge(order)}
                         </div>
                       </td>
                       <td className={cn("px-2 py-2.5 tabular-nums", deadlineClass(order.deadlineState))}>
                         <div className="flex flex-col gap-1">
                           <span>{order.expectedShipDate || "—"}</span>
-                          {!order.highPriority ? deadlineBadge(order) : null}
+                          {!order.highPriority && !order.earlyWarning ? deadlineBadge(order) : null}
                         </div>
                       </td>
                       <td className="px-2 py-2.5">
@@ -646,22 +659,26 @@ export function OrderFlowPage() {
                     <p
                       className={cn(
                         "mt-1",
-                        detail.highPriority ? "font-semibold text-rose-800" : "text-gray-900",
+                        detail.highPriority
+                          ? "font-semibold text-rose-800"
+                          : detail.earlyWarning
+                            ? "font-semibold text-amber-900"
+                            : "text-gray-900",
                       )}
                     >
                       {detail.orderDate}
-                      {detail.highPriority && detail.orderAgeDays != null
+                      {detail.orderAgeDays != null && (detail.highPriority || detail.earlyWarning)
                         ? ` · ${detail.orderAgeDays} days ago`
                         : ""}
                     </p>
-                    {detail.highPriority ? deadlineBadge(detail) : null}
+                    {agePriorityBadge(detail)}
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Expected ship</p>
                     <p className={cn("mt-1", deadlineClass(detail.deadlineState))}>
                       {detail.expectedShipDate || "—"}
                     </p>
-                    {!detail.highPriority ? deadlineBadge(detail) : null}
+                    {!detail.highPriority && !detail.earlyWarning ? deadlineBadge(detail) : null}
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Shopify financial</p>
