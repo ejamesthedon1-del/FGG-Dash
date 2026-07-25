@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from . import order_flow_store
 from .shopify import get_shopify_client
+from .shopify_color import PRODUCT_COLOR_GRAPHQL, resolve_product_color
 
 BRANDS = ("live-don", "sinners-testimony")
 
@@ -23,15 +24,15 @@ STAGE_LABELS = {
     "shipped": "Shipped",
 }
 
-ORDERS_QUERY = """
-query OrderFlowOrders($queryString: String!, $cursor: String) {
-  orders(first: 50, after: $cursor, sortKey: CREATED_AT, reverse: true, query: $queryString) {
-    pageInfo {
+ORDERS_QUERY = f"""
+query OrderFlowOrders($queryString: String!, $cursor: String) {{
+  orders(first: 50, after: $cursor, sortKey: CREATED_AT, reverse: true, query: $queryString) {{
+    pageInfo {{
       hasNextPage
       endCursor
-    }
-    edges {
-      node {
+    }}
+    edges {{
+      node {{
         id
         name
         createdAt
@@ -42,48 +43,51 @@ query OrderFlowOrders($queryString: String!, $cursor: String) {
         tags
         displayFinancialStatus
         displayFulfillmentStatus
-        customer {
+        customer {{
           displayName
           firstName
           lastName
           email
-        }
-        shippingAddress {
+        }}
+        shippingAddress {{
           name
           city
           provinceCode
           countryCodeV2
-        }
-        currentTotalPriceSet {
-          shopMoney {
+        }}
+        currentTotalPriceSet {{
+          shopMoney {{
             amount
             currencyCode
-          }
-        }
-        lineItems(first: 50) {
-          edges {
-            node {
+          }}
+        }}
+        lineItems(first: 50) {{
+          edges {{
+            node {{
               id
               name
               title
               quantity
               sku
               variantTitle
-              variant {
+              variant {{
                 id
                 title
-                selectedOptions {
+                selectedOptions {{
                   name
                   value
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
+                }}
+              }}
+              product {{
+                {PRODUCT_COLOR_GRAPHQL}
+              }}
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
 """
 
 
@@ -158,20 +162,24 @@ def _line_items(node: Dict[str, Any]) -> List[Dict[str, Any]]:
         variant = li.get("variant") or {}
         options = variant.get("selectedOptions") or []
         size = _parse_option(options, "size") or None
-        color = _parse_option(options, "color", "colour") or None
         variant_title = li.get("variantTitle") or variant.get("title") or ""
-        if not color and variant_title and " / " in variant_title:
-            # Common Shopify pattern: "Color / Size"
-            parts = [p.strip() for p in variant_title.split("/")]
-            if len(parts) >= 2:
-                color = color or parts[0]
-                size = size or parts[-1]
-        elif not color and variant_title:
-            color = variant_title
+        if not size and variant_title and " / " in variant_title:
+            size = variant_title.split("/")[-1].strip() or None
+        elif not size and variant_title and variant_title.lower() not in {"default title"}:
+            # Size-only variants (Liv Don painters) use variantTitle as size
+            maybe = variant_title.strip()
+            if maybe.lower() in {"small", "medium", "large", "xl", "2xl", "3xl"} or len(maybe) <= 4:
+                size = maybe
+        color = resolve_product_color(
+            li.get("product"),
+            selected_options=options,
+            variant_title=variant_title,
+        )
         items.append(
             {
                 "id": li.get("id"),
                 "product": li.get("title") or li.get("name") or "—",
+                "productId": ((li.get("product") or {}).get("id")) or "",
                 "variant": variant_title or "—",
                 "color": color or "—",
                 "size": size or "—",

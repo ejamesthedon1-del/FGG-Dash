@@ -33,6 +33,10 @@ class SlackClient:
     @staticmethod
     def _format_item(item: Dict[str, Any]) -> str:
         title = (item.get("title") or item.get("name") or "Item").strip()
+        color = (item.get("color") or "").strip()
+        # Title may already include " · Color" from the order payload
+        if color and color.lower() not in title.lower() and " · " not in title:
+            title = f"{title} · {color}"
         size = (item.get("size") or item.get("variantTitle") or "").strip()
         qty = int(item.get("quantity") or item.get("units") or 1)
         if size and size.lower() != "default title":

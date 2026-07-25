@@ -29,8 +29,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from "./ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import { cn } from "./ui/utils";
-import { Loader2, RefreshCw } from "lucide-react";
+import { buildBlanksPrintHtml, printBlanksSlip } from "../lib/blanks-print-slip";
+import { Loader2, Printer, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 type BrandFilter = "all" | "live-don" | "sinners-testimony";
@@ -95,6 +104,8 @@ export function OrderFlowPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [detail, setDetail] = useState<OrderFlowOrder | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
+  const [blanksSlipOpen, setBlanksSlipOpen] = useState(false);
+  const [blanksSlipHtml, setBlanksSlipHtml] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,7 +137,21 @@ export function OrderFlowPage() {
     [visibleOrders, selected],
   );
 
-  const needsBlanksSelected = selectedOrders.filter((o) => o.stage === "needs_blanks");
+  const bulkNextActions = useMemo(() => {
+    const byStage = new Map<OrderFlowStage, OrderFlowOrder[]>();
+    for (const order of selectedOrders) {
+      const list = byStage.get(order.stage) ?? [];
+      list.push(order);
+      byStage.set(order.stage, list);
+    }
+    const actions: Array<{ stage: OrderFlowStage; next: OrderFlowStage; orders: OrderFlowOrder[] }> =
+      [];
+    for (const [current, list] of byStage) {
+      const nxt = nextStage(current);
+      if (nxt) actions.push({ stage: current, next: nxt, orders: list });
+    }
+    return actions;
+  }, [selectedOrders]);
 
   const toggleSelect = (order: OrderFlowOrder, checked: boolean) => {
     const key = `${order.brand}::${order.id}`;
@@ -272,23 +297,49 @@ export function OrderFlowPage() {
         </Card>
       ) : null}
 
-      {(stage === "needs_blanks" || needsBlanksSelected.length > 0) && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-          <p className="text-sm text-gray-600">
-            {needsBlanksSelected.length > 0
-              ? `${needsBlanksSelected.length} selected in Needs Blanks`
-              : "Select orders that still need blanks, then mark them ordered in a batch."}
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            disabled={saving || needsBlanksSelected.length === 0}
-            onClick={() => void applyStage("blanks_ordered", needsBlanksSelected)}
-          >
-            Mark Blanks Ordered
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
+        <p className="mr-auto text-sm text-gray-600">
+          {selectedOrders.length > 0
+            ? `${selectedOrders.length} order(s) selected`
+            : "Select orders to print a blanks slip or move them to the next stage."}
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant={selectedOrders.length > 0 ? "default" : "outline"}
+          className="gap-2"
+          disabled={selectedOrders.length === 0}
+          onClick={() => {
+            try {
+              const html = buildBlanksPrintHtml(selectedOrders);
+              setBlanksSlipHtml(html);
+              setBlanksSlipOpen(true);
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Could not open blanks slip");
+            }
+          }}
+        >
+          <Printer className="h-4 w-4" />
+          Print blanks needed
+        </Button>
+        {bulkNextActions.length > 0 ? (
+          bulkNextActions.map((action) => (
+            <Button
+              key={`${action.stage}-${action.next}`}
+              type="button"
+              size="sm"
+              disabled={saving}
+              onClick={() => void applyStage(action.next, action.orders)}
+            >
+              Move {action.orders.length} → {STAGE_LABELS[action.next]}
+            </Button>
+          ))
+        ) : (
+          <Button type="button" size="sm" disabled>
+            Move to next stage
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       <Card>
         <CardHeader className="pb-3">
@@ -430,6 +481,50 @@ export function OrderFlowPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={blanksSlipOpen} onOpenChange={setBlanksSlipOpen}>
+        <DialogContent className="flex h-[90vh] max-w-4xl flex-col gap-3 overflow-hidden p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Blanks order slip</DialogTitle>
+            <DialogDescription>
+              Review the color/size breakdown, then print or save as PDF.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
+            {blanksSlipHtml ? (
+              <iframe
+                title="Blanks order slip preview"
+                srcDoc={blanksSlipHtml}
+                className="h-full w-full border-0 bg-white"
+              />
+            ) : null}
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <p className="text-xs text-gray-500">
+              Tip: in the print dialog, choose “Save as PDF” if you do not need paper.
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setBlanksSlipOpen(false)}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                className="gap-2"
+                onClick={() => {
+                  try {
+                    printBlanksSlip(selectedOrders);
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not print");
+                  }
+                }}
+              >
+                <Printer className="h-4 w-4" />
+                Print / Save PDF
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">

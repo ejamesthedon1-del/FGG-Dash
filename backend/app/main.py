@@ -19,6 +19,7 @@ from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
 from . import order_flow_store, product_costs_store
 from .order_flow import build_order_flow
+from .shopify_color import PRODUCT_COLOR_GRAPHQL, product_label_with_color, resolve_product_color
 
 app = FastAPI(title="Shopify Dashboard Backend")
 
@@ -176,6 +177,12 @@ async def slack_notify_todays_orders(brand: str = "live-don") -> dict:
                       name
                       quantity
                       variantTitle
+                      variant {
+                        selectedOptions { name value }
+                      }
+                      product {
+                        """ + PRODUCT_COLOR_GRAPHQL + """
+                      }
                     }
                   }
                 }
@@ -209,9 +216,15 @@ async def slack_notify_todays_orders(brand: str = "live-don") -> dict:
                             size = ""
                     else:
                         size = ""
+                color = resolve_product_color(
+                    item.get("product"),
+                    selected_options=((item.get("variant") or {}).get("selectedOptions")) or [],
+                    variant_title=item.get("variantTitle"),
+                )
                 items.append(
                     {
-                        "title": title,
+                        "title": product_label_with_color(title, color),
+                        "color": color or "",
                         "size": size,
                         "quantity": int(item.get("quantity") or 0),
                     }
@@ -381,6 +394,13 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
                       name
                       title
                       quantity
+                      variantTitle
+                      variant {
+                        selectedOptions { name value }
+                      }
+                      product {
+                        """ + PRODUCT_COLOR_GRAPHQL + """
+                      }
                     }
                   }
                 }
@@ -470,7 +490,13 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
 
                 for li in (node.get("lineItems") or {}).get("edges") or []:
                     item = li["node"]
-                    label = (item.get("title") or item.get("name") or "Unknown").strip()
+                    title = (item.get("title") or item.get("name") or "Unknown").strip()
+                    color = resolve_product_color(
+                        item.get("product"),
+                        selected_options=((item.get("variant") or {}).get("selectedOptions")) or [],
+                        variant_title=item.get("variantTitle"),
+                    )
+                    label = product_label_with_color(title, color)
                     qty = int(item.get("quantity") or 0)
                     if label and qty:
                         units_by_product[label] = units_by_product.get(label, 0) + qty
@@ -658,6 +684,7 @@ async def get_products(brand: str = "live-don") -> dict:
             status
             totalInventory
             updatedAt
+            """ + PRODUCT_COLOR_GRAPHQL + """
           }
         }
       }
@@ -666,7 +693,22 @@ async def get_products(brand: str = "live-don") -> dict:
 
     try:
         data = await client.graphql(query)
-        products = [edge["node"] for edge in data.get("products", {}).get("edges") or []]
+        products = []
+        for edge in data.get("products", {}).get("edges") or []:
+            node = edge["node"]
+            color = resolve_product_color(node)
+            products.append(
+                {
+                    "id": node.get("id"),
+                    "title": product_label_with_color(node.get("title") or "", color),
+                    "baseTitle": node.get("title"),
+                    "color": color,
+                    "handle": node.get("handle"),
+                    "status": node.get("status"),
+                    "totalInventory": node.get("totalInventory"),
+                    "updatedAt": node.get("updatedAt"),
+                }
+            )
         return {"products": products}
     except ShopifyGraphQLError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

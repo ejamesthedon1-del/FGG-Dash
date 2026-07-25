@@ -1,6 +1,6 @@
 import { Outlet, Link, NavLink, useLocation } from "react-router";
 import { Button } from "./ui/button";
-import { BookOpen, ClipboardList, FolderOpen, LayoutDashboard, Package, Plus, Shield, Sparkles, Target } from "lucide-react";
+import { BookOpen, ClipboardList, FolderOpen, LayoutDashboard, Package, Shield, Sparkles, Target } from "lucide-react";
 import { cn } from "./ui/utils";
 import { useAuth } from "../lib/use-auth";
 import { roleLabel } from "../lib/auth-roles";
@@ -51,19 +51,6 @@ export function DashboardLayout() {
               <Button variant="secondary" size="sm" className="gap-2">
                 <Shield className="h-4 w-4" />
                 {isSignedIn ? "Account" : "Sign in"}
-              </Button>
-            </Link>
-            {/* Temporary: show create actions for everyone while building the Ops OS */}
-            <Link to="/create">
-              <Button size="sm" className="gap-2">
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">New System</span>
-              </Button>
-            </Link>
-            <Link to="/sops/create">
-              <Button variant="outline" size="sm" className="gap-2">
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">New SOP</span>
               </Button>
             </Link>
           </div>
