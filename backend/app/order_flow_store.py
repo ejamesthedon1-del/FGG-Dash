@@ -116,9 +116,16 @@ def _upsert_supabase(url: str, key: str, record: Dict[str, Any], record_id: str)
         response = client.post(endpoint, headers=headers, json=row)
         if response.status_code >= 400:
             raise RuntimeError(
-                f"Supabase upsert failed ({response.status_code}): {response.text[:500]}"
+                f"Supabase upsert failed ({response.status_code}): {response.text[:800]}"
             )
-        body = response.json()
+        if not response.content:
+            return record
+        try:
+            body = response.json()
+        except Exception as exc:
+            raise RuntimeError(
+                f"Supabase upsert returned non-JSON ({response.status_code}): {response.text[:300]}"
+            ) from exc
     if isinstance(body, list) and body:
         return _row_to_record(body[0])
     if isinstance(body, dict) and body.get("id"):

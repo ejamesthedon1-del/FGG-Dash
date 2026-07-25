@@ -139,6 +139,28 @@ async def post_order_flow_status(body: OrderFlowStatusUpdateRequest) -> dict:
     return {"ok": True, "stage": stage, "updated": updated}
 
 
+@app.get("/api/order-flow/storage")
+async def get_order_flow_storage() -> dict:
+    """Diagnostics for durable stage storage (Supabase vs file)."""
+    status = order_flow_store.storage_status()
+    cfg_ok = order_flow_store.persistence_backend() == "supabase"
+    probe: dict = {"ok": False, "error": None}
+    if cfg_ok:
+        try:
+            # Lightweight write/read probe using a dedicated diagnostic key.
+            order_flow_store.upsert_stage(
+                "live-don",
+                "gid://shopify/Order/fgg-storage-probe",
+                "needs_blanks",
+                actor="probe",
+                order_name="#PROBE",
+            )
+            probe = {"ok": True, "error": None}
+        except Exception as exc:
+            probe = {"ok": False, "error": str(exc)}
+    return {**status, "writeProbe": probe}
+
+
 @app.post("/api/order-flow/notes")
 async def post_order_flow_notes(body: OrderFlowNotesUpdateRequest) -> dict:
     brand_key = resolve_brand(body.brand)
