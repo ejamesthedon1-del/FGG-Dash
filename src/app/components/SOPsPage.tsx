@@ -668,46 +668,51 @@ export function SOPsPage() {
                     const count = sopCountInCategory(category.id);
                     const blurb = resolveCategoryBlurb(structure, category.id);
                     const Icon = categoryIcon(category.id);
-                    const sections = category.items.length;
                     return (
-                      <button
+                      <article
                         key={category.id}
-                        type="button"
                         className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-left shadow-sm transition-shadow hover:shadow-md"
-                        onClick={() => scheduleNav(() => goToSections(category.id))}
                       >
-                        <CategoryCover
-                          categoryId={category.id}
-                          className="h-40 sm:h-44"
-                          menu={
-                            isAdmin ? (
-                              <span
-                                role="presentation"
-                                className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-gray-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openHubEdit(
-                                    { kind: "categoryTitle", categoryId: category.id },
-                                    category.title,
-                                  );
-                                }}
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </span>
-                            ) : undefined
-                          }
-                        />
+                        <button
+                          type="button"
+                          className="relative w-full text-left"
+                          onClick={() => scheduleNav(() => goToSections(category.id))}
+                          aria-label={`Open ${category.title}`}
+                        >
+                          <CategoryCover
+                            categoryId={category.id}
+                            className="h-40 sm:h-44"
+                            menu={
+                              isAdmin ? (
+                                <span
+                                  role="presentation"
+                                  className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-gray-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openHubEdit(
+                                      { kind: "categoryTitle", categoryId: category.id },
+                                      category.title,
+                                    );
+                                  }}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </span>
+                              ) : undefined
+                            }
+                          />
+                        </button>
                         <div className="flex flex-1 flex-col gap-1.5 px-4 pb-4 pt-3">
-                          <p
+                          <button
+                            type="button"
                             className={cn(
-                              "flex items-center gap-2 text-base font-semibold text-gray-900",
+                              "flex w-full items-center gap-2 text-left text-base font-semibold text-gray-900",
                               isAdmin && "cursor-text select-text",
                             )}
-                            onClick={isAdmin ? (e) => e.stopPropagation() : undefined}
+                            onClick={() => scheduleNav(() => goToSections(category.id))}
                             onDoubleClick={
                               isAdmin
                                 ? (e) => {
-                                    e.stopPropagation();
+                                    e.preventDefault();
                                     clearPendingNav();
                                     openHubEdit(
                                       { kind: "categoryTitle", categoryId: category.id },
@@ -719,17 +724,15 @@ export function SOPsPage() {
                           >
                             <Icon className="h-4 w-4 shrink-0 text-brand" strokeWidth={1.75} aria-hidden />
                             {category.title}
-                          </p>
+                          </button>
                           <p
                             className={cn(
-                              "line-clamp-3 text-sm leading-relaxed text-gray-500",
+                              "line-clamp-2 text-sm leading-relaxed text-gray-500",
                               isAdmin && "cursor-text select-text",
                             )}
-                            onClick={isAdmin ? (e) => e.stopPropagation() : undefined}
                             onDoubleClick={
                               isAdmin
-                                ? (e) => {
-                                    e.stopPropagation();
+                                ? () => {
                                     clearPendingNav();
                                     openHubEdit(
                                       { kind: "categoryBlurb", categoryId: category.id },
@@ -741,16 +744,56 @@ export function SOPsPage() {
                           >
                             {blurb.trim() || "This folder has no description yet."}
                           </p>
-                          <div className="mt-auto flex items-center justify-between gap-2 border-t border-gray-100 pt-3 text-xs text-gray-400">
-                            <span>
-                              {sections} {sections === 1 ? "section" : "sections"}
-                            </span>
-                            <span>
-                              {count} {count === 1 ? "document" : "documents"}
-                            </span>
-                          </div>
+                          {category.items.length > 0 ? (
+                            <ul className="mt-1 space-y-0.5 border-t border-gray-100 pt-2">
+                              {category.items.map((item) => {
+                                const sectionCount = sopCountInSection(category.id, item.id);
+                                return (
+                                  <li key={item.id}>
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-950"
+                                      onClick={() =>
+                                        scheduleNav(() => goToSops(category.id, item.id))
+                                      }
+                                      onDoubleClick={
+                                        isAdmin
+                                          ? (e) => {
+                                              e.preventDefault();
+                                              clearPendingNav();
+                                              openHubEdit(
+                                                {
+                                                  kind: "menuItemTitle",
+                                                  categoryId: category.id,
+                                                  itemId: item.id,
+                                                },
+                                                item.title,
+                                              );
+                                            }
+                                          : undefined
+                                      }
+                                    >
+                                      <ChevronRight
+                                        className="h-3.5 w-3.5 shrink-0 text-gray-300"
+                                        aria-hidden
+                                      />
+                                      <span className="min-w-0 flex-1 truncate font-medium">
+                                        {item.title}
+                                      </span>
+                                      <span className="shrink-0 text-xs tabular-nums text-gray-400">
+                                        {sectionCount}
+                                      </span>
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          ) : null}
+                          <p className="mt-auto pt-2 text-xs text-gray-400">
+                            {count} {count === 1 ? "document" : "documents"}
+                          </p>
                         </div>
-                      </button>
+                      </article>
                     );
                   })}
                 </div>
