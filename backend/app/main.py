@@ -72,7 +72,15 @@ def local_date_str(dt: datetime, tz: ZoneInfo) -> str:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"ok": True}
+    status = order_flow_store.storage_status()
+    return {
+        "ok": True,
+        "orderFlow": {
+            "backend": status["backend"],
+            "durable": status["durable"],
+            "recordCount": status["recordCount"],
+        },
+    }
 
 
 @app.get("/api/product-costs")

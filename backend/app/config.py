@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     shopify_sinners_client_id: Optional[str] = None
     shopify_sinners_client_secret: Optional[str] = None
 
+    # Durable Order Flow stages (Supabase). Prefer service role on Railway.
+    supabase_url: Optional[str] = None
+    supabase_service_role_key: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
