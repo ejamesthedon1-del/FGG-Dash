@@ -14,7 +14,18 @@ import { CreativeAssetsPage } from "./components/CreativeAssetsPage";
 import { TrainingCenterPage } from "./components/TrainingCenterPage";
 import { TrainingModuleDetail } from "./components/TrainingModuleDetail";
 import { OrderFlowPage } from "./components/OrderFlowPage";
+import { CeoOnly } from "./components/CeoOnly";
 import { NotFoundPage, RouteErrorPage } from "./components/RouteErrorPage";
+
+function ceoPage(Component: React.ComponentType) {
+  return function CeoGuardedPage() {
+    return (
+      <CeoOnly>
+        <Component />
+      </CeoOnly>
+    );
+  };
+}
 
 export const router = createBrowserRouter([
   { path: "/admin", Component: AdminPage, errorElement: <RouteErrorPage /> },
@@ -28,12 +39,12 @@ export const router = createBrowserRouter([
       { path: "sops/create", Component: CreateSOP },
       { path: "sops/edit/:id", Component: EditSOP },
       { path: "sops", Component: SOPsPage },
-      { path: "brand-hub", Component: BrandHubPage },
-      { path: "brand-hub/:slug", Component: BrandHubDetail },
-      { path: "creative-assets", Component: CreativeAssetsPage },
-      { path: "training-center", Component: TrainingCenterPage },
-      { path: "training-center/:moduleId", Component: TrainingModuleDetail },
-      { path: "our-mission", Component: MissionPage },
+      { path: "brand-hub", Component: ceoPage(BrandHubPage) },
+      { path: "brand-hub/:slug", Component: ceoPage(BrandHubDetail) },
+      { path: "creative-assets", Component: ceoPage(CreativeAssetsPage) },
+      { path: "training-center", Component: ceoPage(TrainingCenterPage) },
+      { path: "training-center/:moduleId", Component: ceoPage(TrainingModuleDetail) },
+      { path: "our-mission", Component: ceoPage(MissionPage) },
       { path: "system/:id", Component: SystemDetail },
       { path: "create", Component: CreateSystem },
       { path: "*", Component: NotFoundPage },
