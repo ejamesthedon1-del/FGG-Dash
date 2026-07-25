@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router";
 import {
   fetchOrderFlow,
   nextStage,
+  normalizeOrderFlowStage,
   ORDER_FLOW_STAGES,
   STAGE_LABELS,
   updateOrderFlowNotes,
@@ -125,10 +126,11 @@ export function OrderFlowPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const stageFromUrl = searchParams.get("stage");
   const initialStage: StageFilter =
-    stageFromUrl &&
-    (stageFromUrl === "all" || (ORDER_FLOW_STAGES as readonly string[]).includes(stageFromUrl))
-      ? (stageFromUrl as StageFilter)
-      : "all";
+    stageFromUrl === "all"
+      ? "all"
+      : stageFromUrl
+        ? normalizeOrderFlowStage(stageFromUrl)
+        : "all";
 
   const [brand, setBrand] = useState<BrandFilter>("all");
   const [stage, setStage] = useState<StageFilter>(initialStage);
@@ -188,12 +190,8 @@ export function OrderFlowPage() {
   }, [load]);
 
   useEffect(() => {
-    if (
-      stageFromUrl &&
-      (stageFromUrl === "all" || (ORDER_FLOW_STAGES as readonly string[]).includes(stageFromUrl))
-    ) {
-      setStage(stageFromUrl as StageFilter);
-    }
+    if (stageFromUrl === "all") setStage("all");
+    else if (stageFromUrl) setStage(normalizeOrderFlowStage(stageFromUrl));
   }, [stageFromUrl]);
 
   const setStageAndUrl = (next: StageFilter) => {
@@ -316,7 +314,7 @@ export function OrderFlowPage() {
           </p>
           <h2 className="mt-1 text-2xl font-semibold text-gray-900">Order Flow</h2>
           <p className="mt-1 text-gray-600">
-            Track every Liv Don and Sinners order from blanks through shipment.
+            Track orders through blanks, production, and ship.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -763,7 +761,7 @@ export function OrderFlowPage() {
                       {[...detail.history].reverse().map((h, i) => (
                         <li key={`${h.at}-${i}`} className="rounded-md border border-gray-100 px-2 py-1.5">
                           <span className="font-medium">
-                            {STAGE_LABELS[h.stage as OrderFlowStage] || h.stage}
+                            {STAGE_LABELS[normalizeOrderFlowStage(h.stage)] || h.stage}
                           </span>
                           <span className="text-gray-500">
                             {" "}

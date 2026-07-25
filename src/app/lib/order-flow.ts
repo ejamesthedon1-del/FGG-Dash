@@ -2,14 +2,26 @@ import { apiUrl } from "./api-base";
 
 export const ORDER_FLOW_STAGES = [
   "needs_blanks",
-  "blanks_ordered",
-  "ready_for_production",
   "in_production",
   "ready_to_ship",
   "shipped",
 ] as const;
 
 export type OrderFlowStage = (typeof ORDER_FLOW_STAGES)[number];
+
+/** Older boards — mapped into the simplified ops path. */
+const STAGE_ALIASES: Record<string, OrderFlowStage> = {
+  blanks_ordered: "needs_blanks",
+  ready_for_production: "in_production",
+};
+
+export function normalizeOrderFlowStage(value: string | null | undefined): OrderFlowStage {
+  const raw = (value || "needs_blanks").trim();
+  const mapped = STAGE_ALIASES[raw] ?? raw;
+  return (ORDER_FLOW_STAGES as readonly string[]).includes(mapped)
+    ? (mapped as OrderFlowStage)
+    : "needs_blanks";
+}
 
 export type DeadlineState = "overdue" | "due_today" | "upcoming" | "ok" | "none";
 
@@ -81,8 +93,6 @@ export type OrderFlowResponse = {
 
 export const STAGE_LABELS: Record<OrderFlowStage, string> = {
   needs_blanks: "Needs Blanks",
-  blanks_ordered: "Blanks Ordered",
-  ready_for_production: "Ready for Production",
   in_production: "In Production",
   ready_to_ship: "Ready to Ship",
   shipped: "Shipped",
@@ -105,7 +115,8 @@ export function withOrderPriority(order: OrderFlowOrder, todayIso?: string): Ord
       ? Math.max(0, Math.round((end - start) / 86_400_000))
       : 0;
   }
-  const open = order.stage !== "shipped";
+  const stage = normalizeOrderFlowStage(order.stage);
+  const open = stage !== "shipped";
   const highPriority = open && (order.highPriority === true || (age != null && age > 7));
   const earlyWarning =
     open &&
@@ -113,6 +124,8 @@ export function withOrderPriority(order: OrderFlowOrder, todayIso?: string): Ord
     (order.earlyWarning === true || (age != null && age >= 3));
   return {
     ...order,
+    stage,
+    stageLabel: STAGE_LABELS[stage],
     orderAgeDays: age ?? order.orderAgeDays,
     highPriority,
     earlyWarning,

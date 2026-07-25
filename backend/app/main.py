@@ -119,6 +119,7 @@ async def get_order_flow(
 async def post_order_flow_status(body: OrderFlowStatusUpdateRequest) -> dict:
     """Move one or many orders to a FGG production stage (batch-safe)."""
     stage = body.stage.strip()
+    stage = order_flow_store.normalize_stage(stage)
     if stage not in order_flow_store.STAGES:
         raise HTTPException(status_code=400, detail=f"Invalid stage: {stage}")
     items = []

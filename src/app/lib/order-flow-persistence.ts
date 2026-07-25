@@ -1,12 +1,14 @@
 import { writeLocalAndSync } from "@/lib/synced-storage";
 import {
   ORDER_FLOW_STAGES,
+  normalizeOrderFlowStage,
   updateOrderFlowStatus,
   type OrderFlowOrder,
   type OrderFlowStage,
 } from "./order-flow";
 
-export const ORDER_FLOW_STAGES_KEY = "order-flow-stages-v1";
+export const ORDER_FLOW_STAGES_KEY = "order-flow-stages-v2";
+const LEGACY_STAGES_KEY = "order-flow-stages-v1";
 
 export type PersistedStageRecord = {
   brand: string;
@@ -29,10 +31,9 @@ function isStage(value: unknown): value is OrderFlowStage {
   return typeof value === "string" && (ORDER_FLOW_STAGES as readonly string[]).includes(value);
 }
 
-export function loadPersistedStages(): PersistedStore {
+function parseStore(raw: string | null): PersistedStore {
+  if (!raw) return { orders: {} };
   try {
-    const raw = localStorage.getItem(ORDER_FLOW_STAGES_KEY);
-    if (!raw) return { orders: {} };
     const parsed = JSON.parse(raw) as Partial<PersistedStore>;
     if (!parsed || typeof parsed !== "object" || !parsed.orders || typeof parsed.orders !== "object") {
       return { orders: {} };
@@ -40,18 +41,34 @@ export function loadPersistedStages(): PersistedStore {
     const orders: Record<string, PersistedStageRecord> = {};
     for (const [key, value] of Object.entries(parsed.orders)) {
       if (!value || typeof value !== "object") continue;
-      if (!isStage(value.stage)) continue;
       if (!value.brand || !value.shopifyOrderId || !value.updatedAt) continue;
+      const stage = normalizeOrderFlowStage(String(value.stage || ""));
+      if (!isStage(stage)) continue;
       orders[key] = {
         brand: String(value.brand),
         shopifyOrderId: String(value.shopifyOrderId),
         orderName: value.orderName ? String(value.orderName) : undefined,
-        stage: value.stage,
+        stage,
         notes: value.notes ? String(value.notes) : undefined,
         updatedAt: String(value.updatedAt),
       };
     }
     return { orders };
+  } catch {
+    return { orders: {} };
+  }
+}
+
+export function loadPersistedStages(): PersistedStore {
+  try {
+    const current = parseStore(localStorage.getItem(ORDER_FLOW_STAGES_KEY));
+    if (Object.keys(current.orders).length > 0) return current;
+    const legacy = parseStore(localStorage.getItem(LEGACY_STAGES_KEY));
+    if (Object.keys(legacy.orders).length > 0) {
+      savePersistedStages(legacy);
+      return legacy;
+    }
+    return { orders: {} };
   } catch {
     return { orders: {} };
   }

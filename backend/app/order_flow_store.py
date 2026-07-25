@@ -24,12 +24,22 @@ _lock = threading.Lock()
 
 STAGES = (
     "needs_blanks",
-    "blanks_ordered",
-    "ready_for_production",
     "in_production",
     "ready_to_ship",
     "shipped",
 )
+
+# Older boards used extra hops — collapse into the ops-focused path.
+STAGE_ALIASES = {
+    "blanks_ordered": "needs_blanks",
+    "ready_for_production": "in_production",
+}
+
+
+def normalize_stage(stage: Optional[str]) -> str:
+    raw = (stage or "needs_blanks").strip()
+    mapped = STAGE_ALIASES.get(raw, raw)
+    return mapped if mapped in STAGES else "needs_blanks"
 
 
 def _now() -> str:
@@ -80,7 +90,7 @@ def _row_to_record(row: Dict[str, Any]) -> Dict[str, Any]:
         "brand": row.get("brand") or "",
         "shopifyOrderId": row.get("shopify_order_id") or "",
         "orderName": row.get("order_name") or "",
-        "stage": row.get("stage") or "needs_blanks",
+        "stage": normalize_stage(row.get("stage")),
         "notes": row.get("notes") or "",
         "history": history if isinstance(history, list) else [],
         "updatedAt": row.get("updated_at") or "",
@@ -155,7 +165,15 @@ def _load_all_supabase(url: str, key: str) -> Dict[str, Any]:
             rid = row.get("id") or _record_key(
                 str(row.get("brand") or ""), str(row.get("shopify_order_id") or "")
             )
-            orders[rid] = _row_to_record(row)
+            raw_stage = row.get("stage") or "needs_blanks"
+            record = _row_to_record(row)
+            orders[rid] = record
+            # Persist collapsed stages so durable store matches the simplified board.
+            if raw_stage != record["stage"]:
+                try:
+                    _upsert_supabase(url, key, {**record, "stage": record["stage"]}, rid)
+                except Exception:
+                    pass
     return {"orders": orders}
 
 
@@ -173,7 +191,25 @@ def _load_all_file() -> Dict[str, Any]:
     orders = parsed.get("orders")
     if not isinstance(orders, dict):
         return _empty()
-    return {"orders": orders}
+    normalized: Dict[str, Any] = {}
+    changed = False
+    for key, value in orders.items():
+        if not isinstance(value, dict):
+            continue
+        rec = dict(value)
+        raw = rec.get("stage") or "needs_blanks"
+        stage = normalize_stage(raw)
+        if stage != raw:
+            rec["stage"] = stage
+            changed = True
+        normalized[key] = rec
+    data = {"orders": normalized}
+    if changed:
+        try:
+            _write_all_file(data)
+        except Exception:
+            pass
+    return data
 
 
 def _write_all_file(data: Dict[str, Any]) -> None:
@@ -222,6 +258,7 @@ def upsert_stage(
     actor: str = "ops",
     order_name: Optional[str] = None,
 ) -> Dict[str, Any]:
+    stage = normalize_stage(stage)
     if stage not in STAGES:
         raise ValueError(f"Invalid stage: {stage}")
 
@@ -264,7 +301,7 @@ def upsert_stage(
 
 def update_notes(brand: str, shopify_order_id: str, notes: str) -> Dict[str, Any]:
     existing = get_record(brand, shopify_order_id) or {}
-    stage = existing.get("stage") or "needs_blanks"
+    stage = normalize_stage(existing.get("stage"))
     return upsert_stage(
         brand,
         shopify_order_id,

@@ -23,7 +23,6 @@ import {
   ClipboardList,
   Loader2,
   Megaphone,
-  Package,
   RefreshCw,
   Scissors,
   Shirt,
@@ -47,8 +46,6 @@ function countFor(stages: OrderFlowStageCount[], id: string): number {
 
 function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[]): FocusItem[] {
   const needsBlanks = countFor(stages, "needs_blanks");
-  const blanksOrdered = countFor(stages, "blanks_ordered");
-  const readyProd = countFor(stages, "ready_for_production");
   const inProd = countFor(stages, "in_production");
   const readyShip = countFor(stages, "ready_to_ship");
   const overdue = orders.filter(
@@ -112,6 +109,16 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
       count: needsBlanks,
     });
   }
+  if (inProd > 0) {
+    items.push({
+      id: "in-prod",
+      title: "Keep production moving",
+      detail: "Orders on the floor — clear blockers early.",
+      tone: "action",
+      to: "/order-flow?stage=in_production",
+      count: inProd,
+    });
+  }
   if (readyShip > 0) {
     items.push({
       id: "ready-ship",
@@ -120,36 +127,6 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
       tone: "action",
       to: "/order-flow?stage=ready_to_ship",
       count: readyShip,
-    });
-  }
-  if (readyProd > 0) {
-    items.push({
-      id: "ready-prod",
-      title: "Start production",
-      detail: "Blanks are ready — assign work on the floor.",
-      tone: "action",
-      to: "/order-flow?stage=ready_for_production",
-      count: readyProd,
-    });
-  }
-  if (inProd > 0) {
-    items.push({
-      id: "in-prod",
-      title: "Keep production moving",
-      detail: "Orders currently on the floor — clear blockers early.",
-      tone: "steady",
-      to: "/order-flow?stage=in_production",
-      count: inProd,
-    });
-  }
-  if (blanksOrdered > 0) {
-    items.push({
-      id: "blanks-ordered",
-      title: "Watch blank arrivals",
-      detail: "Blanks ordered — move to production when they land.",
-      tone: "steady",
-      to: "/order-flow?stage=blanks_ordered",
-      count: blanksOrdered,
     });
   }
 
@@ -191,8 +168,6 @@ function toneStyles(tone: FocusItem["tone"]) {
 
 const PIPELINE: Array<{ id: OrderFlowStage; icon: typeof Shirt }> = [
   { id: "needs_blanks", icon: Shirt },
-  { id: "blanks_ordered", icon: Package },
-  { id: "ready_for_production", icon: ClipboardList },
   { id: "in_production", icon: Scissors },
   { id: "ready_to_ship", icon: Truck },
 ];
@@ -399,7 +374,7 @@ export function SystemsOverview() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {PIPELINE.map(({ id, icon: Icon }) => {
               const n = countFor(stages, id);
               return (

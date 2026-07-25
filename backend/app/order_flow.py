@@ -17,8 +17,6 @@ BRAND_LABELS = {
 
 STAGE_LABELS = {
     "needs_blanks": "Needs Blanks",
-    "blanks_ordered": "Blanks Ordered",
-    "ready_for_production": "Ready for Production",
     "in_production": "In Production",
     "ready_to_ship": "Ready to Ship",
     "shipped": "Shipped",
@@ -261,7 +259,7 @@ def merge_order(
     if not isinstance(record, dict):
         record = {}
 
-    stage = record.get("stage") or "needs_blanks"
+    stage = order_flow_store.normalize_stage(record.get("stage") or "needs_blanks")
     auto_shipped = False
     if _shopify_is_shipped(fulfillment):
         if stage != "shipped":
