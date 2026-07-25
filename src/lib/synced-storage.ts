@@ -21,6 +21,7 @@ export const SYNCED_STORAGE_KEYS = [
   "training-center-module-overrides-v1",
   "training-center-custom-modules-v1",
   "training-center-progress-v1",
+  "order-flow-stages-v1",
 ] as const;
 
 export type SyncedStorageKey = (typeof SYNCED_STORAGE_KEYS)[number];

@@ -10,6 +10,11 @@ import {
   type OrderFlowStage,
   type OrderFlowStageCount,
 } from "../lib/order-flow";
+import {
+  rememberOrdersFromServer,
+  rememberStages,
+  restoreStagesToServer,
+} from "../lib/order-flow-persistence";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -107,15 +112,35 @@ export function OrderFlowPage() {
   const [blanksSlipOpen, setBlanksSlipOpen] = useState(false);
   const [blanksSlipHtml, setBlanksSlipHtml] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { preserveSelection?: boolean }) => {
     setLoading(true);
     try {
       // Always fetch all stages for accurate counts; filter client-side by stage tab.
-      const data = await fetchOrderFlow({ brand, stage: "all", days: 90 });
+      let data = await fetchOrderFlow({ brand, stage: "all", days: 90 });
+      rememberOrdersFromServer(data.orders);
+
+      // If Railway lost stage data (redeploy without volume), restore from browser/cloud backup.
+      const restored = await restoreStagesToServer(data.orders);
+      if (restored > 0) {
+        data = await fetchOrderFlow({ brand, stage: "all", days: 90 });
+        rememberOrdersFromServer(data.orders);
+        toast.success(`Restored ${restored} saved order stage${restored === 1 ? "" : "s"}`);
+      }
+
       setStages(data.stages);
       setOrders(data.orders);
       setErrors(data.errors || {});
-      setSelected({});
+      if (!opts?.preserveSelection) {
+        // Drop selections for orders that are no longer in the loaded set.
+        setSelected((prev) => {
+          const valid = new Set(data.orders.map((o) => `${o.brand}::${o.id}`));
+          const next: Record<string, boolean> = {};
+          for (const [key, on] of Object.entries(prev)) {
+            if (on && valid.has(key)) next[key] = true;
+          }
+          return next;
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load orders");
     } finally {
@@ -132,9 +157,10 @@ export function OrderFlowPage() {
     return orders.filter((o) => o.stage === stage);
   }, [orders, stage]);
 
+  // Keep multi-select across stage tabs so ops can move batches without re-checking.
   const selectedOrders = useMemo(
-    () => visibleOrders.filter((o) => selected[`${o.brand}::${o.id}`]),
-    [visibleOrders, selected],
+    () => orders.filter((o) => selected[`${o.brand}::${o.id}`]),
+    [orders, selected],
   );
 
   const bulkNextActions = useMemo(() => {
@@ -170,22 +196,27 @@ export function OrderFlowPage() {
     if (list.length === 0) return;
     setSaving(true);
     try {
-      await updateOrderFlowStatus(
-        target,
-        list.map((o) => ({
-          brand: o.brand,
-          shopifyOrderId: o.id,
-          orderName: o.orderNumber,
-        })),
-      );
+      const payload = list.map((o) => ({
+        brand: o.brand,
+        shopifyOrderId: o.id,
+        orderName: o.orderNumber,
+      }));
+      await updateOrderFlowStatus(target, payload);
+      rememberStages(target, payload);
+
+      const keepSelected: Record<string, boolean> = {};
+      for (const o of list) keepSelected[`${o.brand}::${o.id}`] = true;
+      setSelected(keepSelected);
+      setStage(target);
+
       toast.success(
         list.length === 1
           ? `${list[0].orderNumber} → ${STAGE_LABELS[target]}`
           : `${list.length} orders → ${STAGE_LABELS[target]}`,
       );
-      await load();
+      await load({ preserveSelection: true });
       if (detail && list.some((o) => o.id === detail.id && o.brand === detail.brand)) {
-        setDetail(null);
+        setDetail((d) => (d ? { ...d, stage: target, stageLabel: STAGE_LABELS[target] } : d));
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update status");
@@ -208,8 +239,11 @@ export function OrderFlowPage() {
         shopifyOrderId: detail.id,
         notes: notesDraft,
       });
+      rememberStages(detail.stage, [
+        { brand: detail.brand, shopifyOrderId: detail.id, orderName: detail.orderNumber },
+      ]);
       toast.success("Notes saved");
-      await load();
+      await load({ preserveSelection: true });
       setDetail((d) => (d ? { ...d, notes: notesDraft } : d));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save notes");
@@ -300,7 +334,7 @@ export function OrderFlowPage() {
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
         <p className="mr-auto text-sm text-gray-600">
           {selectedOrders.length > 0
-            ? `${selectedOrders.length} order(s) selected`
+            ? `${selectedOrders.length} order(s) selected · stays selected across stages`
             : "Select orders to print a blanks slip or move them to the next stage."}
         </p>
         <Button
