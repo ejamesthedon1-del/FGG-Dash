@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { supabase } from "@/lib/supabase/client";
 import { Button } from "./ui/button";
+import { useAuth } from "../lib/use-auth";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -223,8 +223,9 @@ function KpiTile({
 export function BrandHubDetail() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const { loading: authLoading, isCeo, canManageContent } = useAuth();
   const [brand, setBrand] = useState<BrandProfile | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const isAdmin = canManageContent;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<BrandProfile | null>(null);
   const [tasks, setTasks] = useState<BrandTask[]>(DEFAULT_TASKS);
@@ -353,17 +354,6 @@ export function BrandHubDetail() {
     [],
   );
 
-  useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => setIsAdmin(Boolean(data.session)));
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_e, session) => {
-      setIsAdmin(Boolean(session));
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
   const startEdit = () => {
     if (!brand) return;
     setDraft(cloneForEdit(brand));
@@ -445,6 +435,17 @@ export function BrandHubDetail() {
     }
 
     setProductCosts(getCostsForBrand(slug));
+
+    // Financial KPIs are CEO-only — do not call the sales API for other roles.
+    if (authLoading || !isCeo) {
+      setKpis(null);
+      setKpiStatus("idle");
+      setDailySoldItems([]);
+      setMonthSoldItems([]);
+      setProductTitles([]);
+      setKpiNumbers(null);
+      return;
+    }
 
     if (!SHOPIFY_LIVE_BRAND_SLUGS.has(slug)) {
       setKpis(mockKpisForBrand(slug));
@@ -539,7 +540,7 @@ export function BrandHubDetail() {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, authLoading, isCeo]);
 
   const persistProductCost = (title: string, field: keyof ProductUnitCost, raw: string) => {
     if (!slug) return;
@@ -762,6 +763,8 @@ export function BrandHubDetail() {
 
       {/* Top dashboard full-width; brand tasks below */}
       <div className="space-y-6">
+        {isCeo ? (
+          <>
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1100,6 +1103,8 @@ export function BrandHubDetail() {
               )}
             </CardContent>
           </Card>
+        ) : null}
+          </>
         ) : null}
 
         <Card className="border-0 shadow-sm">

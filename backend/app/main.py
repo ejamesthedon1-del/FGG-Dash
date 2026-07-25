@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .schemas import (
+    OrderFlowNotesUpdateRequest,
+    OrderFlowStatusUpdateRequest,
     ProductCostsPutRequest,
     ProductCreateRequest,
     ProductRenameRequest,
@@ -15,7 +17,8 @@ from .schemas import (
 from .shopify import ShopifyGraphQLError, get_shopify_client
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
-from . import product_costs_store
+from . import order_flow_store, product_costs_store
+from .order_flow import build_order_flow
 
 app = FastAPI(title="Shopify Dashboard Backend")
 
@@ -88,6 +91,48 @@ async def put_product_costs(body: ProductCostsPutRequest, brand: str = "live-don
     }
     saved = product_costs_store.save_brand(brand_key, payload)
     return {"brand": brand_key, "costs": saved}
+
+
+@app.get("/api/order-flow")
+async def get_order_flow(
+    brand: str = "all",
+    stage: str = "all",
+    days: int = 90,
+) -> dict:
+    """Combined Liv Don + Sinners orders with FGG production stages."""
+    try:
+        return await build_order_flow(brand_filter=brand, stage_filter=stage, days=days)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/order-flow/status")
+async def post_order_flow_status(body: OrderFlowStatusUpdateRequest) -> dict:
+    """Move one or many orders to a FGG production stage (batch-safe)."""
+    stage = body.stage.strip()
+    if stage not in order_flow_store.STAGES:
+        raise HTTPException(status_code=400, detail=f"Invalid stage: {stage}")
+    items = []
+    for o in body.orders:
+        items.append(
+            {
+                "brand": resolve_brand(o.brand),
+                "shopifyOrderId": o.shopifyOrderId,
+                "orderName": o.orderName or "",
+            }
+        )
+    try:
+        updated = order_flow_store.bulk_upsert_stage(items, stage, actor="ops")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "stage": stage, "updated": updated}
+
+
+@app.post("/api/order-flow/notes")
+async def post_order_flow_notes(body: OrderFlowNotesUpdateRequest) -> dict:
+    brand_key = resolve_brand(body.brand)
+    record = order_flow_store.update_notes(brand_key, body.shopifyOrderId, body.notes)
+    return {"ok": True, "record": record}
 
 
 @app.post("/api/slack/test")
@@ -204,7 +249,7 @@ async def slack_notify_todays_orders(brand: str = "live-don") -> dict:
 @app.get("/api/meta/ads-spend-today")
 async def get_meta_ads_spend_today(brand: str = "live-don") -> dict:
     """Meta ads spend for today. Pass ?brand=live-don or ?brand=sinners-testimony."""
-    brand_key = normalize_brand(brand)
+    brand_key = resolve_brand(brand)
     if not meta_ads_client.configured(brand_key):
         raise HTTPException(
             status_code=503,

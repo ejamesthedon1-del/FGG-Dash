@@ -13,6 +13,7 @@ import { BrandHubDetail } from "./components/BrandHubDetail";
 import { CreativeAssetsPage } from "./components/CreativeAssetsPage";
 import { TrainingCenterPage } from "./components/TrainingCenterPage";
 import { TrainingModuleDetail } from "./components/TrainingModuleDetail";
+import { OrderFlowPage } from "./components/OrderFlowPage";
 import { NotFoundPage, RouteErrorPage } from "./components/RouteErrorPage";
 
 export const router = createBrowserRouter([
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorPage />,
     children: [
       { index: true, Component: SystemsOverview },
+      { path: "order-flow", Component: OrderFlowPage },
       { path: "sops/create", Component: CreateSOP },
       { path: "sops/edit/:id", Component: EditSOP },
       { path: "sops", Component: SOPsPage },

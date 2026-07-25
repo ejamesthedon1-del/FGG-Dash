@@ -30,3 +30,20 @@ class ProductUnitCostBody(BaseModel):
 
 class ProductCostsPutRequest(BaseModel):
     costs: Dict[str, ProductUnitCostBody] = Field(default_factory=dict)
+
+
+class OrderFlowStatusItem(BaseModel):
+    brand: str = Field(..., min_length=1)
+    shopifyOrderId: str = Field(..., min_length=1)
+    orderName: Optional[str] = None
+
+
+class OrderFlowStatusUpdateRequest(BaseModel):
+    stage: str = Field(..., min_length=1)
+    orders: List[OrderFlowStatusItem] = Field(..., min_length=1)
+
+
+class OrderFlowNotesUpdateRequest(BaseModel):
+    brand: str = Field(..., min_length=1)
+    shopifyOrderId: str = Field(..., min_length=1)
+    notes: str = ""

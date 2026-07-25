@@ -5,6 +5,7 @@ import {
   OperatorDashboardStorage,
   SOPsStorage,
 } from "../lib/storage";
+import { useAuth } from "../lib/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import {
   AlertTriangle,
@@ -15,6 +16,7 @@ import {
 import { CombinedLiveStoresPanel } from "./CombinedLiveStoresPanel";
 
 export function SystemsOverview() {
+  const { loading: authLoading, isCeo } = useAuth();
   const [topSops, setTopSops] = useState<
     Array<{ id: string; title: string; status: "Draft" | "Active" | "Needs Update"; updatedAt: string }>
   >([]);
@@ -45,16 +47,20 @@ export function SystemsOverview() {
     return () => window.removeEventListener("fgg-storage-sync", loadHome);
   }, [loadHome]);
 
+  // Temporary: guest sees the same Ops / Productions home. Tighten auth later.
+  const showCeoFinance = !authLoading && isCeo;
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900">All Systems</h2>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+          Ops / Productions
+        </p>
+        <h2 className="mt-1 text-2xl font-semibold text-gray-900">Daily ops brief</h2>
         <p className="mt-1 text-gray-600">
-          Live store performance and today’s operator snapshot
+          Priorities, tasks due today, and open issues for the floor.
         </p>
       </div>
-
-      <CombinedLiveStoresPanel />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
         <Card className="xl:col-span-2">
@@ -157,6 +163,21 @@ export function SystemsOverview() {
           </CardContent>
         </Card>
       </div>
+
+      {showCeoFinance ? (
+        <div className="space-y-3 border-t border-gray-200 pt-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
+              CEO only
+            </p>
+            <h3 className="mt-1 text-lg font-semibold text-gray-900">Live store performance</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Profit, revenue, ads, and production.
+            </p>
+          </div>
+          <CombinedLiveStoresPanel />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import { Outlet, Link, NavLink, useLocation } from "react-router";
 import { Button } from "./ui/button";
-import { BookOpen, ClipboardList, FolderOpen, LayoutDashboard, Plus, Shield, Sparkles, Target } from "lucide-react";
+import { BookOpen, ClipboardList, FolderOpen, LayoutDashboard, Package, Plus, Shield, Sparkles, Target } from "lucide-react";
 import { cn } from "./ui/utils";
+import { useAuth } from "../lib/use-auth";
+import { roleLabel } from "../lib/auth-roles";
 
 const LOGO_SRC = "/logo.svg";
 
@@ -15,6 +17,7 @@ const sidebarNavClass = ({ isActive }: { isActive: boolean }) =>
 
 export function DashboardLayout() {
   const { pathname } = useLocation();
+  const { loading, isSignedIn, isCeo, role } = useAuth();
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
@@ -32,17 +35,25 @@ export function DashboardLayout() {
               <h1 className="truncate text-base font-semibold text-gray-900 sm:text-lg">
                 Future Garment Group
               </h1>
-              <p className="truncate text-xs text-gray-500 sm:text-sm">Employee Knowledge Base</p>
+              <p className="truncate text-xs text-gray-500 sm:text-sm">
+                {isCeo ? "CEO dashboard" : "Ops / Productions"}
+              </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {!loading && isSignedIn ? (
+              <span className="hidden rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600 sm:inline">
+                {roleLabel(role)}
+              </span>
+            ) : null}
             <Link to="/admin">
               <Button variant="secondary" size="sm" className="gap-2">
                 <Shield className="h-4 w-4" />
-                Admin
+                {isSignedIn ? "Account" : "Sign in"}
               </Button>
             </Link>
+            {/* Temporary: show create actions for everyone while building the Ops OS */}
             <Link to="/create">
               <Button size="sm" className="gap-2">
                 <Plus className="h-4 w-4" />
@@ -79,7 +90,18 @@ export function DashboardLayout() {
               }
             >
               <LayoutDashboard className="h-4 w-4 shrink-0 opacity-80" />
-              All Systems
+              Daily Brief
+            </NavLink>
+            <NavLink
+              to="/order-flow"
+              className={({ isActive }) =>
+                sidebarNavClass({
+                  isActive: isActive || pathname.startsWith("/order-flow"),
+                })
+              }
+            >
+              <Package className="h-4 w-4 shrink-0 opacity-80" />
+              Order Flow
             </NavLink>
             <NavLink
               to="/sops"

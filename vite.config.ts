@@ -22,12 +22,8 @@ export default defineConfig({
 
   server: {
     proxy: {
-      // Brand Hub KPIs → FastAPI Shopify backend
-      '/api/shopify': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-      },
-      '/api/meta': {
+      // FastAPI backend (Shopify, Meta, order flow, product costs, Slack)
+      '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },

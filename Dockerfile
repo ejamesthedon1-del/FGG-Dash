@@ -5,7 +5,8 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PRODUCT_COSTS_PATH=/data/product_costs.json
+    PRODUCT_COSTS_PATH=/data/product_costs.json \
+    ORDER_FLOW_PATH=/data/order_flow.json
 
 RUN mkdir -p /data
 

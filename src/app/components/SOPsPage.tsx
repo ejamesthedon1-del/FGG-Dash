@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
-import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { useAuth } from "../lib/use-auth";
 import {
   Dialog,
   DialogContent,
@@ -87,7 +87,7 @@ export function SOPsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [hubEdit, setHubEdit] = useState<HubEditTarget | null>(null);
   const [hubEditDraft, setHubEditDraft] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { canManageContent: isAdmin } = useAuth();
   const pendingNavTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [hubSearch, setHubSearch] = useState("");
@@ -107,19 +107,6 @@ export function SOPsPage() {
     window.addEventListener("fgg-storage-sync", refresh);
     return () => window.removeEventListener("fgg-storage-sync", refresh);
   }, [pathname]);
-
-  useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => {
-      setIsAdmin(Boolean(data.session));
-    });
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAdmin(Boolean(session));
-    });
-    return () => subscription.unsubscribe();
-  }, []);
 
   const clearPendingNav = () => {
     if (pendingNavTimer.current) {

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { OperatorDashboardStorage } from "../lib/storage";
+import { useAuth } from "../lib/use-auth";
+import { getCeoEmailAllowlist, roleLabel } from "../lib/auth-roles";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -11,10 +13,10 @@ import { ArrowLeft, Shield } from "lucide-react";
 import { toast } from "sonner";
 
 export function AdminPage() {
+  const { isSignedIn, isCeo, canManageContent, role, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState(false);
 
   const initialPriorities = useMemo(
     () => OperatorDashboardStorage.getContent(),
@@ -27,19 +29,6 @@ export function AdminPage() {
   const [quickLinksText, setQuickLinksText] = useState(
     initialPriorities.quickLinks.map((item) => `${item.label} | ${item.to}`).join("\n"),
   );
-
-  useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => {
-      setIsSignedIn(Boolean(data.session));
-    });
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsSignedIn(Boolean(session));
-    });
-    return () => subscription.unsubscribe();
-  }, []);
 
   const reloadOperatorForm = () => {
     const c = OperatorDashboardStorage.getContent();
@@ -91,8 +80,8 @@ export function AdminPage() {
   };
 
   const saveOperatorDashboard = () => {
-    if (!isSignedIn) {
-      toast.error("Sign in as admin first");
+    if (!canManageContent) {
+      toast.error("Sign in as CEO or Ops to edit the daily brief");
       return;
     }
     const priorities = prioritiesText
@@ -127,8 +116,10 @@ export function AdminPage() {
       openIssues,
       quickLinks,
     });
-    toast.success("Home page sections updated");
+    toast.success("Daily brief updated");
   };
+
+  const ceoAllowlistConfigured = getCeoEmailAllowlist().length > 0;
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -139,7 +130,7 @@ export function AdminPage() {
             className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to employee dashboard
+            Back to dashboard
           </Link>
         </div>
       </header>
@@ -149,8 +140,10 @@ export function AdminPage() {
           <div className="rounded-full bg-blue-100 p-3">
             <Shield className="h-8 w-8 text-blue-700" />
           </div>
-          <h1 className="text-2xl font-semibold text-gray-900">Admin dashboard</h1>
-          <p className="text-sm text-gray-600">Sign in to manage content and settings.</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Account</h1>
+          <p className="text-sm text-gray-600">
+            Sign in as CEO (profits) or Ops / Productions (daily brief).
+          </p>
         </div>
 
         <Card className="w-full">
@@ -158,8 +151,8 @@ export function AdminPage() {
             <CardTitle>Sign in</CardTitle>
             <CardDescription>
               {isSupabaseConfigured()
-                ? "Sign in with your Supabase admin account."
-                : "Supabase env vars are missing. Add them to enable admin login."}
+                ? "Use your Supabase account. CEO emails are set via VITE_CEO_EMAILS."
+                : "Supabase env vars are missing. Add them to enable login."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -169,7 +162,7 @@ export function AdminPage() {
                 id="admin-email"
                 type="email"
                 autoComplete="username"
-                placeholder="admin@company.com"
+                placeholder="you@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isSubmitting || isSignedIn}
@@ -188,9 +181,25 @@ export function AdminPage() {
               />
             </div>
             {isSignedIn ? (
-              <Button type="button" variant="outline" className="w-full" onClick={handleSignOut} disabled={isSubmitting}>
-                {isSubmitting ? "Signing out..." : "Sign out"}
-              </Button>
+              <div className="space-y-3">
+                <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                  <p>
+                    <span className="font-medium">Signed in:</span> {user?.email ?? "—"}
+                  </p>
+                  <p className="mt-1">
+                    <span className="font-medium">Role:</span> {roleLabel(role)}
+                    {isCeo ? " · full profit dashboards" : " · daily brief only (no financials)"}
+                  </p>
+                  {!isCeo && !ceoAllowlistConfigured ? (
+                    <p className="mt-2 text-xs text-amber-700">
+                      No VITE_CEO_EMAILS set — all signed-in users are Ops. Add your email on Vercel to unlock CEO.
+                    </p>
+                  ) : null}
+                </div>
+                <Button type="button" variant="outline" className="w-full" onClick={handleSignOut} disabled={isSubmitting}>
+                  {isSubmitting ? "Signing out..." : "Sign out"}
+                </Button>
+              </div>
             ) : (
               <Button type="button" className="w-full" onClick={handleSignIn} disabled={isSubmitting || !isSupabaseConfigured()}>
                 {isSubmitting ? "Signing in..." : "Sign in"}
@@ -200,9 +209,9 @@ export function AdminPage() {
         </Card>
         <Card className="mt-6 w-full">
           <CardHeader>
-            <CardTitle>Operator dashboard content</CardTitle>
+            <CardTitle>Daily ops brief</CardTitle>
             <CardDescription>
-              Edit what appears in Today&apos;s priorities on the employee dashboard.
+              Edit priorities, tasks, and issues shown on the home page for Ops / Productions.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -214,7 +223,7 @@ export function AdminPage() {
                 value={prioritiesText}
                 onChange={(e) => setPrioritiesText(e.target.value)}
                 placeholder="Review SOPs marked Needs Update."
-                disabled={!isSignedIn}
+                disabled={!canManageContent}
               />
             </div>
             <div className="space-y-2">
@@ -225,7 +234,7 @@ export function AdminPage() {
                 value={quickLinksText}
                 onChange={(e) => setQuickLinksText(e.target.value)}
                 placeholder="SOP Library | /sops"
-                disabled={!isSignedIn}
+                disabled={!canManageContent}
               />
             </div>
             <div className="space-y-2">
@@ -236,7 +245,7 @@ export function AdminPage() {
                 value={updatesText}
                 onChange={(e) => setUpdatesText(e.target.value)}
                 placeholder="Ops sync at 2:00 PM."
-                disabled={!isSignedIn}
+                disabled={!canManageContent}
               />
             </div>
             <div className="space-y-2">
@@ -247,7 +256,7 @@ export function AdminPage() {
                 value={tasksText}
                 onChange={(e) => setTasksText(e.target.value)}
                 placeholder="Confirm shipment exception handling checklist."
-                disabled={!isSignedIn}
+                disabled={!canManageContent}
               />
             </div>
             <div className="space-y-2">
@@ -258,14 +267,14 @@ export function AdminPage() {
                 value={issuesText}
                 onChange={(e) => setIssuesText(e.target.value)}
                 placeholder="Outstanding SOP reviews are pending follow-up."
-                disabled={!isSignedIn}
+                disabled={!canManageContent}
               />
             </div>
-            <Button type="button" className="w-full" onClick={saveOperatorDashboard} disabled={!isSignedIn}>
-              Save home page sections
+            <Button type="button" className="w-full" onClick={saveOperatorDashboard} disabled={!canManageContent}>
+              Save daily brief
             </Button>
-            {!isSignedIn && (
-              <p className="text-xs text-gray-500">Sign in first to edit and save dashboard priorities.</p>
+            {!canManageContent && (
+              <p className="text-xs text-gray-500">Sign in as CEO or Ops to edit the daily brief.</p>
             )}
           </CardContent>
         </Card>
