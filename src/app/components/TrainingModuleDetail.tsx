@@ -259,7 +259,7 @@ export function TrainingModuleDetail() {
                   <Link to="/training-center">Back to all modules</Link>
                 </Button>
                 <Button variant="outline" size="sm" asChild>
-                  <Link to="/sops">SOP hub</Link>
+                  <Link to="/sops">Knowledge Base</Link>
                 </Button>
               </div>
             </CardContent>

@@ -99,7 +99,7 @@ export function DashboardLayout() {
               }
             >
               <ClipboardList className="h-4 w-4 shrink-0 opacity-80" />
-              SOPs
+              Knowledge Base
             </NavLink>
 
             {isCeo ? (

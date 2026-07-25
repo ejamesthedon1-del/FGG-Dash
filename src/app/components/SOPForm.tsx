@@ -255,7 +255,7 @@ export function SOPForm({ mode, initialSOP }: SOPFormProps) {
     <div className="mx-auto max-w-4xl space-y-6">
       <Button variant="ghost" onClick={() => navigate("/sops")} className="flex items-center gap-2">
         <ArrowLeft className="h-4 w-4" />
-        Back to SOPs
+        Back to Knowledge Base
       </Button>
 
       <div>
@@ -294,7 +294,7 @@ export function SOPForm({ mode, initialSOP }: SOPFormProps) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Operational area *</Label>
-              <p className="text-xs text-gray-500">Top-level category in the SOP hub.</p>
+              <p className="text-xs text-gray-500">Top-level category in the Knowledge Base.</p>
               <Select value={categoryId || undefined} onValueChange={onCategoryChange}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Choose area" />

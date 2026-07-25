@@ -500,7 +500,7 @@ export function SystemsOverview() {
               to="/sops"
               className="flex items-center justify-between rounded-md border px-3 py-2 hover:bg-gray-50"
             >
-              <span className="text-sm font-medium text-gray-900">SOP library</span>
+              <span className="text-sm font-medium text-gray-900">Knowledge Base</span>
               <ArrowRight className="h-4 w-4 text-gray-400" />
             </Link>
             {homeContent.quickLinks.length > 0

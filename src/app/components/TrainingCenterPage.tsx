@@ -182,8 +182,8 @@ export function TrainingCenterPage() {
                   All Systems
                 </Link>
                 ,{" "}
-                <Link to="/sops" className="text-blue-600 hover:underline">
-                  SOPs
+                  <Link to="/sops" className="text-blue-600 hover:underline">
+                  Knowledge Base
                 </Link>
                 , and{" "}
                 <Link to="/brand-hub" className="text-blue-600 hover:underline">

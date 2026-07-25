@@ -251,9 +251,9 @@ export function SOPsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-900">SOP hub</h2>
+          <h2 className="text-2xl font-semibold text-gray-900">Knowledge Base</h2>
           <p className="mt-1 text-gray-600">
-            Future Garment Group operating procedures: pick an area, then a section, then the document you need.
+            Future Garment Group procedures and docs: pick an area, then a section, then the document you need.
           </p>
           {isAdmin ? (
             <p className="mt-2 max-w-xl text-xs text-gray-500">
@@ -266,7 +266,7 @@ export function SOPsPage() {
           <Link to="/sops/create">
             <Button type="button" className="gap-2">
               <Plus className="h-4 w-4" />
-              Create New SOP
+              Create New Document
             </Button>
           </Link>
         ) : (
@@ -680,7 +680,7 @@ export function SOPsPage() {
                     onChange={(e) => setHubSearch(e.target.value)}
                     placeholder="Search areas, sections, or SOP titles…"
                     className="pl-9"
-                    aria-label="Search SOP library"
+                    aria-label="Search Knowledge Base"
                   />
                 </div>
               </div>
