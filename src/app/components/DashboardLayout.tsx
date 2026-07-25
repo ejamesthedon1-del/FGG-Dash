@@ -101,50 +101,56 @@ export function DashboardLayout() {
               <ClipboardList className="h-4 w-4 shrink-0 opacity-80" />
               SOPs
             </NavLink>
-            <NavLink
-              to="/brand-hub"
-              className={({ isActive }) =>
-                sidebarNavClass({
-                  isActive: isActive || pathname.startsWith("/brand-hub/"),
-                })
-              }
-            >
-              <Sparkles className="h-4 w-4 shrink-0 opacity-80" />
-              Brand Hub
-            </NavLink>
-            <NavLink
-              to="/creative-assets"
-              className={({ isActive }) =>
-                sidebarNavClass({
-                  isActive: isActive || pathname.startsWith("/creative-assets/"),
-                })
-              }
-            >
-              <FolderOpen className="h-4 w-4 shrink-0 opacity-80" />
-              Creative Assets
-            </NavLink>
-            <NavLink
-              to="/training-center"
-              className={({ isActive }) =>
-                sidebarNavClass({
-                  isActive: isActive || pathname.startsWith("/training-center/"),
-                })
-              }
-            >
-              <BookOpen className="h-4 w-4 shrink-0 opacity-80" />
-              Training Center
-            </NavLink>
-            <NavLink
-              to="/our-mission"
-              className={({ isActive }) =>
-                sidebarNavClass({
-                  isActive: isActive || pathname.startsWith("/our-mission/"),
-                })
-              }
-            >
-              <Target className="h-4 w-4 shrink-0 opacity-80" />
-              Our Mission
-            </NavLink>
+
+            {isCeo ? (
+              <>
+                <div className="my-2 border-t border-gray-100" />
+                <NavLink
+                  to="/brand-hub"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/brand-hub/"),
+                    })
+                  }
+                >
+                  <Sparkles className="h-4 w-4 shrink-0 opacity-80" />
+                  Brand Hub
+                </NavLink>
+                <NavLink
+                  to="/creative-assets"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/creative-assets/"),
+                    })
+                  }
+                >
+                  <FolderOpen className="h-4 w-4 shrink-0 opacity-80" />
+                  Creative Assets
+                </NavLink>
+                <NavLink
+                  to="/training-center"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/training-center/"),
+                    })
+                  }
+                >
+                  <BookOpen className="h-4 w-4 shrink-0 opacity-80" />
+                  Training Center
+                </NavLink>
+                <NavLink
+                  to="/our-mission"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/our-mission/"),
+                    })
+                  }
+                >
+                  <Target className="h-4 w-4 shrink-0 opacity-80" />
+                  Our Mission
+                </NavLink>
+              </>
+            ) : null}
           </nav>
         </aside>
 
