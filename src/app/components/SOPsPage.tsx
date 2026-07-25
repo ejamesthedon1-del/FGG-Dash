@@ -20,8 +20,8 @@ import {
   ClipboardList,
   FileText,
   FolderOpen,
-  Layers,
   Maximize2,
+  MoreVertical,
   Pencil,
   Plus,
   Search,
@@ -46,12 +46,76 @@ import {
   SheetTitle,
 } from "./ui/sheet";
 import { toast } from "sonner";
+import { cn } from "./ui/utils";
 
 type HubEditTarget =
   | { kind: "categoryTitle"; categoryId: string }
   | { kind: "menuItemTitle"; categoryId: string; itemId: string }
   | { kind: "categoryBlurb"; categoryId: string }
   | { kind: "menuItemSubtitle"; categoryId: string; itemId: string };
+
+/** Cover art + emoji for Hexagon-style Knowledge Base cards (3-col grid). */
+const CATEGORY_VISUALS: Record<string, { emoji: string; coverClass: string }> = {
+  "start-here": {
+    emoji: "✈️",
+    coverClass:
+      "bg-[radial-gradient(ellipse_at_30%_20%,#d4d4d8_0%,transparent_50%),linear-gradient(145deg,#e8e8ec_0%,#b8b8c0_45%,#9ca3af_100%)]",
+  },
+  "daily-tasks": {
+    emoji: "📋",
+    coverClass:
+      "bg-[linear-gradient(160deg,#1e3a5f_0%,#3b82f6_40%,#93c5fd_100%)]",
+  },
+  fulfillment: {
+    emoji: "📦",
+    coverClass:
+      "bg-[linear-gradient(135deg,#0f766e_0%,#14b8a6_50%,#99f6e4_100%)]",
+  },
+  "customer-support": {
+    emoji: "💬",
+    coverClass:
+      "bg-[linear-gradient(145deg,#4c1d95_0%,#7c3aed_45%,#c4b5fd_100%)]",
+  },
+  "returns-refunds": {
+    emoji: "↩️",
+    coverClass:
+      "bg-[linear-gradient(150deg,#9a3412_0%,#ea580c_40%,#fdba74_100%)]",
+  },
+  inventory: {
+    emoji: "📚",
+    coverClass:
+      "bg-[url('data:image/svg+xml,%3Csvg width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cg fill=%22%239ca3af%22 fill-opacity=%220.35%22%3E%3Cpath d=%22M0 40L40 0H20L0 20M40 40V20L20 40%22/%3E%3C/g%3E%3C/svg%3E'),linear-gradient(180deg,#f5f0e8_0%,#d6cfc4_100%)]",
+  },
+  "store-operations": {
+    emoji: "🏪",
+    coverClass:
+      "bg-[linear-gradient(120deg,#1e293b_0%,#475569_40%,#cbd5e1_100%)]",
+  },
+  "fraud-risk-review": {
+    emoji: "🛡️",
+    coverClass:
+      "bg-[linear-gradient(160deg,#7f1d1d_0%,#dc2626_40%,#fca5a5_100%)]",
+  },
+  escalations: {
+    emoji: "🚨",
+    coverClass:
+      "bg-[linear-gradient(145deg,#713f12_0%,#d97706_45%,#fde68a_100%)]",
+  },
+  "brand-notes": {
+    emoji: "✨",
+    coverClass:
+      "bg-[linear-gradient(135deg,#831843_0%,#db2777_40%,#fbcfe8_100%)]",
+  },
+};
+
+function categoryVisual(categoryId: string) {
+  return (
+    CATEGORY_VISUALS[categoryId] ?? {
+      emoji: "📁",
+      coverClass: "bg-[linear-gradient(145deg,#e5e7eb_0%,#9ca3af_100%)]",
+    }
+  );
+}
 
 function statusBadgeClass(status: SOP["status"] | undefined): string {
   switch (status ?? "Active") {
@@ -249,68 +313,80 @@ export function SOPsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Knowledge Base</h2>
-          <p className="mt-1 text-gray-600">
-            Future Garment Group procedures and docs: pick an area, then a section, then the document you need.
-          </p>
-          {isAdmin ? (
-            <p className="mt-2 max-w-xl text-xs text-gray-500">
-              Double-click a title or description to edit. To open an area or section, click the icon or the counts line
-              (not the title), so a double-click is not swallowed by navigation.
+      <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-2">
+        <div className="relative w-full">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            value={hubSearch}
+            onChange={(e) => {
+              setHubSearch(e.target.value);
+              if (browseCategoryId || browseMenuItemId) {
+                setBrowseCategoryId(null);
+                setBrowseMenuItemId(null);
+              }
+            }}
+            placeholder="Search for everything..."
+            className="h-12 rounded-xl border-gray-200 bg-white pl-11 text-base shadow-sm"
+            aria-label="Search Knowledge Base"
+          />
+        </div>
+        <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="text-center sm:text-left">
+            <h2 className="text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">
+              Knowledge Base
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Procedures and docs for the floor — open an area to dig in.
             </p>
+          </div>
+          {isAdmin ? (
+            <Link to="/sops/create">
+              <Button type="button" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Create New Document
+              </Button>
+            </Link>
           ) : null}
         </div>
-        {isAdmin ? (
-          <Link to="/sops/create">
-            <Button type="button" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Create New Document
-            </Button>
-          </Link>
-        ) : (
-          <p className="text-sm text-gray-500">Sign in as admin to edit areas and sections.</p>
-        )}
       </div>
 
       <div className="-mx-4 flex min-w-0 flex-col sm:-mx-6 lg:-mx-10">
-        {/* Breadcrumb + context */}
-        <div className="flex flex-wrap items-center gap-1 bg-gray-50/60 px-4 py-3 text-sm sm:px-6 lg:px-10">
-          <Button
-            type="button"
-            variant={browseCategoryId ? "ghost" : "secondary"}
-            size="sm"
-            className="h-8 gap-1 px-2 font-medium"
-            onClick={goToCategories}
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            All areas
-          </Button>
-          {selectedCategory ? (
-            <>
-              <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-              <Button
-                type="button"
-                variant={browseMenuItemId ? "ghost" : "secondary"}
-                size="sm"
-                className="h-8 max-w-[min(100%,14rem)] truncate px-2 font-medium"
-                onClick={() => goToSections(selectedCategory.id)}
-              >
-                {selectedCategory.title}
-              </Button>
-            </>
-          ) : null}
-          {selectedCategory && selectedMenuItem ? (
-            <>
-              <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-              <span className="truncate font-medium text-gray-900">{selectedMenuItem.title}</span>
-            </>
-          ) : null}
-        </div>
+        {browseCategoryId ? (
+          <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 bg-white/80 px-4 py-3 text-sm sm:px-6 lg:px-10">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 px-2 font-medium"
+              onClick={goToCategories}
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              All areas
+            </Button>
+            {selectedCategory ? (
+              <>
+                <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                <Button
+                  type="button"
+                  variant={browseMenuItemId ? "ghost" : "secondary"}
+                  size="sm"
+                  className="h-8 max-w-[min(100%,14rem)] truncate px-2 font-medium"
+                  onClick={() => goToSections(selectedCategory.id)}
+                >
+                  {selectedCategory.title}
+                </Button>
+              </>
+            ) : null}
+            {selectedCategory && selectedMenuItem ? (
+              <>
+                <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                <span className="truncate font-medium text-gray-900">{selectedMenuItem.title}</span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
 
-        <div className="min-w-0 flex-1 px-4 pb-10 pt-2 sm:px-6 lg:px-10">
-          {/* Step 3: SOP documents for chosen section */}
+        <div className="min-w-0 flex-1 px-4 pb-10 pt-4 sm:px-6 lg:px-10">
           {browseCategoryId && browseMenuItemId && selectedCategory && selectedMenuItem ? (
             <div className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -331,7 +407,7 @@ export function SOPsPage() {
                 </p>
               </div>
 
-              <div className="rounded-lg bg-gray-50/70 p-4">
+              <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -363,26 +439,26 @@ export function SOPsPage() {
               </div>
 
               {slotSops.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 rounded-lg bg-gray-50/80 px-4 py-12 text-center">
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-white px-4 py-12 text-center">
                   <ClipboardList className="h-10 w-10 text-gray-300" />
                   <p className="text-sm text-gray-600">No procedures in this section match your filters.</p>
-                  {isAdmin && (
+                  {isAdmin ? (
                     <Link
                       to={`/sops/create?categoryId=${encodeURIComponent(browseCategoryId)}&menuItemId=${encodeURIComponent(browseMenuItemId)}`}
                     >
                       <Button type="button" variant="outline" size="sm" className="mt-2 gap-1">
                         <Plus className="h-4 w-4" />
-                        Add SOP here
+                        Add document here
                       </Button>
                     </Link>
-                  )}
+                  ) : null}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
                   {slotSops.map((sop) => (
                     <Card
                       key={sop.id}
-                      className="overflow-hidden border-0 shadow-sm transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-blue-600"
+                      className="overflow-hidden border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-blue-600"
                     >
                       <CardHeader className="pb-3">
                         <div className="flex items-start justify-between gap-2">
@@ -409,12 +485,12 @@ export function SOPsPage() {
                                 >
                                   {sop.status ?? "Active"}
                                 </Badge>
-                                {sop.pdfUrl && (
+                                {sop.pdfUrl ? (
                                   <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
                                     <FileText className="h-3 w-3" />
                                     PDF
                                   </span>
-                                )}
+                                ) : null}
                               </div>
                             </div>
                             <CardTitle className="mt-1 line-clamp-2 text-base">{sop.title}</CardTitle>
@@ -424,17 +500,8 @@ export function SOPsPage() {
                                   ? "PDF attached — preview below. Click title for full view and print."
                                   : "—")}
                             </CardDescription>
-                            {(sop.tags ?? []).length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {(sop.tags ?? []).slice(0, 3).map((tag) => (
-                                  <Badge key={tag} variant="secondary" className="capitalize">
-                                    {tag}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
                           </div>
-                          {isAdmin && (
+                          {isAdmin ? (
                             <Link
                               to={`/sops/edit/${sop.id}`}
                               className="shrink-0"
@@ -444,7 +511,7 @@ export function SOPsPage() {
                                 Edit
                               </Button>
                             </Link>
-                          )}
+                          ) : null}
                         </div>
                       </CardHeader>
                       {sop.pdfUrl ? (
@@ -459,24 +526,19 @@ export function SOPsPage() {
                               className="h-52 w-full sm:h-64"
                             />
                           </div>
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-xs text-gray-500">
-                              Scroll inside the preview, or open a larger panel.
-                            </p>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="shrink-0 gap-1.5"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPdfSheetSop(sop);
-                              }}
-                            >
-                              <Maximize2 className="h-3.5 w-3.5" />
-                              Larger preview
-                            </Button>
-                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPdfSheetSop(sop);
+                            }}
+                          >
+                            <Maximize2 className="h-3.5 w-3.5" />
+                            Larger preview
+                          </Button>
                         </CardContent>
                       ) : null}
                     </Card>
@@ -485,22 +547,24 @@ export function SOPsPage() {
               )}
             </div>
           ) : browseCategoryId && selectedCategory ? (
-            /* Step 2: Sections under category */
-            <div className="space-y-4">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-1 text-gray-600"
-                onClick={goToCategories}
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to all areas
-              </Button>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="mb-2 gap-1 px-0 text-gray-600"
+                    onClick={goToCategories}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to all areas
+                  </Button>
                   <h3
-                    className={`text-lg font-semibold text-gray-900 ${isAdmin ? "cursor-text select-text" : ""}`}
+                    className={cn(
+                      "text-2xl font-semibold text-gray-900",
+                      isAdmin && "cursor-text select-text",
+                    )}
                     onDoubleClick={
                       isAdmin
                         ? () =>
@@ -511,219 +575,155 @@ export function SOPsPage() {
                         : undefined
                     }
                   >
+                    <span className="mr-2">{categoryVisual(selectedCategory.id).emoji}</span>
                     {selectedCategory.title}
                   </h3>
-                  <div className="space-y-1 text-sm text-gray-500">
-                    <p
-                      className={isAdmin ? "cursor-text select-text" : undefined}
-                      onDoubleClick={
-                        isAdmin
-                          ? () =>
-                              openHubEdit(
-                                { kind: "categoryBlurb", categoryId: selectedCategory.id },
-                                resolveCategoryBlurb(structure, selectedCategory.id),
-                              )
-                          : undefined
-                      }
-                    >
-                      {resolveCategoryBlurb(structure, selectedCategory.id)}
-                    </p>
-                    <p className="text-xs text-gray-500">Choose a section below to open its procedures.</p>
-                  </div>
+                  <p
+                    className={cn("mt-1 max-w-2xl text-sm text-gray-500", isAdmin && "cursor-text select-text")}
+                    onDoubleClick={
+                      isAdmin
+                        ? () =>
+                            openHubEdit(
+                              { kind: "categoryBlurb", categoryId: selectedCategory.id },
+                              resolveCategoryBlurb(structure, selectedCategory.id),
+                            )
+                        : undefined
+                    }
+                  >
+                    {resolveCategoryBlurb(structure, selectedCategory.id) ||
+                      "This folder has no description yet."}
+                  </p>
                 </div>
-                {isAdmin && (
-                  <div className="flex shrink-0 gap-1">
-                    <Link to={`/sops/create?categoryId=${encodeURIComponent(selectedCategory.id)}`}>
-                      <Button type="button" variant="outline" size="sm" className="gap-1">
-                        <Plus className="h-4 w-4" />
-                        Add SOP in area
-                      </Button>
-                    </Link>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      aria-label={`Rename ${selectedCategory.title}`}
-                      onClick={() =>
-                        openHubEdit(
-                          { kind: "categoryTitle", categoryId: selectedCategory.id },
-                          selectedCategory.title,
-                        )
-                      }
-                    >
-                      <Pencil className="h-4 w-4" />
+                {isAdmin ? (
+                  <Link to={`/sops/create?categoryId=${encodeURIComponent(selectedCategory.id)}`}>
+                    <Button type="button" variant="outline" size="sm" className="gap-1">
+                      <Plus className="h-4 w-4" />
+                      Add document
                     </Button>
-                  </div>
-                )}
+                  </Link>
+                ) : null}
               </div>
+
               {selectedCategory.items.length === 0 ? (
-                <p className="py-6 text-sm text-gray-500">
-                  No sections yet —{" "}
-                  <Link to="/sops/create" className="font-medium text-blue-600 hover:underline">
-                    create an SOP
-                  </Link>{" "}
-                  to add one.
+                <p className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+                  No sections yet.
                 </p>
               ) : (
-                <ul className="divide-y divide-gray-100 rounded-lg bg-white/90 shadow-sm">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {selectedCategory.items.map((item) => {
                     const count = sopCountInSection(selectedCategory.id, item.id);
+                    const visual = categoryVisual(selectedCategory.id);
                     return (
-                      <li key={item.id} className="flex items-stretch">
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 px-4 py-4 text-left transition-colors hover:bg-gray-50"
-                          onClick={() => scheduleNav(() => goToSops(selectedCategory.id, item.id))}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              if (!isAdmin) goToSops(selectedCategory.id, item.id);
-                              else scheduleNav(() => goToSops(selectedCategory.id, item.id));
-                            }
-                          }}
-                        >
-                          <div className="min-w-0">
-                            <p
-                              className={`font-medium text-gray-900 ${isAdmin ? "cursor-text select-text" : ""}`}
-                              onClick={isAdmin ? (e) => e.stopPropagation() : undefined}
-                              onDoubleClick={
-                                isAdmin
-                                  ? (e) => {
-                                      e.stopPropagation();
-                                      clearPendingNav();
-                                      openHubEdit(
-                                        { kind: "menuItemTitle", categoryId: selectedCategory.id, itemId: item.id },
-                                        item.title,
-                                      );
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {item.title}
-                            </p>
-                            <p
-                              className={`text-xs text-gray-500 ${isAdmin ? "cursor-text select-text" : ""}`}
-                              onClick={isAdmin ? (e) => e.stopPropagation() : undefined}
-                              onDoubleClick={
-                                isAdmin
-                                  ? (e) => {
-                                      e.stopPropagation();
-                                      clearPendingNav();
-                                      openHubEdit(
-                                        {
-                                          kind: "menuItemSubtitle",
-                                          categoryId: selectedCategory.id,
-                                          itemId: item.id,
-                                        },
-                                        item.subtitle?.trim() ?? "",
-                                      );
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {item.subtitle?.trim()
-                                ? item.subtitle.trim()
-                                : `${count} ${count === 1 ? "procedure" : "procedures"}`}
-                            </p>
-                          </div>
-                          <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
-                        </div>
-                        {isAdmin ? (
-                          <div className="flex shrink-0 items-center gap-0.5 bg-gray-50/60 px-2">
-                            <Link
-                              to={`/sops/create?categoryId=${encodeURIComponent(selectedCategory.id)}&menuItemId=${encodeURIComponent(item.id)}`}
-                            >
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                aria-label={`Add SOP in ${item.title}`}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            </Link>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              aria-label={`Rename ${item.title}`}
-                              onClick={() =>
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-left shadow-sm transition-shadow hover:shadow-md"
+                        onClick={() => scheduleNav(() => goToSops(selectedCategory.id, item.id))}
+                      >
+                        <div className={cn("relative h-36 w-full", visual.coverClass)}>
+                          {isAdmin ? (
+                            <span
+                              role="presentation"
+                              className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-gray-600 shadow-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 openHubEdit(
-                                  { kind: "menuItemTitle", categoryId: selectedCategory.id, itemId: item.id },
+                                  {
+                                    kind: "menuItemTitle",
+                                    categoryId: selectedCategory.id,
+                                    itemId: item.id,
+                                  },
                                   item.title,
-                                )
-                              }
+                                );
+                              }}
                             >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : null}
-                      </li>
+                              <MoreVertical className="h-4 w-4" />
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-1 flex-col gap-1 px-4 pb-4 pt-3">
+                          <p className="text-base font-semibold text-gray-900">
+                            <span className="mr-1.5">{visual.emoji}</span>
+                            {item.title}
+                          </p>
+                          <p className="line-clamp-2 text-sm leading-relaxed text-gray-500">
+                            {item.subtitle?.trim() || "This folder has no description yet."}
+                          </p>
+                          <p className="mt-auto pt-3 text-xs text-gray-400">
+                            {count} {count === 1 ? "document" : "documents"}
+                          </p>
+                        </div>
+                      </button>
                     );
                   })}
-                </ul>
+                </div>
               )}
             </div>
           ) : (
-            /* Step 1: All categories */
-            <div className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Operational areas</h3>
-                <div className="relative w-full sm:max-w-md">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    value={hubSearch}
-                    onChange={(e) => setHubSearch(e.target.value)}
-                    placeholder="Search areas, sections, or SOP titles…"
-                    className="pl-9"
-                    aria-label="Search Knowledge Base"
-                  />
-                </div>
-              </div>
+            <div className="space-y-5">
               {filteredStructure.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-4 py-8 text-center text-sm text-gray-600">
+                <p className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-600">
                   No areas match that search. Try a different keyword or clear the search box.
                 </p>
               ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredStructure.map((category) => {
-                  const count = sopCountInCategory(category.id);
-                  const blurb = resolveCategoryBlurb(structure, category.id);
-                  return (
-                    <div
-                      key={category.id}
-                      className="flex flex-col overflow-hidden rounded-xl bg-white/90 shadow-sm transition-shadow hover:shadow-md"
-                    >
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredStructure.map((category) => {
+                    const count = sopCountInCategory(category.id);
+                    const blurb = resolveCategoryBlurb(structure, category.id);
+                    const visual = categoryVisual(category.id);
+                    const sections = category.items.length;
+                    return (
                       <button
+                        key={category.id}
                         type="button"
-                        className="flex flex-1 flex-col p-4 text-left"
+                        className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-left shadow-sm transition-shadow hover:shadow-md"
                         onClick={() => scheduleNav(() => goToSections(category.id))}
                       >
-                        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-                          <Layers className="h-5 w-5" />
+                        <div className={cn("relative h-40 w-full sm:h-44", visual.coverClass)}>
+                          {isAdmin ? (
+                            <span
+                              role="presentation"
+                              className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-gray-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openHubEdit(
+                                  { kind: "categoryTitle", categoryId: category.id },
+                                  category.title,
+                                );
+                              }}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </span>
+                          ) : null}
                         </div>
-                        <span
-                          className={`font-semibold text-gray-900 ${isAdmin ? "cursor-text select-text" : ""}`}
-                          onClick={isAdmin ? (e) => e.stopPropagation() : undefined}
-                          onDoubleClick={
-                            isAdmin
-                              ? (e) => {
-                                  e.stopPropagation();
-                                  clearPendingNav();
-                                  openHubEdit({ kind: "categoryTitle", categoryId: category.id }, category.title);
-                                }
-                              : undefined
-                          }
-                        >
-                          {category.title}
-                        </span>
-                        {blurb ? (
-                          <span
-                            className={`mt-1 line-clamp-2 text-sm leading-snug text-gray-600 ${isAdmin ? "cursor-text select-text" : ""}`}
+                        <div className="flex flex-1 flex-col gap-1.5 px-4 pb-4 pt-3">
+                          <p
+                            className={cn(
+                              "text-base font-semibold text-gray-900",
+                              isAdmin && "cursor-text select-text",
+                            )}
+                            onClick={isAdmin ? (e) => e.stopPropagation() : undefined}
+                            onDoubleClick={
+                              isAdmin
+                                ? (e) => {
+                                    e.stopPropagation();
+                                    clearPendingNav();
+                                    openHubEdit(
+                                      { kind: "categoryTitle", categoryId: category.id },
+                                      category.title,
+                                    );
+                                  }
+                                : undefined
+                            }
+                          >
+                            <span className="mr-1.5">{visual.emoji}</span>
+                            {category.title}
+                          </p>
+                          <p
+                            className={cn(
+                              "line-clamp-3 text-sm leading-relaxed text-gray-500",
+                              isAdmin && "cursor-text select-text",
+                            )}
                             onClick={isAdmin ? (e) => e.stopPropagation() : undefined}
                             onDoubleClick={
                               isAdmin
@@ -732,60 +732,27 @@ export function SOPsPage() {
                                     clearPendingNav();
                                     openHubEdit(
                                       { kind: "categoryBlurb", categoryId: category.id },
-                                      resolveCategoryBlurb(structure, category.id),
+                                      blurb,
                                     );
                                   }
                                 : undefined
                             }
                           >
-                            {blurb}
-                          </span>
-                        ) : isAdmin ? (
-                          <span
-                            className="mt-1 line-clamp-2 cursor-text select-text text-sm italic leading-snug text-gray-400"
-                            onClick={(e) => e.stopPropagation()}
-                            onDoubleClick={(e) => {
-                              e.stopPropagation();
-                              clearPendingNav();
-                              openHubEdit(
-                                { kind: "categoryBlurb", categoryId: category.id },
-                                resolveCategoryBlurb(structure, category.id),
-                              );
-                            }}
-                          >
-                            Double-click to add area description
-                          </span>
-                        ) : null}
-                        <span className="mt-2 text-xs text-gray-500">
-                          {category.items.length} {category.items.length === 1 ? "section" : "sections"} · {count}{" "}
-                          {count === 1 ? "SOP" : "SOPs"}
-                        </span>
-                      </button>
-                      {isAdmin ? (
-                        <div className="flex justify-end gap-1 bg-gray-50/70 px-2 py-2">
-                          <Link to={`/sops/create?categoryId=${encodeURIComponent(category.id)}`}>
-                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label={`Add SOP in ${category.title}`}>
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            aria-label={`Rename ${category.title}`}
-                            onClick={() =>
-                              openHubEdit({ kind: "categoryTitle", categoryId: category.id }, category.title)
-                            }
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                            {blurb.trim() || "This folder has no description yet."}
+                          </p>
+                          <div className="mt-auto flex items-center justify-between gap-2 border-t border-gray-100 pt-3 text-xs text-gray-400">
+                            <span>
+                              {sections} {sections === 1 ? "section" : "sections"}
+                            </span>
+                            <span>
+                              {count} {count === 1 ? "document" : "documents"}
+                            </span>
+                          </div>
                         </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
           )}
