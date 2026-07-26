@@ -254,43 +254,9 @@ export function DashboardLayout() {
               <LayoutDashboard className="h-4 w-4 shrink-0 opacity-80" />
               Dashboard
             </NavLink>
-            <NavLink
-              to="/order-flow"
-              className={({ isActive }) =>
-                sidebarNavClass({
-                  isActive: isActive || pathname.startsWith("/order-flow"),
-                })
-              }
-            >
-              <Package className="h-4 w-4 shrink-0 opacity-80" />
-              Order Flow
-            </NavLink>
-            <NavLink
-              to="/my-tasks"
-              className={({ isActive }) =>
-                sidebarNavClass({
-                  isActive: isActive || pathname.startsWith("/my-tasks"),
-                })
-              }
-            >
-              <CheckSquare className="h-4 w-4 shrink-0 opacity-80" />
-              My Tasks
-            </NavLink>
-            <NavLink
-              to="/sops"
-              className={({ isActive }) =>
-                sidebarNavClass({
-                  isActive: isActive || pathname.startsWith("/sops/"),
-                })
-              }
-            >
-              <ClipboardList className="h-4 w-4 shrink-0 opacity-80" />
-              Knowledge Base
-            </NavLink>
 
             {isCeo ? (
               <>
-                <div className="my-2 border-t border-gray-100" />
                 <NavLink
                   to="/brand-hub"
                   className={({ isActive }) =>
@@ -301,6 +267,42 @@ export function DashboardLayout() {
                 >
                   <Sparkles className="h-4 w-4 shrink-0 opacity-80" />
                   Brand Hub
+                </NavLink>
+                <NavLink
+                  to="/my-tasks"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/my-tasks"),
+                    })
+                  }
+                >
+                  <CheckSquare className="h-4 w-4 shrink-0 opacity-80" />
+                  My Tasks
+                </NavLink>
+
+                <div className="my-2 border-t border-gray-100" />
+
+                <NavLink
+                  to="/order-flow"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/order-flow"),
+                    })
+                  }
+                >
+                  <Package className="h-4 w-4 shrink-0 opacity-80" />
+                  Order Flow
+                </NavLink>
+                <NavLink
+                  to="/sops"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/sops/"),
+                    })
+                  }
+                >
+                  <ClipboardList className="h-4 w-4 shrink-0 opacity-80" />
+                  Knowledge Base
                 </NavLink>
                 <NavLink
                   to="/creative-assets"
@@ -336,7 +338,43 @@ export function DashboardLayout() {
                   Our Mission
                 </NavLink>
               </>
-            ) : null}
+            ) : (
+              <>
+                <NavLink
+                  to="/order-flow"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/order-flow"),
+                    })
+                  }
+                >
+                  <Package className="h-4 w-4 shrink-0 opacity-80" />
+                  Order Flow
+                </NavLink>
+                <NavLink
+                  to="/my-tasks"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/my-tasks"),
+                    })
+                  }
+                >
+                  <CheckSquare className="h-4 w-4 shrink-0 opacity-80" />
+                  My Tasks
+                </NavLink>
+                <NavLink
+                  to="/sops"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/sops/"),
+                    })
+                  }
+                >
+                  <ClipboardList className="h-4 w-4 shrink-0 opacity-80" />
+                  Knowledge Base
+                </NavLink>
+              </>
+            )}
 
             <div className="mt-auto border-t border-gray-100 pt-2">
               <NavLink
