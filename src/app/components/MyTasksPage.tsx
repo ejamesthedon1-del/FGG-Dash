@@ -227,19 +227,19 @@ export function MyTasksPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 border-b border-gray-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <header className="border-b border-gray-200 pb-5">
+        <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-[1.75rem] font-semibold tracking-tight text-gray-950">
             My Tasks
           </h2>
-          <p className="mt-1.5 max-w-xl text-sm text-gray-500">
-            Your personal board — order, status, and edits stay with your account.
-          </p>
+          <Button type="button" size="sm" className="gap-1.5" onClick={openCreate}>
+            <Plus className="h-3.5 w-3.5" />
+            Add task
+          </Button>
         </div>
-        <Button type="button" size="sm" className="gap-1.5" onClick={openCreate}>
-          <Plus className="h-3.5 w-3.5" />
-          Add task
-        </Button>
+        <p className="mt-1.5 max-w-xl text-sm text-gray-500">
+          Your personal board — order, status, and edits stay with your account.
+        </p>
       </header>
 
       <div
