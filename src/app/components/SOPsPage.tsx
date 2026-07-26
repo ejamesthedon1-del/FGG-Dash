@@ -304,22 +304,6 @@ export function SOPsPage() {
   return (
     <div className="space-y-6">
       <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-2 text-center">
-        <div className="relative w-full">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input
-            value={hubSearch}
-            onChange={(e) => {
-              setHubSearch(e.target.value);
-              if (browseCategoryId || browseMenuItemId) {
-                setBrowseCategoryId(null);
-                setBrowseMenuItemId(null);
-              }
-            }}
-            placeholder="Search for everything..."
-            className="h-12 rounded-xl border-gray-200 bg-white pl-11 text-base shadow-sm"
-            aria-label="Search Knowledge Base"
-          />
-        </div>
         <div className="flex w-full flex-col items-center gap-3">
           <div>
             <h2 className="text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">
@@ -337,6 +321,22 @@ export function SOPsPage() {
               </Button>
             </Link>
           ) : null}
+        </div>
+        <div className="relative w-full">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            value={hubSearch}
+            onChange={(e) => {
+              setHubSearch(e.target.value);
+              if (browseCategoryId || browseMenuItemId) {
+                setBrowseCategoryId(null);
+                setBrowseMenuItemId(null);
+              }
+            }}
+            placeholder="Search for everything..."
+            className="h-12 rounded-xl border-gray-200 bg-white pl-11 text-base shadow-sm"
+            aria-label="Search Knowledge Base"
+          />
         </div>
       </div>
 
