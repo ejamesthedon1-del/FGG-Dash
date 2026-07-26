@@ -28,16 +28,14 @@ const INITIAL: AuthState = {
 function fromSession(session: Session | null): Omit<AuthState, "loading"> {
   const user = session?.user ?? null;
   const role = resolveAppRole(user);
-  // Temporary build mode: guests see/act as Ops / Productions.
-  // Tighten to signed-in-only once the Ops OS UI is finished.
-  const effectiveRole: AppRole | null = role ?? "ops";
+  const effectiveRole: AppRole | null = session ? (role ?? "ops") : null;
   return {
     session,
     user,
     role: effectiveRole,
     isSignedIn: Boolean(session),
     isCeo: role === "ceo",
-    canManageContent: true,
+    canManageContent: Boolean(session),
   };
 }
 

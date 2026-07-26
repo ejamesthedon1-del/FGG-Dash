@@ -1,14 +1,34 @@
-import { Outlet, Link, NavLink, useLocation } from "react-router";
-import { Button } from "./ui/button";
-import { BookOpen, ClipboardList, FolderOpen, LayoutDashboard, Package, Shield, Sparkles, Target } from "lucide-react";
+import { useState } from "react";
+import { Outlet, Link, NavLink, useLocation, useNavigate } from "react-router";
+import { toast } from "sonner";
+import {
+  BookOpen,
+  ChevronDown,
+  ClipboardList,
+  FolderOpen,
+  LayoutDashboard,
+  LogOut,
+  Package,
+  Settings,
+  Sparkles,
+  Target,
+  User,
+} from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
 import { cn } from "./ui/utils";
 import { useAuth } from "../lib/use-auth";
 import { roleLabel, userFirstName } from "../lib/auth-roles";
+import { SignInPage } from "./SignInPage";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 const LOGO_SRC = "/fgg-logo.png?v=2";
-
-/** Temporary guest greeting so Sharon can preview the header before signing in. */
-const GUEST_TEST_FIRST_NAME = "Sharon";
 
 const sidebarNavClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -20,11 +40,41 @@ const sidebarNavClass = ({ isActive }: { isActive: boolean }) =>
 
 export function DashboardLayout() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const { loading, isSignedIn, isCeo, role, user } = useAuth();
-  const firstName = userFirstName(user) ?? (isSignedIn ? null : GUEST_TEST_FIRST_NAME);
+  const firstName = userFirstName(user);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    if (!supabase) {
+      toast.error("Supabase is not configured yet");
+      return;
+    }
+    setSigningOut(true);
+    const { error } = await supabase.auth.signOut();
+    setSigningOut(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Signed out");
+    navigate("/");
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-gray-50">
+        <p className="text-sm text-gray-500">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return <SignInPage />;
+  }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-gray-50">
       {/* Top bar */}
       <header className="z-50 shrink-0 border-b border-gray-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
@@ -47,19 +97,53 @@ export function DashboardLayout() {
               <p className="truncate text-xs font-medium text-gray-500 sm:text-sm">
                 {isCeo ? "CEO dashboard" : "Ops / Productions"}
               </p>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-gray-500 outline-none transition-colors hover:text-gray-800 focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
+                  >
+                    My profile
+                    <ChevronDown className="h-3 w-3 opacity-70" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[11rem]">
+                  {user?.email ? (
+                    <>
+                      <DropdownMenuLabel className="font-normal">
+                        <p className="text-xs text-muted-foreground">Signed in as</p>
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {user.email}
+                        </p>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                    </>
+                  ) : null}
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin" className="cursor-pointer">
+                      <User className="h-4 w-4" />
+                      View profile details
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={signingOut}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      void handleSignOut();
+                    }}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    {signingOut ? "Signing out…" : "Sign out"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            {!loading && isSignedIn ? (
+            {role ? (
               <span className="hidden rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600 sm:inline">
                 {roleLabel(role)}
               </span>
-            ) : null}
-            {!loading && isSignedIn ? (
-              <Link to="/admin">
-                <Button variant="secondary" size="sm" className="gap-2">
-                  <Shield className="h-4 w-4" />
-                  Account
-                </Button>
-              </Link>
             ) : null}
           </div>
         </div>
@@ -68,10 +152,10 @@ export function DashboardLayout() {
       {/* Sidebar + main */}
       <div className="flex min-h-0 flex-1">
         <aside
-          className="flex w-52 shrink-0 flex-col border-r border-gray-200 bg-white sm:w-56 lg:w-64"
+          className="flex h-full w-52 shrink-0 flex-col border-r border-gray-200 bg-white sm:w-56 lg:w-64"
           aria-label="Main navigation"
         >
-          <nav className="flex flex-col gap-0.5 p-3 sm:p-4">
+          <nav className="flex min-h-0 flex-1 flex-col gap-0.5 p-3 sm:p-4">
             <NavLink
               to="/"
               end
@@ -159,6 +243,20 @@ export function DashboardLayout() {
                 </NavLink>
               </>
             ) : null}
+
+            <div className="mt-auto border-t border-gray-100 pt-2">
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  sidebarNavClass({
+                    isActive: isActive || pathname.startsWith("/admin"),
+                  })
+                }
+              >
+                <Settings className="h-4 w-4 shrink-0 opacity-80" />
+                Settings
+              </NavLink>
+            </div>
           </nav>
         </aside>
 

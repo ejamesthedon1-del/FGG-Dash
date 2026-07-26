@@ -279,7 +279,7 @@ export function SystemsOverview() {
         <section className="lg:col-span-7">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-gray-950">Work queue</h3>
+              <h3 className="text-base font-semibold text-gray-950">Work queue</h3>
               <p className="mt-0.5 text-xs text-gray-500">
                 From live Order Flow
                 {criticalCount > 0 ? (
@@ -317,7 +317,7 @@ export function SystemsOverview() {
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium text-gray-950">{item.title}</p>
+                        <p className="text-base font-medium text-gray-950">{item.title}</p>
                         <span
                           className={cn(
                             "text-[10px] font-medium uppercase tracking-wide",
@@ -367,7 +367,7 @@ export function SystemsOverview() {
 
         <section className="lg:col-span-5">
           <div className="mb-3">
-            <h3 className="text-sm font-semibold text-gray-950">Pipeline</h3>
+            <h3 className="text-base font-semibold text-gray-950">Pipeline</h3>
             <p className="mt-0.5 text-xs text-gray-500">Open stages only — click to jump in.</p>
           </div>
           <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -386,7 +386,7 @@ export function SystemsOverview() {
                     <Icon className="h-4 w-4" strokeWidth={1.75} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-950">{STAGE_LABELS[id]}</p>
+                    <p className="text-base font-medium text-gray-950">{STAGE_LABELS[id]}</p>
                     <p className="text-[11px] text-gray-400">Open Order Flow</p>
                   </div>
                   <p className="text-xl font-semibold tabular-nums text-gray-950">
@@ -402,7 +402,7 @@ export function SystemsOverview() {
       {/* Shift notes — quieter written brief */}
       <section className="border-t border-gray-200 pt-8">
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-950">Shift notes</h3>
+          <h3 className="text-base font-semibold text-gray-950">Shift notes</h3>
           <p className="mt-0.5 text-xs text-gray-500">Priorities and issues set for the floor.</p>
         </div>
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 md:grid-cols-2 xl:grid-cols-4">
@@ -454,14 +454,14 @@ export function SystemsOverview() {
             <div className="mt-4 space-y-1 border-t border-gray-100 pt-3">
               <Link
                 to="/order-flow"
-                className="flex items-center justify-between text-sm font-medium text-gray-900 hover:text-brand"
+                className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
               >
                 Order Flow
                 <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
               </Link>
               <Link
                 to="/sops"
-                className="flex items-center justify-between text-sm font-medium text-gray-900 hover:text-brand"
+                className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
               >
                 Knowledge Base
                 <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
@@ -470,7 +470,7 @@ export function SystemsOverview() {
                 <Link
                   key={`${item.label}-${item.to}`}
                   to={item.to}
-                  className="flex items-center justify-between text-sm font-medium text-gray-900 hover:text-brand"
+                  className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
                 >
                   <span className="truncate">{item.label}</span>
                   <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-300" />
