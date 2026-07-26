@@ -9,6 +9,7 @@ import { EditSOP } from "./components/EditSOP";
 import { MissionPage } from "./components/MissionPage";
 import { AdminPage } from "./components/AdminPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { MyTasksPage } from "./components/MyTasksPage";
 import { BrandHubPage } from "./components/BrandHubPage";
 import { BrandHubDetail } from "./components/BrandHubDetail";
 import { CreativeAssetsPage } from "./components/CreativeAssetsPage";
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: SystemsOverview },
       { path: "order-flow", Component: OrderFlowPage },
+      { path: "my-tasks", Component: MyTasksPage },
       { path: "sops/create", Component: ceoPage(CreateSOP) },
       { path: "sops/edit/:id", Component: ceoPage(EditSOP) },
       { path: "sops", Component: SOPsPage },

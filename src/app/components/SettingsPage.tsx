@@ -4,7 +4,7 @@ import { Bell, LogOut, Settings2, User } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "../lib/use-auth";
-import { roleLabel, userFirstName, type AppRole } from "../lib/auth-roles";
+import { roleLabel, userFirstName } from "../lib/auth-roles";
 import { Button } from "./ui/button";
 import { cn } from "./ui/utils";
 
@@ -22,14 +22,7 @@ const GENERAL_NAV: {
 
 export function SettingsPage() {
   const navigate = useNavigate();
-  const {
-    user,
-    role,
-    accountIsCeo,
-    viewMode,
-    setViewMode,
-    isCeo,
-  } = useAuth();
+  const { user, role, isCeo } = useAuth();
   const [section, setSection] = useState<SettingsSection>("account");
   const [signingOut, setSigningOut] = useState(false);
 
@@ -39,10 +32,6 @@ export function SettingsPage() {
     const source = firstName || email;
     return source && source !== "—" ? source.charAt(0).toUpperCase() : "?";
   }, [firstName, email]);
-
-  const handleViewMode = (mode: AppRole) => {
-    setViewMode(mode);
-  };
 
   const handleSignOut = async () => {
     if (!supabase) {
@@ -208,55 +197,12 @@ export function SettingsPage() {
               <p className="mt-1 text-sm text-gray-500">
                 Choose how the dashboard looks for your account.
               </p>
-
-              <div className="mt-6 rounded-lg border border-gray-200">
-                <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4">
-                  <div className="min-w-0 max-w-md">
-                    <p className="text-sm font-medium text-gray-950">Dashboard view</p>
-                    <p className="mt-0.5 text-sm text-gray-500">
-                      {accountIsCeo
-                        ? "Switch between CEO tools and Ops floor view."
-                        : "Ops accounts use the floor / productions view."}
-                    </p>
-                  </div>
-
-                  {accountIsCeo ? (
-                    <div
-                      className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5"
-                      role="group"
-                      aria-label="Dashboard view"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleViewMode("ceo")}
-                        className={cn(
-                          "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-                          viewMode === "ceo"
-                            ? "bg-white text-brand shadow-sm"
-                            : "text-gray-500 hover:text-gray-800",
-                        )}
-                      >
-                        CEO
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleViewMode("ops")}
-                        className={cn(
-                          "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-                          viewMode === "ops"
-                            ? "bg-white text-brand shadow-sm"
-                            : "text-gray-500 hover:text-gray-800",
-                        )}
-                      >
-                        Ops
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600">
-                      Ops / Productions
-                    </span>
-                  )}
-                </div>
+              <div className="mt-6 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center">
+                <Settings2 className="mx-auto h-5 w-5 text-gray-400" />
+                <p className="mt-2 text-sm font-medium text-gray-800">Coming soon</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Dashboard and display preferences will live here.
+                </p>
               </div>
             </section>
           ) : null}

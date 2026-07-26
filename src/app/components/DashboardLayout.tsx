@@ -3,6 +3,7 @@ import { Outlet, Link, NavLink, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import {
   BookOpen,
+  CheckSquare,
   ChevronDown,
   ClipboardList,
   FolderOpen,
@@ -269,6 +270,17 @@ export function DashboardLayout() {
             >
               <Package className="h-4 w-4 shrink-0 opacity-80" />
               Order Flow
+            </NavLink>
+            <NavLink
+              to="/my-tasks"
+              className={({ isActive }) =>
+                sidebarNavClass({
+                  isActive: isActive || pathname.startsWith("/my-tasks"),
+                })
+              }
+            >
+              <CheckSquare className="h-4 w-4 shrink-0 opacity-80" />
+              My Tasks
             </NavLink>
             <NavLink
               to="/sops"
