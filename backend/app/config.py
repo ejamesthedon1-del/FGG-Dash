@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     shopify_api_version: str = "2026-04"
     cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
-    # Optional Meta Marketing API (Facebook Ads) — Liv Don by default
+    # Optional Meta Marketing API (Facebook Ads) — Livdon by default
     meta_access_token: Optional[str] = None
     meta_ad_account_id: Optional[str] = None
     meta_api_version: str = "v22.0"

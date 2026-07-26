@@ -166,14 +166,14 @@ export const DEFAULT_CREATIVE_ASSETS: AssetItem[] = [
       },
       {
         id: "ba-livdon",
-        name: "Liv Don",
+        name: "Livdon",
         kind: "folder",
         sizeLabel: "112 MB",
         modified: "Jul 10, 2026",
         sharing: { avatars: 2 },
         view: "gallery",
         children: [
-          sampleImage("ba-ld-1", "LD hero.jpg", "Liv Don", "#fff1f2", "#fda4af"),
+          sampleImage("ba-ld-1", "LD hero.jpg", "Livdon", "#fff1f2", "#fda4af"),
           sampleImage("ba-ld-2", "LD model.jpg", "LD model", "#fce7f3", "#f9a8d4"),
           sampleImage("ba-ld-3", "LD packshot.jpg", "LD pack", "#fafafa", "#e5e5e5"),
         ],

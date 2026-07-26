@@ -11,7 +11,7 @@ from .shopify_color import PRODUCT_COLOR_GRAPHQL, resolve_product_color
 BRANDS = ("live-don", "sinners-testimony")
 
 BRAND_LABELS = {
-    "live-don": "LIVDON",
+    "live-don": "Livdon",
     "sinners-testimony": "Sinners Testimony",
 }
 
@@ -174,7 +174,7 @@ def _line_items(node: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not size and variant_title and " / " in variant_title:
             size = variant_title.split("/")[-1].strip() or None
         elif not size and variant_title and variant_title.lower() not in {"default title"}:
-            # Size-only variants (Liv Don painters) use variantTitle as size
+            # Size-only variants (Livdon painters) use variantTitle as size
             maybe = variant_title.strip()
             if maybe.lower() in {"small", "medium", "large", "xl", "2xl", "3xl"} or len(maybe) <= 4:
                 size = maybe

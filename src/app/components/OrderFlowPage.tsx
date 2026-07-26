@@ -468,7 +468,7 @@ export function OrderFlowPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Brands</SelectItem>
-              <SelectItem value="live-don">LIVDON</SelectItem>
+              <SelectItem value="live-don">Livdon</SelectItem>
               <SelectItem value="sinners-testimony">Sinners Testimony</SelectItem>
             </SelectContent>
           </Select>

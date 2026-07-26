@@ -95,7 +95,7 @@ export const BRAND_CATALOG: BrandProfile[] = [
   },
   {
     id: "live-don",
-    name: "Liv Don",
+    name: "Livdon",
     shortDescription: "",
     status: "Active",
     positioningAudience:

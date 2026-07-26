@@ -156,7 +156,7 @@ def get_shopify_client(brand: str = "live-don") -> ShopifyClient:
     return client
 
 
-# Backward-compatible default (Liv Don)
+# Backward-compatible default (Livdon)
 shopify_client = None  # set after settings load via get_shopify_client
 
 
