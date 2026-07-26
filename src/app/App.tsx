@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
-import { RouterProvider } from 'react-router';
-import { router } from './routes';
-import { Toaster } from './components/ui/sonner';
-import { initSupabaseAuthSync } from '@/lib/supabase/session';
+import { useEffect } from "react";
+import { RouterProvider } from "react-router";
+import { router } from "./routes";
+import { Toaster } from "./components/ui/sonner";
+import { initSupabaseAuthSync } from "@/lib/supabase/session";
+import { AuthProvider } from "./lib/use-auth";
 
 function App() {
   useEffect(() => {
@@ -10,10 +11,10 @@ function App() {
   }, []);
 
   return (
-    <>
+    <AuthProvider>
       <RouterProvider router={router} />
       <Toaster />
-    </>
+    </AuthProvider>
   );
 }
 

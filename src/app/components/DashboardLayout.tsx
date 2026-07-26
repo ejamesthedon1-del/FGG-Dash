@@ -17,8 +17,9 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { cn } from "./ui/utils";
 import { useAuth } from "../lib/use-auth";
-import { roleLabel, userFirstName } from "../lib/auth-roles";
+import { roleLabel, userFirstName, type AppRole } from "../lib/auth-roles";
 import { SignInPage } from "./SignInPage";
+import { ViewModePicker } from "./ViewModePicker";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +30,19 @@ import {
 } from "./ui/dropdown-menu";
 
 const LOGO_SRC = "/fgg-logo.png?v=2";
+
+const CEO_ONLY_PREFIXES = [
+  "/brand-hub",
+  "/creative-assets",
+  "/training-center",
+  "/our-mission",
+];
+
+function isCeoOnlyPath(pathname: string): boolean {
+  return CEO_ONLY_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 
 const sidebarNavClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -41,9 +55,26 @@ const sidebarNavClass = ({ isActive }: { isActive: boolean }) =>
 export function DashboardLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { loading, isSignedIn, isCeo, role, user } = useAuth();
+  const {
+    loading,
+    isSignedIn,
+    isCeo,
+    accountIsCeo,
+    needsViewPick,
+    viewMode,
+    setViewMode,
+    role,
+    user,
+  } = useAuth();
   const firstName = userFirstName(user);
   const [signingOut, setSigningOut] = useState(false);
+
+  const handleViewMode = (mode: AppRole) => {
+    setViewMode(mode);
+    if (mode === "ops" && isCeoOnlyPath(pathname)) {
+      navigate("/", { replace: true });
+    }
+  };
 
   const handleSignOut = async () => {
     if (!supabase) {
@@ -73,6 +104,10 @@ export function DashboardLayout() {
     return <SignInPage />;
   }
 
+  if (needsViewPick) {
+    return <ViewModePicker />;
+  }
+
   return (
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-gray-50">
       {/* Top bar */}
@@ -88,6 +123,39 @@ export function DashboardLayout() {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-3">
+            {accountIsCeo ? (
+              <div
+                className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5"
+                role="group"
+                aria-label="Dashboard view"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleViewMode("ceo")}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                    viewMode === "ceo"
+                      ? "bg-white text-brand shadow-sm"
+                      : "text-gray-500 hover:text-gray-800",
+                  )}
+                >
+                  CEO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleViewMode("ops")}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                    viewMode === "ops"
+                      ? "bg-white text-brand shadow-sm"
+                      : "text-gray-500 hover:text-gray-800",
+                  )}
+                >
+                  Ops
+                </button>
+              </div>
+            ) : null}
+
             <div className="min-w-0 text-right">
               {firstName ? (
                 <p className="truncate text-sm font-semibold text-gray-900 sm:text-base">
@@ -116,6 +184,26 @@ export function DashboardLayout() {
                           {user.email}
                         </p>
                       </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                    </>
+                  ) : null}
+                  {accountIsCeo ? (
+                    <>
+                      <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+                        Switch view
+                      </DropdownMenuLabel>
+                      <DropdownMenuItem
+                        onSelect={() => handleViewMode("ceo")}
+                        disabled={viewMode === "ceo"}
+                      >
+                        CEO view
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => handleViewMode("ops")}
+                        disabled={viewMode === "ops"}
+                      >
+                        Ops view
+                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                     </>
                   ) : null}
