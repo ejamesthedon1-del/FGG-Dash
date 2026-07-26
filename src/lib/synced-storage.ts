@@ -7,6 +7,13 @@ export function myTasksStorageKey(userId: string): string {
   return `${MY_TASKS_KEY_PREFIX}${userId.trim()}`;
 }
 
+/** Per-user Due today checklist (`fgg.shift-due-today.v1:<userId>:<YYYY-MM-DD>`). */
+export const SHIFT_DUE_TODAY_KEY_PREFIX = "fgg.shift-due-today.v1:";
+
+export function shiftDueTodayStorageKey(userId: string, dateIso: string): string {
+  return `${SHIFT_DUE_TODAY_KEY_PREFIX}${userId.trim()}:${dateIso.trim()}`;
+}
+
 /** localStorage keys that sync across devices for signed-in users */
 export const SYNCED_STORAGE_KEYS = [
   "training-systems",
@@ -30,7 +37,11 @@ export type SyncedStorageKey = (typeof SYNCED_STORAGE_KEYS)[number];
 const KEY_SET = new Set<string>(SYNCED_STORAGE_KEYS);
 
 export function isSyncedStorageKey(key: string): boolean {
-  return KEY_SET.has(key) || key.startsWith(MY_TASKS_KEY_PREFIX);
+  return (
+    KEY_SET.has(key) ||
+    key.startsWith(MY_TASKS_KEY_PREFIX) ||
+    key.startsWith(SHIFT_DUE_TODAY_KEY_PREFIX)
+  );
 }
 
 function remoteValueToString(value: unknown): string {
@@ -102,6 +113,10 @@ export async function pullAndMergeRemoteStorage(): Promise<void> {
   const keysToSync = new Set<string>(SYNCED_STORAGE_KEYS);
   const personalTasksKey = myTasksStorageKey(session.user.id);
   keysToSync.add(personalTasksKey);
+
+  const today = new Date();
+  const dateIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  keysToSync.add(shiftDueTodayStorageKey(session.user.id, dateIso));
 
   for (const key of keysToSync) {
     if (remoteMap.has(key)) {

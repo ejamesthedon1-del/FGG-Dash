@@ -19,7 +19,13 @@ import {
   TASK_STATUS_LABELS,
   type MyTask,
 } from "../lib/my-tasks-storage";
+import {
+  loadShiftDueTodayDone,
+  toggleShiftDueTodayItem,
+  type ShiftDueTodayDoneMap,
+} from "../lib/shift-due-today-storage";
 import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 import {
   ArrowRight,
   Loader2,
@@ -172,6 +178,7 @@ export function SystemsOverview() {
     OperatorDashboardStorage.getContent(),
   );
   const [myTasks, setMyTasks] = useState<MyTask[]>([]);
+  const [dueTodayDone, setDueTodayDone] = useState<ShiftDueTodayDoneMap>({});
   const [stages, setStages] = useState<OrderFlowStageCount[]>([]);
   const [orders, setOrders] = useState<OrderFlowOrder[]>([]);
   const [flowLoading, setFlowLoading] = useState(true);
@@ -180,6 +187,7 @@ export function SystemsOverview() {
   const loadHome = useCallback(() => {
     setHomeContent(OperatorDashboardStorage.getContent());
     setMyTasks(loadMyTasks(userId));
+    setDueTodayDone(loadShiftDueTodayDone(userId));
     const recentSops = SOPsStorage.getSOPs()
       .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
       .slice(0, 5)
@@ -294,13 +302,57 @@ export function SystemsOverview() {
             </ul>
           </div>
           <div className="bg-white p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Due today</p>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                Due today
+              </p>
+              {homeContent.tasksDueToday.length > 0 ? (
+                <span className="text-[11px] font-medium text-gray-400">
+                  {
+                    homeContent.tasksDueToday.filter((item) => dueTodayDone[item])
+                      .length
+                  }
+                  /{homeContent.tasksDueToday.length}
+                </span>
+              ) : null}
+            </div>
             <ul className="mt-3 space-y-2.5">
-              {homeContent.tasksDueToday.map((item) => (
-                <li key={item} className="text-sm leading-snug text-gray-700">
-                  {item}
-                </li>
-              ))}
+              {homeContent.tasksDueToday.map((item) => {
+                const done = Boolean(dueTodayDone[item]);
+                const id = `due-today-${item}`;
+                return (
+                  <li key={item}>
+                    <label
+                      htmlFor={id}
+                      className="flex cursor-pointer items-start gap-2.5 text-sm leading-snug text-gray-700"
+                    >
+                      <Checkbox
+                        id={id}
+                        checked={done}
+                        onCheckedChange={(value) => {
+                          if (!userId) return;
+                          setDueTodayDone(
+                            toggleShiftDueTodayItem(
+                              userId,
+                              item,
+                              Boolean(value),
+                              dueTodayDone,
+                            ),
+                          );
+                        }}
+                        className="mt-0.5"
+                      />
+                      <span
+                        className={cn(
+                          done && "text-gray-400 line-through decoration-gray-300",
+                        )}
+                      >
+                        {item}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
           </div>
           <div className="bg-white p-4">
