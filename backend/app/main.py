@@ -122,6 +122,15 @@ async def post_order_flow_status(body: OrderFlowStatusUpdateRequest) -> dict:
     stage = order_flow_store.normalize_stage(stage)
     if stage not in order_flow_store.STAGES:
         raise HTTPException(status_code=400, detail=f"Invalid stage: {stage}")
+    if stage == "blanks_ordered":
+        receipt = body.blanksReceipt or {}
+        data_url = str(receipt.get("dataUrl") or "").strip()
+        name = str(receipt.get("name") or "").strip()
+        if not name or not data_url.startswith("data:"):
+            raise HTTPException(
+                status_code=400,
+                detail="Blanks order receipt is required to move to Blanks Ordered",
+            )
     items = []
     for o in body.orders:
         items.append(

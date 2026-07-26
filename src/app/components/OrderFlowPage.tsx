@@ -387,30 +387,33 @@ export function OrderFlowPage() {
   };
 
   const confirmBlanksOrderedMove = async () => {
-    if (!blanksOrderedConfirm || !blanksOrderedAck) return;
+    if (!blanksOrderedConfirm || !blanksOrderedAck || !blanksReceiptFile) {
+      if (!blanksReceiptFile) {
+        toast.error("Upload the blanks order receipt to continue");
+      }
+      return;
+    }
     const list = blanksOrderedConfirm.orders;
-    let receipt: BlanksReceipt | undefined;
-    if (blanksReceiptFile) {
-      setBlanksReceiptBusy(true);
-      try {
-        const dataUrl = await readFileAsPersistedDataUrl(blanksReceiptFile, 2.5 * 1024 * 1024);
-        receipt = {
-          name: blanksReceiptFile.name,
-          mimeType: blanksReceiptFile.type || "application/octet-stream",
-          dataUrl,
-          uploadedAt: new Date().toISOString(),
-        };
-      } catch (err) {
-        if (err instanceof FileTooLargeError) {
-          toast.error("Receipt must be 2.5 MB or smaller");
-        } else {
-          toast.error(err instanceof Error ? err.message : "Could not read receipt");
-        }
-        setBlanksReceiptBusy(false);
-        return;
+    setBlanksReceiptBusy(true);
+    let receipt: BlanksReceipt;
+    try {
+      const dataUrl = await readFileAsPersistedDataUrl(blanksReceiptFile, 2.5 * 1024 * 1024);
+      receipt = {
+        name: blanksReceiptFile.name,
+        mimeType: blanksReceiptFile.type || "application/octet-stream",
+        dataUrl,
+        uploadedAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      if (err instanceof FileTooLargeError) {
+        toast.error("Receipt must be 2.5 MB or smaller");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Could not read receipt");
       }
       setBlanksReceiptBusy(false);
+      return;
     }
+    setBlanksReceiptBusy(false);
     closeBlanksOrderedConfirm();
     await applyStage("blanks_ordered", list, { blanksReceipt: receipt });
   };
@@ -791,7 +794,7 @@ export function OrderFlowPage() {
           <div className="space-y-2">
             <p className="text-sm font-medium text-gray-900">Order receipt</p>
             <p className="text-xs text-gray-500">
-              Optional — attach the vendor receipt or PO confirmation (PDF or image, max 2.5 MB).
+              Required — attach the vendor receipt or PO confirmation (PDF or image, max 2.5 MB).
             </p>
             {blanksReceiptFile ? (
               <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
@@ -835,7 +838,12 @@ export function OrderFlowPage() {
             </Button>
             <Button
               type="button"
-              disabled={!blanksOrderedAck || saving || blanksReceiptBusy}
+              disabled={
+                !blanksOrderedAck ||
+                !blanksReceiptFile ||
+                saving ||
+                blanksReceiptBusy
+              }
               onClick={() => void confirmBlanksOrderedMove()}
             >
               {blanksReceiptBusy ? (

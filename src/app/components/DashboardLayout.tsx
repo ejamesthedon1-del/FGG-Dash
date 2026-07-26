@@ -18,7 +18,7 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { cn } from "./ui/utils";
 import { useAuth } from "../lib/use-auth";
-import { roleLabel, userFirstName, type AppRole } from "../lib/auth-roles";
+import { userFirstName, type AppRole } from "../lib/auth-roles";
 import { SignInPage } from "./SignInPage";
 import { ViewModePicker } from "./ViewModePicker";
 import {
@@ -64,7 +64,6 @@ export function DashboardLayout() {
     needsViewPick,
     viewMode,
     setViewMode,
-    role,
     user,
   } = useAuth();
   const firstName = userFirstName(user);
@@ -229,11 +228,6 @@ export function DashboardLayout() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            {role ? (
-              <span className="hidden rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600 sm:inline">
-                {roleLabel(role)}
-              </span>
-            ) : null}
           </div>
         </div>
       </header>
