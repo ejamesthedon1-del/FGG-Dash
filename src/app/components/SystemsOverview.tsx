@@ -340,7 +340,7 @@ export function SystemsOverview() {
                             ),
                           );
                         }}
-                        className="mt-0.5"
+                        className="mt-0.5 rounded-full border-gray-300 bg-transparent shadow-none data-[state=checked]:border-brand data-[state=checked]:bg-transparent data-[state=checked]:text-brand dark:bg-transparent dark:data-[state=checked]:bg-transparent"
                       />
                       <span
                         className={cn(
