@@ -33,6 +33,13 @@ import {
 } from "../lib/brand-hub-product-costs";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 import { cn } from "./ui/utils";
 
 type PeriodPreset = "today" | "yesterday" | "month" | "custom";
@@ -349,9 +356,37 @@ export function CombinedLiveStoresPanel() {
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Live store overview</h3>
-          <p className="text-sm text-gray-500">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h3 className="text-lg font-semibold text-gray-900">Live store overview</h3>
+            <Select
+              value={preset}
+              onValueChange={(value) => {
+                const next = value as PeriodPreset;
+                setPreset(next);
+                if (next === "custom") {
+                  setAppliedCustom({ start: customStart, end: customEnd });
+                } else {
+                  setAppliedCustom(null);
+                }
+              }}
+            >
+              <SelectTrigger
+                aria-label="Date range"
+                className="h-8 w-auto min-w-[8.5rem] border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-700 shadow-none"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start">
+                {PRESETS.map((item) => (
+                  <SelectItem key={item.id} value={item.id} className="text-sm">
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="mt-1 text-sm text-gray-500">
             Combined results from{" "}
             {state.brands.map((b) => b.label).join(" + ") || "Brand Hub stores"} · {periodHint}
           </p>
@@ -361,78 +396,45 @@ export function CombinedLiveStoresPanel() {
         </Link>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-3 sm:p-4">
-        <div
-          className="flex flex-wrap gap-1"
-          role="tablist"
-          aria-label="Leadership date range"
-        >
-          {PRESETS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={preset === item.id}
-              onClick={() => {
-                setPreset(item.id);
-                if (item.id === "custom") {
-                  setAppliedCustom({ start: customStart, end: customEnd });
-                } else {
-                  setAppliedCustom(null);
-                }
-              }}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                preset === item.id
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
-              )}
+      {preset === "custom" ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label
+              htmlFor="ceo-kpi-start"
+              className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-400"
             >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {preset === "custom" ? (
-          <div className="flex flex-wrap items-end gap-2 border-t border-gray-100 pt-3">
-            <div>
-              <label
-                htmlFor="ceo-kpi-start"
-                className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-400"
-              >
-                From
-              </label>
-              <Input
-                id="ceo-kpi-start"
-                type="date"
-                className="h-9 w-auto"
-                max={todayIso}
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="ceo-kpi-end"
-                className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-400"
-              >
-                To
-              </label>
-              <Input
-                id="ceo-kpi-end"
-                type="date"
-                className="h-9 w-auto"
-                max={todayIso}
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-              />
-            </div>
-            <Button type="button" size="sm" onClick={applyCustom}>
-              Apply dates
-            </Button>
+              From
+            </label>
+            <Input
+              id="ceo-kpi-start"
+              type="date"
+              className="h-8 w-auto text-sm"
+              max={todayIso}
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+            />
           </div>
-        ) : null}
-      </div>
+          <div>
+            <label
+              htmlFor="ceo-kpi-end"
+              className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-400"
+            >
+              To
+            </label>
+            <Input
+              id="ceo-kpi-end"
+              type="date"
+              className="h-8 w-auto text-sm"
+              max={todayIso}
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+            />
+          </div>
+          <Button type="button" size="sm" className="h-8" onClick={applyCustom}>
+            Apply
+          </Button>
+        </div>
+      ) : null}
 
       {state.loading ? (
         <div className="flex items-center gap-2 rounded-2xl bg-white px-5 py-8 text-sm text-gray-500 shadow-sm">
