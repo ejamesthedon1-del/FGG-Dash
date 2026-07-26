@@ -216,8 +216,10 @@ export function SystemsOverview() {
 
   useEffect(() => {
     loadHome();
-    void loadFlow();
-  }, [loadHome, loadFlow]);
+    if (!isCeo) {
+      void loadFlow();
+    }
+  }, [loadHome, loadFlow, isCeo]);
 
   useEffect(() => {
     window.addEventListener("fgg-storage-sync", loadHome);
@@ -247,6 +249,25 @@ export function SystemsOverview() {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date());
+
+  if (showCeoFinance) {
+    return (
+      <div className="space-y-8">
+        <header className="border-b border-gray-200 pb-6">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+            Leadership · {weekday} · {timeLabel}
+          </p>
+          <h2 className="mt-2 text-[1.75rem] font-semibold tracking-tight text-gray-950">
+            Dashboard
+          </h2>
+          <p className="mt-1.5 max-w-xl text-sm text-gray-500">
+            Live store performance — profit, revenue, ads, and production.
+          </p>
+        </header>
+        <CombinedLiveStoresPanel />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -591,19 +612,6 @@ export function SystemsOverview() {
           </div>
         </section>
       </div>
-
-      {showCeoFinance ? (
-        <section className="space-y-3 border-t border-gray-200 pt-8">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
-              Leadership
-            </p>
-            <h3 className="mt-1 text-sm font-semibold text-gray-950">Live store performance</h3>
-            <p className="mt-0.5 text-xs text-gray-500">Profit, revenue, ads, and production.</p>
-          </div>
-          <CombinedLiveStoresPanel />
-        </section>
-      ) : null}
     </div>
   );
 }
