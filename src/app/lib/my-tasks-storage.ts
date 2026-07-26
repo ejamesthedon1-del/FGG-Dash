@@ -37,44 +37,8 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-/** Starter cards for a brand-new user — instructional, not real floor work. */
-function seedGuideTasks(): MyTask[] {
-  const now = nowIso();
-  return [
-    {
-      id: "guide-add-task",
-      title: "Add your task here",
-      description:
-        "This board is yours alone. Click this card to rename it, change status, or delete it — or use Add task above to create a new one.",
-      status: "todo",
-      priority: "medium",
-      dueDate: null,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "guide-move-status",
-      title: "Move work as you go",
-      description:
-        "Open a task and set Status to In progress or Done. Your order and choices stay saved for your account.",
-      status: "in_progress",
-      priority: "low",
-      dueDate: null,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "guide-customize",
-      title: "Make this board yours",
-      description:
-        "Delete these guide cards when you’re ready. Everything you add after that is personal to your login.",
-      status: "done",
-      priority: "low",
-      dueDate: null,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
+export function isGuideTask(task: MyTask): boolean {
+  return task.id.startsWith("guide-");
 }
 
 function isTask(value: unknown): value is MyTask {
@@ -92,13 +56,13 @@ function isTask(value: unknown): value is MyTask {
   );
 }
 
+/** `null` = missing/invalid; array may be empty. */
 function parseTasks(raw: string | null): MyTask[] | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return null;
-    const tasks = parsed.filter(isTask);
-    return tasks.length > 0 ? tasks : null;
+    return parsed.filter(isTask);
   } catch {
     return null;
   }
@@ -106,19 +70,21 @@ function parseTasks(raw: string | null): MyTask[] | null {
 
 /**
  * Load the personal task list for a signed-in user.
- * New users get instructional guide cards; existing lists keep order and edits.
+ * New boards start empty; old guide starter cards are stripped.
  */
 export function loadMyTasks(userId: string | null | undefined): MyTask[] {
   if (!userId?.trim()) return [];
-  if (typeof window === "undefined") return seedGuideTasks();
+  if (typeof window === "undefined") return [];
 
   const key = myTasksStorageKey(userId);
   const existing = parseTasks(window.localStorage.getItem(key));
-  if (existing) return existing;
+  if (existing === null) return [];
 
-  const seeded = seedGuideTasks();
-  saveMyTasks(userId, seeded);
-  return seeded;
+  const personal = existing.filter((t) => !isGuideTask(t));
+  if (personal.length !== existing.length) {
+    saveMyTasks(userId, personal);
+  }
+  return personal;
 }
 
 export function saveMyTasks(userId: string | null | undefined, tasks: MyTask[]): void {
@@ -161,10 +127,6 @@ export function removeMyTask(tasks: MyTask[], id: string): MyTask[] {
 
 export function tasksByStatus(tasks: MyTask[], status: TaskStatus): MyTask[] {
   return tasks.filter((t) => t.status === status);
-}
-
-export function isGuideTask(task: MyTask): boolean {
-  return task.id.startsWith("guide-");
 }
 
 /** Open personal tasks (excludes guide starters and completed items). */

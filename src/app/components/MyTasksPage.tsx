@@ -271,7 +271,23 @@ export function MyTasksPage() {
         ))}
       </div>
 
-      {view === "board" ? (
+      {tasks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-6 py-16 text-center">
+          <p className="text-base font-semibold text-gray-950">No tasks yet</p>
+          <p className="mt-1.5 max-w-sm text-sm text-gray-500">
+            Your personal board is empty. Add your first task to start tracking work for the shift.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-5 gap-1.5"
+            onClick={openCreate}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add your first task
+          </Button>
+        </div>
+      ) : view === "board" ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {BOARD_COLUMNS.map((status) => {
             const columnTasks = tasksByStatus(tasks, status);
@@ -342,9 +358,6 @@ export function MyTasksPage() {
               </div>
             );
           })}
-          {tasks.length === 0 ? (
-            <p className="px-4 py-10 text-center text-sm text-gray-500">No tasks yet</p>
-          ) : null}
         </div>
       )}
 
