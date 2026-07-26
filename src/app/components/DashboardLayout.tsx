@@ -208,7 +208,7 @@ export function DashboardLayout() {
                     </>
                   ) : null}
                   <DropdownMenuItem asChild>
-                    <Link to="/admin" className="cursor-pointer">
+                    <Link to="/settings" className="cursor-pointer">
                       <User className="h-4 w-4" />
                       View profile details
                     </Link>
@@ -334,10 +334,13 @@ export function DashboardLayout() {
 
             <div className="mt-auto border-t border-gray-100 pt-2">
               <NavLink
-                to="/admin"
+                to="/settings"
                 className={({ isActive }) =>
                   sidebarNavClass({
-                    isActive: isActive || pathname.startsWith("/admin"),
+                    isActive:
+                      isActive ||
+                      pathname.startsWith("/settings") ||
+                      pathname.startsWith("/admin"),
                   })
                 }
               >
@@ -348,10 +351,16 @@ export function DashboardLayout() {
           </nav>
         </aside>
 
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="min-h-full px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
-            <Outlet />
-          </div>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+          {pathname.startsWith("/settings") ? (
+            <div className="min-h-0 flex-1">
+              <Outlet />
+            </div>
+          ) : (
+            <div className="min-h-full px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+              <Outlet />
+            </div>
+          )}
         </main>
       </div>
     </div>

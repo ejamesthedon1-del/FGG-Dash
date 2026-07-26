@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import { DashboardLayout } from "./components/DashboardLayout";
 import { SystemsOverview } from "./components/SystemsOverview";
 import { SystemDetail } from "./components/SystemDetail";
@@ -8,6 +8,7 @@ import { CreateSOP } from "./components/CreateSOP";
 import { EditSOP } from "./components/EditSOP";
 import { MissionPage } from "./components/MissionPage";
 import { AdminPage } from "./components/AdminPage";
+import { SettingsPage } from "./components/SettingsPage";
 import { BrandHubPage } from "./components/BrandHubPage";
 import { BrandHubDetail } from "./components/BrandHubDetail";
 import { CreativeAssetsPage } from "./components/CreativeAssetsPage";
@@ -45,8 +46,10 @@ export const router = createBrowserRouter([
       { path: "training-center", Component: ceoPage(TrainingCenterPage) },
       { path: "training-center/:moduleId", Component: ceoPage(TrainingModuleDetail) },
       { path: "our-mission", Component: ceoPage(MissionPage) },
+      { path: "settings", Component: SettingsPage },
       { path: "system/:id", Component: SystemDetail },
       { path: "create", Component: CreateSystem },
+      { path: "admin", element: <Navigate to="/settings" replace /> },
       { path: "*", Component: NotFoundPage },
     ],
   },
