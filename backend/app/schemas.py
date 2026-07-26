@@ -41,6 +41,7 @@ class OrderFlowStatusItem(BaseModel):
 class OrderFlowStatusUpdateRequest(BaseModel):
     stage: str = Field(..., min_length=1)
     orders: List[OrderFlowStatusItem] = Field(..., min_length=1)
+    blanksReceipt: Optional[Dict[str, str]] = None
 
 
 class OrderFlowNotesUpdateRequest(BaseModel):

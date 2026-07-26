@@ -306,6 +306,7 @@ def merge_order(
         "shopifyFulfillmentStatus": fulfillment,
         "autoShippedFromShopify": auto_shipped,
         "notes": record.get("notes") or "",
+        "blanksReceipt": order_flow_store.get_blanks_receipt(record),
         "history": record.get("history") or [],
         "shopifyNote": node.get("note") or "",
         "tags": node.get("tags") or [],

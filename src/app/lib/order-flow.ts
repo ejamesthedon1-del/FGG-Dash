@@ -40,6 +40,14 @@ export type OrderFlowHistoryEntry = {
   at: string;
   by?: string;
   from?: string | null;
+  receipt?: BlanksReceipt;
+};
+
+export type BlanksReceipt = {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  uploadedAt?: string;
 };
 
 export type OrderFlowOrder = {
@@ -69,6 +77,7 @@ export type OrderFlowOrder = {
   shopifyFinancialStatus?: string;
   shopifyFulfillmentStatus?: string;
   notes: string;
+  blanksReceipt?: BlanksReceipt | null;
   history: OrderFlowHistoryEntry[];
   shopifyNote?: string;
   tags?: string[];
@@ -186,11 +195,16 @@ export async function fetchOrderFlow(params?: {
 export async function updateOrderFlowStatus(
   stage: OrderFlowStage,
   orders: Array<{ brand: string; shopifyOrderId: string; orderName?: string }>,
+  options?: { blanksReceipt?: BlanksReceipt },
 ): Promise<void> {
   const res = await fetch(apiUrl("/api/order-flow/status"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stage, orders }),
+    body: JSON.stringify({
+      stage,
+      orders,
+      blanksReceipt: options?.blanksReceipt ?? undefined,
+    }),
   });
   if (!res.ok) {
     const text = await res.text();

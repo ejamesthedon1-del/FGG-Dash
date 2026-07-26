@@ -79,6 +79,45 @@ def _store_path() -> Path:
     return Path(__file__).resolve().parent.parent / "data" / "order_flow.json"
 
 
+def _extract_blanks_receipt(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    receipt = record.get("blanksReceipt")
+    if isinstance(receipt, dict) and receipt.get("dataUrl"):
+        return receipt
+    history = record.get("history") or []
+    if not isinstance(history, list):
+        return None
+    for entry in reversed(history):
+        if not isinstance(entry, dict):
+            continue
+        nested = entry.get("receipt")
+        if isinstance(nested, dict) and nested.get("dataUrl"):
+            return nested
+    return None
+
+
+def get_blanks_receipt(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    return _extract_blanks_receipt(record)
+
+
+def _normalize_blanks_receipt(value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not isinstance(value, dict):
+        return None
+    name = str(value.get("name") or "").strip()
+    data_url = str(value.get("dataUrl") or "").strip()
+    mime = str(value.get("mimeType") or "").strip() or "application/octet-stream"
+    if not name or not data_url.startswith("data:"):
+        return None
+    # Keep receipts modest for JSON / PostgREST payloads.
+    if len(data_url) > 3_500_000:
+        raise ValueError("Blanks receipt is too large (max ~2.5 MB)")
+    return {
+        "name": name[:200],
+        "mimeType": mime[:120],
+        "dataUrl": data_url,
+        "uploadedAt": str(value.get("uploadedAt") or _now()),
+    }
+
+
 def _row_to_record(row: Dict[str, Any]) -> Dict[str, Any]:
     history = row.get("history") or []
     if isinstance(history, str):
@@ -86,7 +125,7 @@ def _row_to_record(row: Dict[str, Any]) -> Dict[str, Any]:
             history = json.loads(history)
         except Exception:
             history = []
-    return {
+    record = {
         "brand": row.get("brand") or "",
         "shopifyOrderId": row.get("shopify_order_id") or "",
         "orderName": row.get("order_name") or "",
@@ -96,9 +135,14 @@ def _row_to_record(row: Dict[str, Any]) -> Dict[str, Any]:
         "updatedAt": row.get("updated_at") or "",
         "createdAt": row.get("created_at") or "",
     }
+    receipt = _extract_blanks_receipt(record)
+    if receipt:
+        record["blanksReceipt"] = receipt
+    return record
 
 
 def _record_to_row(record: Dict[str, Any], record_id: str) -> Dict[str, Any]:
+    # blanksReceipt lives inside history so no schema migration is required.
     return {
         "id": record_id,
         "brand": record["brand"],
@@ -257,10 +301,13 @@ def upsert_stage(
     notes: Optional[str] = None,
     actor: str = "ops",
     order_name: Optional[str] = None,
+    blanks_receipt: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     stage = normalize_stage(stage)
     if stage not in STAGES:
         raise ValueError(f"Invalid stage: {stage}")
+
+    receipt = _normalize_blanks_receipt(blanks_receipt) if blanks_receipt else None
 
     key = _record_key(brand, shopify_order_id)
     now = _now()
@@ -268,8 +315,23 @@ def upsert_stage(
     history: List[Dict[str, Any]] = list(existing.get("history") or [])
     prev = existing.get("stage")
     if prev != stage:
-        history.append({"stage": stage, "at": now, "by": actor, "from": prev})
+        entry: Dict[str, Any] = {"stage": stage, "at": now, "by": actor, "from": prev}
+        if receipt:
+            entry["receipt"] = receipt
+        history.append(entry)
+    elif receipt:
+        # Same-stage update that only attaches a receipt (rare).
+        history.append(
+            {
+                "stage": stage,
+                "at": now,
+                "by": actor,
+                "from": prev,
+                "receipt": receipt,
+            }
+        )
 
+    existing_receipt = _extract_blanks_receipt(existing)
     record = {
         "brand": brand,
         "shopifyOrderId": shopify_order_id,
@@ -279,7 +341,10 @@ def upsert_stage(
         "history": history[-100:],
         "updatedAt": now,
         "createdAt": existing.get("createdAt") or now,
+        "blanksReceipt": receipt or existing_receipt,
     }
+    if not record.get("blanksReceipt"):
+        record.pop("blanksReceipt", None)
 
     cfg = _supabase_config()
     if cfg:
@@ -317,6 +382,7 @@ def bulk_upsert_stage(
     stage: str,
     *,
     actor: str = "ops",
+    blanks_receipt: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for item in items:
@@ -327,6 +393,7 @@ def bulk_upsert_stage(
                 stage,
                 actor=actor,
                 order_name=item.get("orderName"),
+                blanks_receipt=blanks_receipt,
             )
         )
     return out

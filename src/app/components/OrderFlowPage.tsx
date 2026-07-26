@@ -8,6 +8,7 @@ import {
   STAGE_LABELS,
   updateOrderFlowNotes,
   updateOrderFlowStatus,
+  type BlanksReceipt,
   type OrderFlowOrder,
   type OrderFlowStage,
   type OrderFlowStageCount,
@@ -17,6 +18,10 @@ import {
   rememberStages,
   restoreStagesToServer,
 } from "../lib/order-flow-persistence";
+import {
+  FileTooLargeError,
+  readFileAsPersistedDataUrl,
+} from "../lib/file-data-url";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -51,6 +56,7 @@ import {
   CheckCircle2,
   Clock,
   CreditCard,
+  FileText,
   Loader2,
   Package,
   Printer,
@@ -58,7 +64,9 @@ import {
   Shirt,
   Tag,
   Truck,
+  Upload,
   User,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -194,6 +202,8 @@ export function OrderFlowPage() {
     orders: OrderFlowOrder[];
   } | null>(null);
   const [blanksOrderedAck, setBlanksOrderedAck] = useState(false);
+  const [blanksReceiptFile, setBlanksReceiptFile] = useState<File | null>(null);
+  const [blanksReceiptBusy, setBlanksReceiptBusy] = useState(false);
 
   const load = useCallback(async (opts?: { preserveSelection?: boolean }) => {
     setLoading(true);
@@ -290,7 +300,11 @@ export function OrderFlowPage() {
     setSelected(next);
   };
 
-  const applyStage = async (target: OrderFlowStage, list: OrderFlowOrder[]) => {
+  const applyStage = async (
+    target: OrderFlowStage,
+    list: OrderFlowOrder[],
+    options?: { blanksReceipt?: BlanksReceipt },
+  ) => {
     if (list.length === 0) return;
     setSaving(true);
     try {
@@ -299,7 +313,9 @@ export function OrderFlowPage() {
         shopifyOrderId: o.id,
         orderName: o.orderNumber,
       }));
-      await updateOrderFlowStatus(target, payload);
+      await updateOrderFlowStatus(target, payload, {
+        blanksReceipt: options?.blanksReceipt,
+      });
       rememberStages(target, payload);
 
       const keepSelected: Record<string, boolean> = {};
@@ -314,7 +330,16 @@ export function OrderFlowPage() {
       );
       await load({ preserveSelection: true });
       if (detail && list.some((o) => o.id === detail.id && o.brand === detail.brand)) {
-        setDetail((d) => (d ? { ...d, stage: target, stageLabel: STAGE_LABELS[target] } : d));
+        setDetail((d) =>
+          d
+            ? {
+                ...d,
+                stage: target,
+                stageLabel: STAGE_LABELS[target],
+                blanksReceipt: options?.blanksReceipt ?? d.blanksReceipt,
+              }
+            : d,
+        );
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update status");
@@ -328,18 +353,66 @@ export function OrderFlowPage() {
     if (list.length === 0) return;
     if (target === "blanks_ordered") {
       setBlanksOrderedAck(false);
+      setBlanksReceiptFile(null);
       setBlanksOrderedConfirm({ orders: list });
       return;
     }
     void applyStage(target, list);
   };
 
-  const confirmBlanksOrderedMove = () => {
-    if (!blanksOrderedConfirm || !blanksOrderedAck) return;
-    const list = blanksOrderedConfirm.orders;
+  const closeBlanksOrderedConfirm = () => {
     setBlanksOrderedConfirm(null);
     setBlanksOrderedAck(false);
-    void applyStage("blanks_ordered", list);
+    setBlanksReceiptFile(null);
+  };
+
+  const onBlanksReceiptSelected = (file: File | null) => {
+    if (!file) {
+      setBlanksReceiptFile(null);
+      return;
+    }
+    const allowed = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/heic",
+      "image/heif",
+    ];
+    if (!allowed.includes(file.type) && !/\.(pdf|jpe?g|png|webp|heic|heif)$/i.test(file.name)) {
+      toast.error("Upload a PDF or image receipt");
+      return;
+    }
+    setBlanksReceiptFile(file);
+  };
+
+  const confirmBlanksOrderedMove = async () => {
+    if (!blanksOrderedConfirm || !blanksOrderedAck) return;
+    const list = blanksOrderedConfirm.orders;
+    let receipt: BlanksReceipt | undefined;
+    if (blanksReceiptFile) {
+      setBlanksReceiptBusy(true);
+      try {
+        const dataUrl = await readFileAsPersistedDataUrl(blanksReceiptFile, 2.5 * 1024 * 1024);
+        receipt = {
+          name: blanksReceiptFile.name,
+          mimeType: blanksReceiptFile.type || "application/octet-stream",
+          dataUrl,
+          uploadedAt: new Date().toISOString(),
+        };
+      } catch (err) {
+        if (err instanceof FileTooLargeError) {
+          toast.error("Receipt must be 2.5 MB or smaller");
+        } else {
+          toast.error(err instanceof Error ? err.message : "Could not read receipt");
+        }
+        setBlanksReceiptBusy(false);
+        return;
+      }
+      setBlanksReceiptBusy(false);
+    }
+    closeBlanksOrderedConfirm();
+    await applyStage("blanks_ordered", list, { blanksReceipt: receipt });
   };
 
   const openDetail = (order: OrderFlowOrder) => {
@@ -687,10 +760,7 @@ export function OrderFlowPage() {
       <Dialog
         open={Boolean(blanksOrderedConfirm)}
         onOpenChange={(open) => {
-          if (!open) {
-            setBlanksOrderedConfirm(null);
-            setBlanksOrderedAck(false);
-          }
+          if (!open) closeBlanksOrderedConfirm();
         }}
       >
         <DialogContent className="sm:max-w-md">
@@ -718,23 +788,64 @@ export function OrderFlowPage() {
             </span>
           </label>
 
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-900">Order receipt</p>
+            <p className="text-xs text-gray-500">
+              Optional — attach the vendor receipt or PO confirmation (PDF or image, max 2.5 MB).
+            </p>
+            {blanksReceiptFile ? (
+              <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                <FileText className="h-4 w-4 shrink-0 text-gray-400" />
+                <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
+                  {blanksReceiptFile.name}
+                </span>
+                <button
+                  type="button"
+                  className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  aria-label="Remove receipt"
+                  onClick={() => setBlanksReceiptFile(null)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center transition-colors hover:border-gray-400 hover:bg-gray-50/80">
+                <Upload className="h-5 w-5 text-gray-400" />
+                <span className="text-sm font-medium text-gray-800">Upload receipt</span>
+                <span className="text-xs text-gray-500">PDF, JPG, or PNG</span>
+                <input
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
+                  className="sr-only"
+                  onChange={(e) =>
+                    onBlanksReceiptSelected(e.target.files?.[0] ?? null)
+                  }
+                />
+              </label>
+            )}
+          </div>
+
           <DialogFooter className="gap-2 sm:justify-end">
             <Button
               type="button"
               variant="tertiary"
-              onClick={() => {
-                setBlanksOrderedConfirm(null);
-                setBlanksOrderedAck(false);
-              }}
+              onClick={closeBlanksOrderedConfirm}
             >
               Cancel
             </Button>
             <Button
               type="button"
-              disabled={!blanksOrderedAck || saving}
-              onClick={confirmBlanksOrderedMove}
+              disabled={!blanksOrderedAck || saving || blanksReceiptBusy}
+              onClick={() => void confirmBlanksOrderedMove()}
             >
-              Move to Blanks Ordered
+              {blanksReceiptBusy ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Preparing…
+                </>
+              ) : (
+                "Move to Blanks Ordered"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -765,6 +876,21 @@ export function OrderFlowPage() {
                       {detail.stageLabel}
                     </Badge>
                   </DetailMetaRow>
+                  {detail.blanksReceipt?.dataUrl ? (
+                    <DetailMetaRow icon={FileText} label="Receipt">
+                      <a
+                        href={detail.blanksReceipt.dataUrl}
+                        download={detail.blanksReceipt.name || "blanks-receipt"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex max-w-full items-center gap-1.5 font-medium text-brand hover:underline"
+                      >
+                        <span className="truncate">
+                          {detail.blanksReceipt.name || "Blanks order receipt"}
+                        </span>
+                      </a>
+                    </DetailMetaRow>
+                  ) : null}
                   <DetailMetaRow icon={User} label="Customer">
                     <div>
                       <p className="font-medium">{detail.customer}</p>
