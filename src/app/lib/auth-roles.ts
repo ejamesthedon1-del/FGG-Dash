@@ -40,3 +40,38 @@ export function roleLabel(role: AppRole | null): string {
   if (role === "ops") return "Ops / Productions";
   return "Guest";
 }
+
+/** First name for header greeting — from metadata, full name, or email local-part. */
+export function userFirstName(user: {
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+} | null): string | null {
+  if (!user) return null;
+  const meta = user.user_metadata ?? {};
+  const direct = [meta.first_name, meta.given_name, meta.firstName]
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .find(Boolean);
+  if (direct) return titleCaseFirst(direct);
+
+  const full = [meta.full_name, meta.name, meta.display_name]
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .find(Boolean);
+  if (full) {
+    const first = full.split(/\s+/)[0];
+    if (first) return titleCaseFirst(first);
+  }
+
+  const email = (user.email ?? "").trim();
+  if (email.includes("@")) {
+    const local = email.split("@")[0] ?? "";
+    const token = local.split(/[._+\-]/)[0] ?? "";
+    if (token) return titleCaseFirst(token);
+  }
+  return null;
+}
+
+function titleCaseFirst(value: string): string {
+  const v = value.trim();
+  if (!v) return v;
+  return v.charAt(0).toUpperCase() + v.slice(1);
+}

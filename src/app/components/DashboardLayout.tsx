@@ -3,9 +3,12 @@ import { Button } from "./ui/button";
 import { BookOpen, ClipboardList, FolderOpen, LayoutDashboard, Package, Shield, Sparkles, Target } from "lucide-react";
 import { cn } from "./ui/utils";
 import { useAuth } from "../lib/use-auth";
-import { roleLabel } from "../lib/auth-roles";
+import { roleLabel, userFirstName } from "../lib/auth-roles";
 
-const LOGO_SRC = "/logo.svg";
+const LOGO_SRC = "/fgg-logo.png?v=2";
+
+/** Temporary guest greeting so Sharon can preview the header before signing in. */
+const GUEST_TEST_FIRST_NAME = "Sharon";
 
 const sidebarNavClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -17,42 +20,47 @@ const sidebarNavClass = ({ isActive }: { isActive: boolean }) =>
 
 export function DashboardLayout() {
   const { pathname } = useLocation();
-  const { loading, isSignedIn, isCeo, role } = useAuth();
+  const { loading, isSignedIn, isCeo, role, user } = useAuth();
+  const firstName = userFirstName(user) ?? (isSignedIn ? null : GUEST_TEST_FIRST_NAME);
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
       {/* Top bar */}
       <header className="z-50 shrink-0 border-b border-gray-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <img
               src={LOGO_SRC}
-              alt="Future Garment Group"
-              className="h-10 w-10 shrink-0 object-contain"
+              alt="Future Garment Group, LLC"
+              className="h-[4.5rem] w-auto max-w-[280px] shrink-0 object-contain object-left sm:h-24 sm:max-w-[340px]"
               decoding="async"
             />
-            <div className="min-w-0">
-              <h1 className="truncate text-base font-semibold text-gray-900 sm:text-lg">
-                Future Garment Group
-              </h1>
-              <p className="truncate text-xs text-gray-500 sm:text-sm">
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="min-w-0 text-right">
+              {firstName ? (
+                <p className="truncate text-sm font-semibold text-gray-900 sm:text-base">
+                  Hi {firstName}
+                </p>
+              ) : null}
+              <p className="truncate text-xs font-medium text-gray-500 sm:text-sm">
                 {isCeo ? "CEO dashboard" : "Ops / Productions"}
               </p>
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
             {!loading && isSignedIn ? (
               <span className="hidden rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600 sm:inline">
                 {roleLabel(role)}
               </span>
             ) : null}
-            <Link to="/admin">
-              <Button variant="secondary" size="sm" className="gap-2">
-                <Shield className="h-4 w-4" />
-                {isSignedIn ? "Account" : "Sign in"}
-              </Button>
-            </Link>
+            {!loading && isSignedIn ? (
+              <Link to="/admin">
+                <Button variant="secondary" size="sm" className="gap-2">
+                  <Shield className="h-4 w-4" />
+                  Account
+                </Button>
+              </Link>
+            ) : null}
           </div>
         </div>
       </header>
