@@ -422,11 +422,6 @@ export function OrderFlowPage() {
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-        <p className="mr-auto text-sm text-gray-600">
-          {selectedOrders.length > 0
-            ? `${selectedOrders.length} order(s) selected · stays selected across stages`
-            : "Select orders to print a blanks slip or move them to the next stage."}
-        </p>
         <Button
           type="button"
           size="sm"
@@ -463,6 +458,11 @@ export function OrderFlowPage() {
             Move to next stage
           </Button>
         )}
+        <p className="text-sm text-gray-600 sm:ml-1">
+          {selectedOrders.length > 0
+            ? `${selectedOrders.length} order(s) selected · stays selected across stages`
+            : "Select orders to print a blanks slip or move them to the next stage."}
+        </p>
       </div>
 
       <Card>
