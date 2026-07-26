@@ -190,6 +190,10 @@ export function OrderFlowPage() {
   const [notesDraft, setNotesDraft] = useState("");
   const [blanksSlipOpen, setBlanksSlipOpen] = useState(false);
   const [blanksSlipHtml, setBlanksSlipHtml] = useState("");
+  const [blanksOrderedConfirm, setBlanksOrderedConfirm] = useState<{
+    orders: OrderFlowOrder[];
+  } | null>(null);
+  const [blanksOrderedAck, setBlanksOrderedAck] = useState(false);
 
   const load = useCallback(async (opts?: { preserveSelection?: boolean }) => {
     setLoading(true);
@@ -317,6 +321,25 @@ export function OrderFlowPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  /** Gate moves into Blanks Ordered behind an ops confirmation checkbox. */
+  const requestStageChange = (target: OrderFlowStage, list: OrderFlowOrder[]) => {
+    if (list.length === 0) return;
+    if (target === "blanks_ordered") {
+      setBlanksOrderedAck(false);
+      setBlanksOrderedConfirm({ orders: list });
+      return;
+    }
+    void applyStage(target, list);
+  };
+
+  const confirmBlanksOrderedMove = () => {
+    if (!blanksOrderedConfirm || !blanksOrderedAck) return;
+    const list = blanksOrderedConfirm.orders;
+    setBlanksOrderedConfirm(null);
+    setBlanksOrderedAck(false);
+    void applyStage("blanks_ordered", list);
   };
 
   const openDetail = (order: OrderFlowOrder) => {
@@ -450,7 +473,7 @@ export function OrderFlowPage() {
               type="button"
               size="sm"
               disabled={saving}
-              onClick={() => void applyStage(action.next, action.orders)}
+              onClick={() => void requestStageChange(action.next, action.orders)}
             >
               Move {action.orders.length} → {STAGE_LABELS[action.next]}
             </Button>
@@ -568,7 +591,9 @@ export function OrderFlowPage() {
                         <Select
                           value={order.stage}
                           disabled={saving}
-                          onValueChange={(v) => void applyStage(v as OrderFlowStage, [order])}
+                          onValueChange={(v) =>
+                            void requestStageChange(v as OrderFlowStage, [order])
+                          }
                         >
                           <SelectTrigger className="h-8 w-[160px]">
                             <SelectValue />
@@ -599,7 +624,7 @@ export function OrderFlowPage() {
                               size="sm"
                               className="h-8"
                               disabled={saving}
-                              onClick={() => void applyStage(nxt, [order])}
+                              onClick={() => void requestStageChange(nxt, [order])}
                             >
                               → {STAGE_LABELS[nxt]}
                             </Button>
@@ -655,6 +680,62 @@ export function OrderFlowPage() {
                 Print / Save PDF
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(blanksOrderedConfirm)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBlanksOrderedConfirm(null);
+            setBlanksOrderedAck(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Move to Blanks Ordered?</DialogTitle>
+            <DialogDescription>
+              {blanksOrderedConfirm
+                ? blanksOrderedConfirm.orders.length === 1
+                  ? `Confirm that blanks for ${blanksOrderedConfirm.orders[0].orderNumber} have been ordered before moving to the next stage.`
+                  : `Confirm that blanks for ${blanksOrderedConfirm.orders.length} selected orders have been ordered before moving to the next stage.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm leading-snug text-gray-800">
+            <Checkbox
+              checked={blanksOrderedAck}
+              onCheckedChange={(v) => setBlanksOrderedAck(Boolean(v))}
+              className="mt-0.5"
+              aria-label="Confirm blanks ordered"
+            />
+            <span>
+              I have ordered the necessary garments from the required batch to
+              move to the next stage.
+            </span>
+          </label>
+
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="tertiary"
+              onClick={() => {
+                setBlanksOrderedConfirm(null);
+                setBlanksOrderedAck(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!blanksOrderedAck || saving}
+              onClick={confirmBlanksOrderedMove}
+            >
+              Move to Blanks Ordered
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -774,7 +855,7 @@ export function OrderFlowPage() {
                         shape="pill"
                         variant={detail.stage === s ? "default" : "tertiary"}
                         disabled={saving || detail.stage === s}
-                        onClick={() => void applyStage(s, [detail])}
+                        onClick={() => void requestStageChange(s, [detail])}
                       >
                         {STAGE_LABELS[s]}
                       </Button>
