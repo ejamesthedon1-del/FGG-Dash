@@ -35,6 +35,23 @@ import {
 import { cn } from "./ui/utils";
 
 type ViewMode = "board" | "list";
+type PanelMode = "create" | "edit" | null;
+
+type TaskDraft = {
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate: string | null;
+};
+
+const EMPTY_DRAFT: TaskDraft = {
+  title: "",
+  description: "",
+  status: "todo",
+  priority: "medium",
+  dueDate: null,
+};
 
 function formatDue(dueDate: string | null): string {
   if (!dueDate) return "No due date";
@@ -121,12 +138,14 @@ export function MyTasksPage() {
   const userId = user?.id ?? null;
   const [tasks, setTasks] = useState<MyTask[]>([]);
   const [view, setView] = useState<ViewMode>("board");
+  const [panel, setPanel] = useState<PanelMode>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
+  const [draft, setDraft] = useState<TaskDraft>(EMPTY_DRAFT);
 
   useEffect(() => {
     setTasks(loadMyTasks(userId));
     setSelectedId(null);
+    setPanel(null);
   }, [userId]);
 
   useEffect(() => {
@@ -147,7 +166,23 @@ export function MyTasksPage() {
     saveMyTasks(userId, next);
   };
 
-  const openTask = (task: MyTask) => setSelectedId(task.id);
+  const openTask = (task: MyTask) => {
+    setDraft(EMPTY_DRAFT);
+    setSelectedId(task.id);
+    setPanel("edit");
+  };
+
+  const openCreate = () => {
+    setSelectedId(null);
+    setDraft(EMPTY_DRAFT);
+    setPanel("create");
+  };
+
+  const closePanel = () => {
+    setPanel(null);
+    setSelectedId(null);
+    setDraft(EMPTY_DRAFT);
+  };
 
   const updateSelected = (patch: Partial<MyTask>) => {
     if (!selected) return;
@@ -155,8 +190,12 @@ export function MyTasksPage() {
     persist(next);
   };
 
-  const handleAdd = () => {
-    const title = draftTitle.trim();
+  const updateDraft = (patch: Partial<TaskDraft>) => {
+    setDraft((prev) => ({ ...prev, ...patch }));
+  };
+
+  const handleCreate = () => {
+    const title = draft.title.trim();
     if (!title) {
       toast.error("Enter a task title");
       return;
@@ -165,18 +204,24 @@ export function MyTasksPage() {
       toast.error("Sign in to save personal tasks");
       return;
     }
-    const task = createMyTask({ title });
-    // New tasks go to the top of To do while keeping the rest of the list order.
+    const task = createMyTask({
+      title,
+      description: draft.description,
+      status: draft.status,
+      priority: draft.priority,
+      dueDate: draft.dueDate,
+    });
     persist([task, ...tasks]);
-    setDraftTitle("");
+    setDraft(EMPTY_DRAFT);
     setSelectedId(task.id);
+    setPanel("edit");
     toast.success("Task added");
   };
 
   const handleDelete = () => {
     if (!selected) return;
     persist(removeMyTask(tasks, selected.id));
-    setSelectedId(null);
+    closePanel();
     toast.success("Task deleted");
   };
 
@@ -191,19 +236,10 @@ export function MyTasksPage() {
             Your personal board — order, status, and edits stay with your account.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            value={draftTitle}
-            onChange={(e) => setDraftTitle(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            placeholder="New task title…"
-            className="w-52 sm:w-64"
-          />
-          <Button type="button" size="sm" className="gap-1.5" onClick={handleAdd}>
-            <Plus className="h-3.5 w-3.5" />
-            Add task
-          </Button>
-        </div>
+        <Button type="button" size="sm" className="gap-1.5" onClick={openCreate}>
+          <Plus className="h-3.5 w-3.5" />
+          Add task
+        </Button>
       </header>
 
       <div
@@ -313,16 +349,120 @@ export function MyTasksPage() {
       )}
 
       <Sheet
-        open={Boolean(selected)}
+        open={panel !== null}
         onOpenChange={(open) => {
-          if (!open) setSelectedId(null);
+          if (!open) closePanel();
         }}
       >
         <SheetContent
           side="right"
           className="w-full gap-0 overflow-y-auto p-0 sm:max-w-lg"
         >
-          {selected ? (
+          {panel === "create" ? (
+            <>
+              <SheetHeader className="border-b border-gray-100 px-6 py-5 pr-12 text-left">
+                <SheetTitle className="text-xl font-semibold tracking-tight text-gray-950">
+                  Add task
+                </SheetTitle>
+                <SheetDescription className="text-sm text-gray-500">
+                  Set the title and details, then save to your personal board.
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="space-y-6 px-6 py-5">
+                <div>
+                  <Label htmlFor="new-task-title" className="text-sm text-gray-500">
+                    Title
+                  </Label>
+                  <Input
+                    id="new-task-title"
+                    className="mt-1.5"
+                    value={draft.title}
+                    onChange={(e) => updateDraft({ title: e.target.value })}
+                    placeholder="What needs to get done?"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="new-task-description" className="text-sm text-gray-500">
+                    Description
+                  </Label>
+                  <Textarea
+                    id="new-task-description"
+                    className="mt-1.5 min-h-[120px]"
+                    value={draft.description}
+                    onChange={(e) => updateDraft({ description: e.target.value })}
+                    placeholder="Add context, steps, or notes…"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-gray-500">Status</span>
+                    <select
+                      className="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-900"
+                      value={draft.status}
+                      onChange={(e) =>
+                        updateDraft({ status: e.target.value as TaskStatus })
+                      }
+                    >
+                      {BOARD_COLUMNS.map((status) => (
+                        <option key={status} value={status}>
+                          {TASK_STATUS_LABELS[status]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-gray-500">Priority</span>
+                    <select
+                      className="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-900"
+                      value={draft.priority}
+                      onChange={(e) =>
+                        updateDraft({ priority: e.target.value as TaskPriority })
+                      }
+                    >
+                      {(Object.keys(TASK_PRIORITY_LABELS) as TaskPriority[]).map(
+                        (priority) => (
+                          <option key={priority} value={priority}>
+                            {TASK_PRIORITY_LABELS[priority]}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-gray-500">Due date</span>
+                    <Input
+                      type="date"
+                      className="h-8 w-auto"
+                      value={draft.dueDate ?? ""}
+                      onChange={(e) =>
+                        updateDraft({ dueDate: e.target.value || null })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row-reverse">
+                  <Button type="button" className="sm:flex-1" onClick={handleCreate}>
+                    Save task
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    className="sm:flex-1"
+                    onClick={closePanel}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {panel === "edit" && selected ? (
             <>
               <SheetHeader className="border-b border-gray-100 px-6 py-5 pr-12 text-left">
                 <SheetTitle className="text-xl font-semibold tracking-tight text-gray-950">
