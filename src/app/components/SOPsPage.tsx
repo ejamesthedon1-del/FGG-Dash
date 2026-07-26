@@ -303,7 +303,7 @@ export function SOPsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-2">
+      <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-2 text-center">
         <div className="relative w-full">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
@@ -320,8 +320,8 @@ export function SOPsPage() {
             aria-label="Search Knowledge Base"
           />
         </div>
-        <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="text-center sm:text-left">
+        <div className="flex w-full flex-col items-center gap-3">
+          <div>
             <h2 className="text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">
               Knowledge Base
             </h2>
