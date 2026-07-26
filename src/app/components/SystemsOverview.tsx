@@ -13,6 +13,12 @@ import {
   type OrderFlowStage,
   type OrderFlowStageCount,
 } from "../lib/order-flow";
+import {
+  getActivePersonalTasks,
+  loadMyTasks,
+  TASK_STATUS_LABELS,
+  type MyTask,
+} from "../lib/my-tasks-storage";
 import { Button } from "./ui/button";
 import {
   ArrowRight,
@@ -144,13 +150,15 @@ const PIPELINE: Array<{ id: OrderFlowStage; icon: typeof Shirt }> = [
 ];
 
 export function SystemsOverview() {
-  const { loading: authLoading, isCeo } = useAuth();
+  const { loading: authLoading, isCeo, user } = useAuth();
+  const userId = user?.id ?? null;
   const [topSops, setTopSops] = useState<
     Array<{ id: string; title: string; status: "Draft" | "Active" | "Needs Update"; updatedAt: string }>
   >([]);
   const [homeContent, setHomeContent] = useState<OperatorDashboardContent>(
     OperatorDashboardStorage.getContent(),
   );
+  const [myTasks, setMyTasks] = useState<MyTask[]>([]);
   const [stages, setStages] = useState<OrderFlowStageCount[]>([]);
   const [orders, setOrders] = useState<OrderFlowOrder[]>([]);
   const [flowLoading, setFlowLoading] = useState(true);
@@ -158,6 +166,7 @@ export function SystemsOverview() {
 
   const loadHome = useCallback(() => {
     setHomeContent(OperatorDashboardStorage.getContent());
+    setMyTasks(loadMyTasks(userId));
     const recentSops = SOPsStorage.getSOPs()
       .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
       .slice(0, 5)
@@ -168,7 +177,7 @@ export function SystemsOverview() {
         updatedAt: sop.updatedAt,
       }));
     setTopSops(recentSops);
-  }, []);
+  }, [userId]);
 
   const loadFlow = useCallback(async () => {
     setFlowLoading(true);
@@ -196,6 +205,10 @@ export function SystemsOverview() {
 
   const showCeoFinance = !authLoading && isCeo;
   const focusItems = useMemo(() => buildLiveFocus(orders, stages), [orders, stages]);
+  const shiftMyTasks = useMemo(
+    () => getActivePersonalTasks(myTasks).slice(0, 5),
+    [myTasks],
+  );
   const openOrders =
     countFor(stages, "needs_blanks") +
     countFor(stages, "in_production") +
@@ -277,14 +290,45 @@ export function SystemsOverview() {
             </ul>
           </div>
           <div className="bg-white p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Updates</p>
-            <ul className="mt-3 space-y-2.5">
-              {homeContent.updates.map((item) => (
-                <li key={item} className="text-sm leading-snug text-gray-700">
-                  {item}
-                </li>
-              ))}
-            </ul>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                My Tasks
+              </p>
+              <Link
+                to="/my-tasks"
+                className="text-[11px] font-medium text-gray-400 transition-colors hover:text-brand"
+              >
+                View all
+              </Link>
+            </div>
+            {shiftMyTasks.length > 0 ? (
+              <ul className="mt-3 space-y-2.5">
+                {shiftMyTasks.map((task) => (
+                  <li key={task.id}>
+                    <Link
+                      to="/my-tasks"
+                      className="block text-sm leading-snug text-gray-700 transition-colors hover:text-brand"
+                    >
+                      <span className="font-medium text-gray-900">{task.title}</span>
+                      <span className="mt-0.5 block text-[11px] text-gray-400">
+                        {TASK_STATUS_LABELS[task.status]}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm leading-relaxed text-gray-500">
+                No personal tasks yet. Create a{" "}
+                <Link
+                  to="/my-tasks"
+                  className="font-medium text-gray-900 underline decoration-gray-300 underline-offset-2 transition-colors hover:text-brand hover:decoration-brand"
+                >
+                  task
+                </Link>{" "}
+                to track your priorities for this shift.
+              </p>
+            )}
           </div>
           <div className="bg-white p-4">
             <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Open issues</p>

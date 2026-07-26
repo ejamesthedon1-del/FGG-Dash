@@ -162,3 +162,14 @@ export function removeMyTask(tasks: MyTask[], id: string): MyTask[] {
 export function tasksByStatus(tasks: MyTask[], status: TaskStatus): MyTask[] {
   return tasks.filter((t) => t.status === status);
 }
+
+export function isGuideTask(task: MyTask): boolean {
+  return task.id.startsWith("guide-");
+}
+
+/** Open personal tasks (excludes guide starters and completed items). */
+export function getActivePersonalTasks(tasks: MyTask[]): MyTask[] {
+  return tasks.filter(
+    (t) => !isGuideTask(t) && (t.status === "todo" || t.status === "in_progress"),
+  );
+}
