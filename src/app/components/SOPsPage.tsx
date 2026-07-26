@@ -141,7 +141,7 @@ export function SOPsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [hubEdit, setHubEdit] = useState<HubEditTarget | null>(null);
   const [hubEditDraft, setHubEditDraft] = useState("");
-  const { canManageContent: isAdmin } = useAuth();
+  const { canManageContent: isAdmin, isCeo } = useAuth();
   const pendingNavTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [hubSearch, setHubSearch] = useState("");
@@ -329,7 +329,7 @@ export function SOPsPage() {
               Procedures and docs for the floor — open an area to dig in.
             </p>
           </div>
-          {isAdmin ? (
+          {isCeo ? (
             <Link to="/sops/create">
               <Button type="button" className="gap-2">
                 <Plus className="h-4 w-4" />
@@ -432,7 +432,7 @@ export function SOPsPage() {
                 <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-white px-4 py-12 text-center">
                   <ClipboardList className="h-10 w-10 text-gray-300" />
                   <p className="text-sm text-gray-600">No procedures in this section match your filters.</p>
-                  {isAdmin ? (
+                  {isCeo ? (
                     <Link
                       to={`/sops/create?categoryId=${encodeURIComponent(browseCategoryId)}&menuItemId=${encodeURIComponent(browseMenuItemId)}`}
                     >
@@ -491,7 +491,7 @@ export function SOPsPage() {
                                   : "—")}
                             </CardDescription>
                           </div>
-                          {isAdmin ? (
+                          {isCeo ? (
                             <Link
                               to={`/sops/edit/${sop.id}`}
                               className="shrink-0"
@@ -587,7 +587,7 @@ export function SOPsPage() {
                       "This folder has no description yet."}
                   </p>
                 </div>
-                {isAdmin ? (
+                {isCeo ? (
                   <Link to={`/sops/create?categoryId=${encodeURIComponent(selectedCategory.id)}`}>
                     <Button type="button" variant="outline" size="sm" className="gap-1">
                       <Plus className="h-4 w-4" />

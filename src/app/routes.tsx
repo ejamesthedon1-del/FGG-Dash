@@ -36,8 +36,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: SystemsOverview },
       { path: "order-flow", Component: OrderFlowPage },
-      { path: "sops/create", Component: CreateSOP },
-      { path: "sops/edit/:id", Component: EditSOP },
+      { path: "sops/create", Component: ceoPage(CreateSOP) },
+      { path: "sops/edit/:id", Component: ceoPage(EditSOP) },
       { path: "sops", Component: SOPsPage },
       { path: "brand-hub", Component: ceoPage(BrandHubPage) },
       { path: "brand-hub/:slug", Component: ceoPage(BrandHubDetail) },
