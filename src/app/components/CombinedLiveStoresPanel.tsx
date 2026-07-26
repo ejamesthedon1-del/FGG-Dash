@@ -355,41 +355,35 @@ export function CombinedLiveStoresPanel() {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h3 className="text-lg font-semibold text-gray-900">Live store overview</h3>
-            <Select
-              value={preset}
-              onValueChange={(value) => {
-                const next = value as PeriodPreset;
-                setPreset(next);
-                if (next === "custom") {
-                  setAppliedCustom({ start: customStart, end: customEnd });
-                } else {
-                  setAppliedCustom(null);
-                }
-              }}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={preset}
+            onValueChange={(value) => {
+              const next = value as PeriodPreset;
+              setPreset(next);
+              if (next === "custom") {
+                setAppliedCustom({ start: customStart, end: customEnd });
+              } else {
+                setAppliedCustom(null);
+              }
+            }}
+          >
+            <SelectTrigger
+              aria-label="Date range"
+              className="h-8 w-auto min-w-[8.5rem] border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-700 shadow-none"
             >
-              <SelectTrigger
-                aria-label="Date range"
-                className="h-8 w-auto min-w-[8.5rem] border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-700 shadow-none"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="start">
-                {PRESETS.map((item) => (
-                  <SelectItem key={item.id} value={item.id} className="text-sm">
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <p className="mt-1 text-sm text-gray-500">
-            Combined results from{" "}
-            {state.brands.map((b) => b.label).join(" + ") || "Brand Hub stores"} · {periodHint}
-          </p>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start">
+              {PRESETS.map((item) => (
+                <SelectItem key={item.id} value={item.id} className="text-sm">
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-[11px] text-gray-400">{periodHint}</span>
         </div>
         <Link to="/brand-hub" className="text-sm font-medium text-blue-600 hover:underline">
           Open Brand Hub

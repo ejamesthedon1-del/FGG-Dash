@@ -252,8 +252,8 @@ export function SystemsOverview() {
 
   if (showCeoFinance) {
     return (
-      <div className="space-y-8">
-        <header className="border-b border-gray-200 pb-6">
+      <div className="space-y-5">
+        <header>
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
             Leadership · {weekday} · {timeLabel}
           </p>
