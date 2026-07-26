@@ -249,6 +249,88 @@ export function SystemsOverview() {
         </div>
       </header>
 
+      {/* Shift notes — first thing on the floor brief */}
+      <section>
+        <div className="mb-4">
+          <h3 className="text-base font-semibold text-gray-950">Shift notes</h3>
+          <p className="mt-0.5 text-xs text-gray-500">Priorities and issues set for the floor.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 md:grid-cols-2 xl:grid-cols-4">
+          <div className="bg-white p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Priorities</p>
+            <ul className="mt-3 space-y-2.5">
+              {homeContent.priorities.map((item) => (
+                <li key={item} className="text-sm leading-snug text-gray-700">
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-white p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Due today</p>
+            <ul className="mt-3 space-y-2.5">
+              {homeContent.tasksDueToday.map((item) => (
+                <li key={item} className="text-sm leading-snug text-gray-700">
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-white p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Updates</p>
+            <ul className="mt-3 space-y-2.5">
+              {homeContent.updates.map((item) => (
+                <li key={item} className="text-sm leading-snug text-gray-700">
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-white p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Open issues</p>
+            <ul className="mt-3 space-y-2.5">
+              {homeContent.openIssues.map((item) => (
+                <li key={item} className="text-sm leading-snug text-gray-700">
+                  {item}
+                </li>
+              ))}
+              <li className="text-sm text-gray-500">
+                Docs needing update:{" "}
+                <span className="font-medium text-gray-800">
+                  {topSops.filter((sop) => sop.status !== "Active").length}
+                </span>
+              </li>
+            </ul>
+            <div className="mt-4 space-y-1 border-t border-gray-100 pt-3">
+              <Link
+                to="/order-flow"
+                className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
+              >
+                Order Flow
+                <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
+              </Link>
+              <Link
+                to="/sops"
+                className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
+              >
+                Knowledge Base
+                <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
+              </Link>
+              {homeContent.quickLinks.map((item) => (
+                <Link
+                  key={`${item.label}-${item.to}`}
+                  to={item.to}
+                  className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
+                >
+                  <span className="truncate">{item.label}</span>
+                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-300" />
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* KPI strip — denser, less “card toy” */}
       <section className="grid grid-cols-2 divide-x divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 bg-white sm:grid-cols-4 sm:divide-y-0">
         {[
@@ -398,88 +480,6 @@ export function SystemsOverview() {
           </div>
         </section>
       </div>
-
-      {/* Shift notes — quieter written brief */}
-      <section className="border-t border-gray-200 pt-8">
-        <div className="mb-4">
-          <h3 className="text-base font-semibold text-gray-950">Shift notes</h3>
-          <p className="mt-0.5 text-xs text-gray-500">Priorities and issues set for the floor.</p>
-        </div>
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 md:grid-cols-2 xl:grid-cols-4">
-          <div className="bg-white p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Priorities</p>
-            <ul className="mt-3 space-y-2.5">
-              {homeContent.priorities.map((item) => (
-                <li key={item} className="text-sm leading-snug text-gray-700">
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="bg-white p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Due today</p>
-            <ul className="mt-3 space-y-2.5">
-              {homeContent.tasksDueToday.map((item) => (
-                <li key={item} className="text-sm leading-snug text-gray-700">
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="bg-white p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Updates</p>
-            <ul className="mt-3 space-y-2.5">
-              {homeContent.updates.map((item) => (
-                <li key={item} className="text-sm leading-snug text-gray-700">
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="bg-white p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Open issues</p>
-            <ul className="mt-3 space-y-2.5">
-              {homeContent.openIssues.map((item) => (
-                <li key={item} className="text-sm leading-snug text-gray-700">
-                  {item}
-                </li>
-              ))}
-              <li className="text-sm text-gray-500">
-                Docs needing update:{" "}
-                <span className="font-medium text-gray-800">
-                  {topSops.filter((sop) => sop.status !== "Active").length}
-                </span>
-              </li>
-            </ul>
-            <div className="mt-4 space-y-1 border-t border-gray-100 pt-3">
-              <Link
-                to="/order-flow"
-                className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
-              >
-                Order Flow
-                <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
-              </Link>
-              <Link
-                to="/sops"
-                className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
-              >
-                Knowledge Base
-                <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
-              </Link>
-              {homeContent.quickLinks.map((item) => (
-                <Link
-                  key={`${item.label}-${item.to}`}
-                  to={item.to}
-                  className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
-                >
-                  <span className="truncate">{item.label}</span>
-                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-300" />
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
 
       {showCeoFinance ? (
         <section className="space-y-3 border-t border-gray-200 pt-8">
