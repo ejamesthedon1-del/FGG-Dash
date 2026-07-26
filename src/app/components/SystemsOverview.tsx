@@ -239,30 +239,13 @@ export function SystemsOverview() {
     countFor(stages, "ready_to_ship");
   const criticalCount = focusItems.filter((i) => i.tone === "critical").length;
 
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  }).format(new Date());
-
-  const timeLabel = new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date());
-
   if (showCeoFinance) {
     return (
       <div className="space-y-5">
         <header>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
-            Leadership · {weekday} · {timeLabel}
-          </p>
-          <h2 className="mt-2 text-[1.75rem] font-semibold tracking-tight text-gray-950">
+          <h2 className="text-[1.75rem] font-semibold tracking-tight text-gray-950">
             Dashboard
           </h2>
-          <p className="mt-1.5 max-w-xl text-sm text-gray-500">
-            Live store performance — profit, revenue, ads, and production.
-          </p>
         </header>
         <CombinedLiveStoresPanel />
       </div>
@@ -274,15 +257,9 @@ export function SystemsOverview() {
       {/* Workspace header */}
       <header className="flex flex-col gap-4 border-b border-gray-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
-            Floor · {weekday} · {timeLabel}
-          </p>
-          <h2 className="mt-2 text-[1.75rem] font-semibold tracking-tight text-gray-950">
+          <h2 className="text-[1.75rem] font-semibold tracking-tight text-gray-950">
             Dashboard
           </h2>
-          <p className="mt-1.5 max-w-xl text-sm text-gray-500">
-            Live production status for the shift. Work the queue, then open Order Flow.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
