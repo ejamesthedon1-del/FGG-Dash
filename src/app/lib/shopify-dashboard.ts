@@ -4,7 +4,7 @@ import { apiUrl } from "./api-base";
 export const SHOPIFY_LIVE_BRAND_SLUGS = new Set(["live-don", "sinners-testimony"]);
 
 export const SHOPIFY_BRAND_LABELS: Record<string, string> = {
-  "live-don": "Liv Don",
+  "live-don": "Livdon",
   "sinners-testimony": "Sinners Testimony",
 };
 
@@ -22,21 +22,29 @@ export type ShopifySoldItem = {
 export type ShopifyBrandKpis = {
   date: string;
   monthStart: string;
+  periodStart?: string;
+  periodEnd?: string;
   timezone?: string;
   currency: string;
   dailySales: number;
   dailyOrderCount: number;
   monthSales: number;
   monthOrderCount: number;
+  periodSales?: number;
+  periodOrderCount?: number;
   dailyFees: number;
   monthFees: number;
+  periodFees?: number;
   dailyShipping: number;
   monthShipping: number;
+  periodShipping?: number;
   dailyOrderShipping: ShopifyOrderShipping[];
   dailyItems: ShopifySoldItem[];
   dailyItemUnits: number;
   monthItems: ShopifySoldItem[];
   monthItemUnits: number;
+  periodItems?: ShopifySoldItem[];
+  periodItemUnits?: number;
   topProduct: { name: string; units: number } | null;
   adsSpendToday?: {
     spend: number;
@@ -46,6 +54,14 @@ export type ShopifyBrandKpis = {
     date?: string;
   } | null;
   adsSpendMonth?: {
+    spend: number;
+    currency: string;
+    impressions?: number;
+    clicks?: number;
+    since?: string;
+    until?: string;
+  } | null;
+  adsSpendPeriod?: {
     spend: number;
     currency: string;
     impressions?: number;
@@ -88,10 +104,14 @@ export function formatDailyItems(
   return `${top.name} ×${top.units} +${extra} more`;
 }
 
-export async function fetchShopifyBrandKpis(brand: string): Promise<ShopifyBrandKpis> {
-  const res = await fetch(
-    apiUrl(`/api/shopify/brand-kpis?brand=${encodeURIComponent(brand)}`),
-  );
+export async function fetchShopifyBrandKpis(
+  brand: string,
+  range?: { start: string; end: string },
+): Promise<ShopifyBrandKpis> {
+  const qs = new URLSearchParams({ brand });
+  if (range?.start) qs.set("start", range.start);
+  if (range?.end) qs.set("end", range.end);
+  const res = await fetch(apiUrl(`/api/shopify/brand-kpis?${qs.toString()}`));
   if (!res.ok) {
     let detail = res.statusText;
     try {

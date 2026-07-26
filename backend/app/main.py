@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -32,7 +33,7 @@ app.add_middleware(
 )
 
 BRAND_LABELS = {
-    "live-don": "Liv Don",
+    "live-don": "Livdon",
     "sinners-testimony": "Sinners Testimony",
 }
 
@@ -108,7 +109,7 @@ async def get_order_flow(
     stage: str = "all",
     days: int = 90,
 ) -> dict:
-    """Combined Liv Don + Sinners orders with FGG production stages."""
+    """Combined Livdon + Sinners orders with FGG production stages."""
     try:
         return await build_order_flow(brand_filter=brand, stage_filter=stage, days=days)
     except Exception as exc:
@@ -402,15 +403,53 @@ async def get_daily_sales() -> dict:
 
 
 @app.get("/api/shopify/brand-kpis")
-async def get_brand_kpis(brand: str = "live-don") -> dict:
-    """Today + month-to-date KPIs. Pass ?brand=live-don or ?brand=sinners-testimony."""
+async def get_brand_kpis(
+    brand: str = "live-don",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+) -> dict:
+    """Store KPIs for a date range.
+
+    Default (no start/end): today + month-to-date (Brand Hub compatible).
+    With start/end (YYYY-MM-DD, shop timezone): period totals for that inclusive range.
+    """
     brand_key = resolve_brand(brand)
+
+    def parse_ymd(value: Optional[str], label: str) -> Optional[date]:
+        if value is None or not str(value).strip():
+            return None
+        try:
+            return date.fromisoformat(str(value).strip())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid {label} date: {value}") from exc
+
     try:
         client = get_shopify_client(brand_key)
         tz = await shop_timezone(brand_key)
         now_local = datetime.now(timezone.utc).astimezone(tz)
-        today = now_local.date().isoformat()
-        month_start = now_local.date().replace(day=1).isoformat()
+        today_d = now_local.date()
+        month_start_d = today_d.replace(day=1)
+        today = today_d.isoformat()
+        month_start = month_start_d.isoformat()
+
+        range_start = parse_ymd(start, "start")
+        range_end = parse_ymd(end, "end")
+        range_mode = range_start is not None or range_end is not None
+
+        if range_mode:
+            period_start_d = range_start or month_start_d
+            period_end_d = range_end or today_d
+            if period_end_d < period_start_d:
+                raise HTTPException(status_code=400, detail="end must be on or after start")
+            if (period_end_d - period_start_d).days > 93:
+                raise HTTPException(status_code=400, detail="Date range cannot exceed 93 days")
+            if period_end_d > today_d:
+                period_end_d = today_d
+            fetch_start_d = period_start_d
+        else:
+            period_start_d = month_start_d
+            period_end_d = today_d
+            fetch_start_d = month_start_d
 
         query = """
         query BrandKpiOrders($queryString: String!, $cursor: String) {
@@ -431,7 +470,6 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
                 totalShippingPriceSet {
                   shopMoney {
                     amount
-                    currencyCode
                   }
                 }
                 name
@@ -469,24 +507,29 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
         """
 
         # Shopify order search dates are evaluated in shop timezone.
-        query_string = f"created_at:>={month_start}"
+        query_string = f"created_at:>={fetch_start_d.isoformat()}"
 
         currency = "USD"
         daily_sales = 0.0
         month_sales = 0.0
+        period_sales = 0.0
         daily_orders = 0
         month_orders = 0
+        period_orders = 0
         daily_fees = 0.0
         month_fees = 0.0
+        period_fees = 0.0
         daily_shipping = 0.0
         month_shipping = 0.0
+        period_shipping = 0.0
         units_by_product: dict[str, int] = {}
         daily_units_by_product: dict[str, int] = {}
+        period_units_by_product: dict[str, int] = {}
         daily_order_shipping: list[dict] = []
 
         cursor = None
         pages = 0
-        while pages < 20:
+        while pages < 30:
             variables: dict = {"queryString": query_string}
             if cursor:
                 variables["cursor"] = cursor
@@ -496,12 +539,18 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
             edges = block.get("edges") or []
             page_info = block.get("pageInfo") or {}
 
+            stop_paging = False
             for edge in edges:
                 node = edge["node"]
                 created_raw = node.get("createdAt") or ""
                 created_dt = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
                 created_local = local_date_str(created_dt, tz)
-                is_today = created_local >= today
+                created_d = date.fromisoformat(created_local)
+
+                # Orders are reverse-chronological; once we pass fetch_start we can stop.
+                if created_d < fetch_start_d:
+                    stop_paging = True
+                    break
 
                 shop = ((node.get("currentTotalPriceSet") or {}).get("shopMoney")) or {}
                 amount = float(shop.get("amount") or 0)
@@ -518,10 +567,16 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
                         fee_amt = float(((fee.get("amount") or {}).get("amount")) or 0)
                         order_fees += fee_amt
 
-                month_sales += amount
-                month_orders += 1
-                month_fees += order_fees
-                month_shipping += shipping_amount
+                in_month = created_d >= month_start_d and created_d <= today_d
+                is_today = created_d == today_d
+                in_period = period_start_d <= created_d <= period_end_d
+
+                if in_month:
+                    month_sales += amount
+                    month_orders += 1
+                    month_fees += order_fees
+                    month_shipping += shipping_amount
+
                 if is_today:
                     daily_sales += amount
                     daily_orders += 1
@@ -535,6 +590,12 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
                         }
                     )
 
+                if in_period:
+                    period_sales += amount
+                    period_orders += 1
+                    period_fees += order_fees
+                    period_shipping += shipping_amount
+
                 for li in (node.get("lineItems") or {}).get("edges") or []:
                     item = li["node"]
                     title = (item.get("title") or item.get("name") or "Unknown").strip()
@@ -546,22 +607,36 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
                     label = product_label_with_color(title, color)
                     qty = int(item.get("quantity") or 0)
                     if label and qty:
-                        units_by_product[label] = units_by_product.get(label, 0) + qty
+                        if in_month:
+                            units_by_product[label] = units_by_product.get(label, 0) + qty
                         if is_today:
                             daily_units_by_product[label] = (
                                 daily_units_by_product.get(label, 0) + qty
                             )
+                        if in_period:
+                            period_units_by_product[label] = (
+                                period_units_by_product.get(label, 0) + qty
+                            )
 
             pages += 1
-            if not page_info.get("hasNextPage"):
+            if stop_paging or not page_info.get("hasNextPage"):
                 break
             cursor = page_info.get("endCursor")
             if not cursor:
                 break
 
+        # When range mode asks for a non-MTD window, month/daily still reflect
+        # live shop today/MTD only if we fetched from month_start. For ranges
+        # that start before month_start we already fetch from period_start.
+        if range_mode and fetch_start_d < month_start_d:
+            # Recompute month/daily from the same pass is already done when
+            # orders fall in those windows; no extra work needed.
+            pass
+
         top_name = None
         top_units = 0
-        for name, units in units_by_product.items():
+        top_source = period_units_by_product if range_mode else units_by_product
+        for name, units in top_source.items():
             if units > top_units:
                 top_name = name
                 top_units = units
@@ -578,16 +653,24 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
                 units_by_product.items(), key=lambda kv: (-kv[1], kv[0])
             )
         ]
+        period_items = [
+            {"name": name, "units": units}
+            for name, units in sorted(
+                period_units_by_product.items(), key=lambda kv: (-kv[1], kv[0])
+            )
+        ]
         daily_item_units = sum(daily_units_by_product.values())
         month_item_units = sum(units_by_product.values())
+        period_item_units = sum(period_units_by_product.values())
 
         ads_spend_today = None
         ads_spend_month = None
+        ads_spend_period = None
         ads_error = None
         if meta_ads_client.configured(brand_key):
             try:
                 ads_today = await meta_ads_client.daily_spend(
-                    now_local.date(), brand=brand_key
+                    today_d, brand=brand_key
                 )
                 ads_spend_today = {
                     "spend": round(float(ads_today["spend"]), 2),
@@ -597,8 +680,8 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
                     "date": ads_today.get("date"),
                 }
                 ads_month = await meta_ads_client.spend_range(
-                    now_local.date().replace(day=1),
-                    now_local.date(),
+                    month_start_d,
+                    today_d,
                     brand=brand_key,
                 )
                 ads_spend_month = {
@@ -609,6 +692,19 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
                     "since": ads_month.get("since"),
                     "until": ads_month.get("until"),
                 }
+                ads_period = await meta_ads_client.spend_range(
+                    period_start_d,
+                    period_end_d,
+                    brand=brand_key,
+                )
+                ads_spend_period = {
+                    "spend": round(float(ads_period["spend"]), 2),
+                    "currency": ads_period.get("currency") or "USD",
+                    "impressions": ads_period.get("impressions") or 0,
+                    "clicks": ads_period.get("clicks") or 0,
+                    "since": ads_period.get("since"),
+                    "until": ads_period.get("until"),
+                }
             except MetaAdsError as exc:
                 ads_error = str(exc)
 
@@ -616,95 +712,41 @@ async def get_brand_kpis(brand: str = "live-don") -> dict:
             "brand": brand_key,
             "date": today,
             "monthStart": month_start,
+            "periodStart": period_start_d.isoformat(),
+            "periodEnd": period_end_d.isoformat(),
             "timezone": str(tz),
             "currency": currency,
             "dailySales": round(daily_sales, 2),
             "dailyOrderCount": daily_orders,
             "monthSales": round(month_sales, 2),
             "monthOrderCount": month_orders,
+            "periodSales": round(period_sales, 2),
+            "periodOrderCount": period_orders,
             "dailyFees": round(daily_fees, 2),
             "monthFees": round(month_fees, 2),
+            "periodFees": round(period_fees, 2),
             "dailyShipping": round(daily_shipping, 2),
             "monthShipping": round(month_shipping, 2),
+            "periodShipping": round(period_shipping, 2),
             "dailyOrderShipping": daily_order_shipping,
             "dailyItems": daily_items,
             "dailyItemUnits": daily_item_units,
             "monthItems": month_items,
             "monthItemUnits": month_item_units,
+            "periodItems": period_items,
+            "periodItemUnits": period_item_units,
             "topProduct": (
                 {"name": top_name, "units": top_units} if top_name else None
             ),
             "adsSpendToday": ads_spend_today,
             "adsSpendMonth": ads_spend_month,
+            "adsSpendPeriod": ads_spend_period,
             "adsError": ads_error,
         }
+    except HTTPException:
+        raise
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ShopifyGraphQLError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=502, detail=f"Shopify HTTP error: {exc}") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.get("/api/shopify/orders")
-async def get_orders() -> dict:
-    query = """
-    query RecentOrders {
-      orders(first: 25, sortKey: CREATED_AT, reverse: true) {
-        edges {
-          node {
-            id
-            name
-            createdAt
-            displayFinancialStatus
-            displayFulfillmentStatus
-            email
-            currentTotalPriceSet {
-              shopMoney {
-                amount
-                currencyCode
-              }
-            }
-            lineItems(first: 10) {
-              edges {
-                node {
-                  name
-                  quantity
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    """
-
-    try:
-        data = await get_shopify_client("live-don").graphql(query)
-        orders_out = []
-
-        for edge in data.get("orders", {}).get("edges") or []:
-            node = edge["node"]
-            line_edges = (node.get("lineItems") or {}).get("edges") or []
-            orders_out.append(
-                {
-                    "id": node["id"],
-                    "name": node["name"],
-                    "createdAt": node["createdAt"],
-                    "email": node.get("email"),
-                    "financialStatus": node.get("displayFinancialStatus"),
-                    "fulfillmentStatus": node.get("displayFulfillmentStatus"),
-                    "total": (node.get("currentTotalPriceSet") or {}).get("shopMoney"),
-                    "items": [
-                        {"name": li["node"]["name"], "quantity": li["node"]["quantity"]}
-                        for li in line_edges
-                    ],
-                }
-            )
-
-        return {"orders": orders_out}
     except ShopifyGraphQLError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except httpx.HTTPStatusError as exc:
