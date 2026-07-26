@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Calendar,
   CheckSquare,
@@ -6,6 +6,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "../lib/use-auth";
 import {
   BOARD_COLUMNS,
   createMyTask,
@@ -116,10 +117,25 @@ function TaskCard({
 }
 
 export function MyTasksPage() {
-  const [tasks, setTasks] = useState<MyTask[]>(() => loadMyTasks());
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const [tasks, setTasks] = useState<MyTask[]>([]);
   const [view, setView] = useState<ViewMode>("board");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
+
+  useEffect(() => {
+    setTasks(loadMyTasks(userId));
+    setSelectedId(null);
+  }, [userId]);
+
+  useEffect(() => {
+    const onSync = () => {
+      setTasks(loadMyTasks(userId));
+    };
+    window.addEventListener("fgg-storage-sync", onSync);
+    return () => window.removeEventListener("fgg-storage-sync", onSync);
+  }, [userId]);
 
   const selected = useMemo(
     () => tasks.find((t) => t.id === selectedId) ?? null,
@@ -128,7 +144,7 @@ export function MyTasksPage() {
 
   const persist = (next: MyTask[]) => {
     setTasks(next);
-    saveMyTasks(next);
+    saveMyTasks(userId, next);
   };
 
   const openTask = (task: MyTask) => setSelectedId(task.id);
@@ -145,7 +161,12 @@ export function MyTasksPage() {
       toast.error("Enter a task title");
       return;
     }
+    if (!userId) {
+      toast.error("Sign in to save personal tasks");
+      return;
+    }
     const task = createMyTask({ title });
+    // New tasks go to the top of To do while keeping the rest of the list order.
     persist([task, ...tasks]);
     setDraftTitle("");
     setSelectedId(task.id);
@@ -167,7 +188,7 @@ export function MyTasksPage() {
             My Tasks
           </h2>
           <p className="mt-1.5 max-w-xl text-sm text-gray-500">
-            Shift work for the floor — track what needs to move today.
+            Your personal board — order, status, and edits stay with your account.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

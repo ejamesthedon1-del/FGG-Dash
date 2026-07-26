@@ -1,10 +1,11 @@
-/**
- * Cloud mirror for selected localStorage keys via Supabase `app_storage`.
- * When signed in, writes sync to Postgres; on sign-in, remote data merges into localStorage
- * so existing modules keep working without a full rewrite.
- */
-
 import { supabase } from "./supabase/client";
+
+/** Per-user My Tasks boards (`fgg.my-tasks.v1:<userId>`). Kept here to avoid a circular import. */
+export const MY_TASKS_KEY_PREFIX = "fgg.my-tasks.v1:";
+
+export function myTasksStorageKey(userId: string): string {
+  return `${MY_TASKS_KEY_PREFIX}${userId.trim()}`;
+}
 
 /** localStorage keys that sync across devices for signed-in users */
 export const SYNCED_STORAGE_KEYS = [
@@ -28,8 +29,8 @@ export type SyncedStorageKey = (typeof SYNCED_STORAGE_KEYS)[number];
 
 const KEY_SET = new Set<string>(SYNCED_STORAGE_KEYS);
 
-export function isSyncedStorageKey(key: string): key is SyncedStorageKey {
-  return KEY_SET.has(key);
+export function isSyncedStorageKey(key: string): boolean {
+  return KEY_SET.has(key) || key.startsWith(MY_TASKS_KEY_PREFIX);
 }
 
 function remoteValueToString(value: unknown): string {
@@ -98,7 +99,11 @@ export async function pullAndMergeRemoteStorage(): Promise<void> {
 
   const remoteMap = new Map((rows ?? []).map((r) => [r.key as string, r.value as unknown]));
 
-  for (const key of SYNCED_STORAGE_KEYS) {
+  const keysToSync = new Set<string>(SYNCED_STORAGE_KEYS);
+  const personalTasksKey = myTasksStorageKey(session.user.id);
+  keysToSync.add(personalTasksKey);
+
+  for (const key of keysToSync) {
     if (remoteMap.has(key)) {
       try {
         localStorage.setItem(key, remoteValueToString(remoteMap.get(key)));
