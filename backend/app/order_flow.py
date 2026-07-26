@@ -17,6 +17,7 @@ BRAND_LABELS = {
 
 STAGE_LABELS = {
     "needs_blanks": "Needs Blanks",
+    "blanks_ordered": "Blanks Ordered",
     "in_production": "In Production",
     "ready_to_ship": "Ready to Ship",
     "shipped": "Shipped",

@@ -24,14 +24,14 @@ _lock = threading.Lock()
 
 STAGES = (
     "needs_blanks",
+    "blanks_ordered",
     "in_production",
     "ready_to_ship",
     "shipped",
 )
 
-# Older boards used extra hops — collapse into the ops-focused path.
+# Older boards used extra hops — map into the current path.
 STAGE_ALIASES = {
-    "blanks_ordered": "needs_blanks",
     "ready_for_production": "in_production",
 }
 

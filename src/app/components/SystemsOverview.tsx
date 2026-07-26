@@ -23,6 +23,7 @@ import { Button } from "./ui/button";
 import {
   ArrowRight,
   Loader2,
+  Package,
   RefreshCw,
   Scissors,
   Shirt,
@@ -46,6 +47,7 @@ function countFor(stages: OrderFlowStageCount[], id: string): number {
 
 function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[]): FocusItem[] {
   const needsBlanks = countFor(stages, "needs_blanks");
+  const blanksOrdered = countFor(stages, "blanks_ordered");
   const inProd = countFor(stages, "in_production");
   const readyShip = countFor(stages, "ready_to_ship");
   const overdue = orders.filter(
@@ -109,6 +111,16 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
       count: needsBlanks,
     });
   }
+  if (blanksOrdered > 0) {
+    items.push({
+      id: "blanks-ordered",
+      title: "Blanks ordered",
+      detail: "Purchase placed — waiting to arrive before production.",
+      tone: "action",
+      to: "/order-flow?stage=blanks_ordered",
+      count: blanksOrdered,
+    });
+  }
   if (inProd > 0) {
     items.push({
       id: "in-prod",
@@ -145,6 +157,7 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
 
 const PIPELINE: Array<{ id: OrderFlowStage; icon: typeof Shirt }> = [
   { id: "needs_blanks", icon: Shirt },
+  { id: "blanks_ordered", icon: Package },
   { id: "in_production", icon: Scissors },
   { id: "ready_to_ship", icon: Truck },
 ];
@@ -211,6 +224,7 @@ export function SystemsOverview() {
   );
   const openOrders =
     countFor(stages, "needs_blanks") +
+    countFor(stages, "blanks_ordered") +
     countFor(stages, "in_production") +
     countFor(stages, "ready_to_ship");
   const criticalCount = focusItems.filter((i) => i.tone === "critical").length;
@@ -376,10 +390,11 @@ export function SystemsOverview() {
       </section>
 
       {/* KPI strip — denser, less “card toy” */}
-      <section className="grid grid-cols-2 divide-x divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 bg-white sm:grid-cols-4 sm:divide-y-0">
+      <section className="grid grid-cols-2 divide-x divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 bg-white sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
         {[
           { label: "Open", value: openOrders },
           { label: "Needs blanks", value: countFor(stages, "needs_blanks") },
+          { label: "Blanks ordered", value: countFor(stages, "blanks_ordered") },
           { label: "In production", value: countFor(stages, "in_production") },
           { label: "Ready to ship", value: countFor(stages, "ready_to_ship") },
         ].map((cell) => (

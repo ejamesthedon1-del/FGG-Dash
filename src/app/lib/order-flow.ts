@@ -2,6 +2,7 @@ import { apiUrl } from "./api-base";
 
 export const ORDER_FLOW_STAGES = [
   "needs_blanks",
+  "blanks_ordered",
   "in_production",
   "ready_to_ship",
   "shipped",
@@ -9,9 +10,8 @@ export const ORDER_FLOW_STAGES = [
 
 export type OrderFlowStage = (typeof ORDER_FLOW_STAGES)[number];
 
-/** Older boards — mapped into the simplified ops path. */
+/** Older boards — mapped into the current ops path. */
 const STAGE_ALIASES: Record<string, OrderFlowStage> = {
-  blanks_ordered: "needs_blanks",
   ready_for_production: "in_production",
 };
 
@@ -93,6 +93,7 @@ export type OrderFlowResponse = {
 
 export const STAGE_LABELS: Record<OrderFlowStage, string> = {
   needs_blanks: "Needs Blanks",
+  blanks_ordered: "Blanks Ordered",
   in_production: "In Production",
   ready_to_ship: "Ready to Ship",
   shipped: "Shipped",

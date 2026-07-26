@@ -130,6 +130,8 @@ function stageBadgeClass(stage: OrderFlowStage) {
   switch (stage) {
     case "needs_blanks":
       return "border-amber-200 bg-amber-50 text-amber-900";
+    case "blanks_ordered":
+      return "border-orange-200 bg-orange-50 text-orange-900";
     case "in_production":
       return "border-blue-200 bg-blue-50 text-blue-800";
     case "ready_to_ship":
@@ -378,7 +380,7 @@ export function OrderFlowPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {(stages.length
           ? stages.filter((s) => s.id !== "all")
           : ORDER_FLOW_STAGES.map((id) => ({
