@@ -162,11 +162,7 @@ export interface OperatorDashboardContent {
 }
 
 const DEFAULT_OPERATOR_DASHBOARD_CONTENT: OperatorDashboardContent = {
-  priorities: [
-    "Review SOPs marked Needs Update.",
-    "Check open tasks due today and clear blockers.",
-    "Confirm critical fulfillment and returns workflows are current.",
-  ],
+  priorities: [],
   quickLinks: [],
   updates: ["Ops sync at 2:00 PM.", "New SOP labels are now available."],
   tasksDueToday: [
@@ -176,6 +172,14 @@ const DEFAULT_OPERATOR_DASHBOARD_CONTENT: OperatorDashboardContent = {
   ],
   openIssues: ["Outstanding SOP reviews are pending follow-up."],
 };
+
+/** Old seeded priorities — cleared so the floor shows an empty state instead. */
+const LEGACY_SEED_PRIORITIES = new Set([
+  "Review SOPs marked Needs Update.",
+  "Check open tasks due today and clear blockers.",
+  "Confirm critical fulfillment and returns workflows are current.",
+]);
+
 
 export class OperatorDashboardStorage {
   static getContent(): OperatorDashboardContent {
@@ -189,7 +193,9 @@ export class OperatorDashboardStorage {
               .map((item) => (typeof item === "string" ? item.trim() : ""))
               .filter(Boolean)
           : [];
-      const priorities = cleanList(parsed.priorities);
+      const priorities = cleanList(parsed.priorities).filter(
+        (item) => !LEGACY_SEED_PRIORITIES.has(item),
+      );
       const updates = cleanList(parsed.updates);
       const tasksDueToday = cleanList(parsed.tasksDueToday);
       const openIssues = cleanList(parsed.openIssues);
@@ -205,10 +211,7 @@ export class OperatorDashboardStorage {
             .filter((entry): entry is { label: string; to: string } => Boolean(entry))
         : [];
       return {
-        priorities:
-          priorities.length > 0
-            ? priorities
-            : DEFAULT_OPERATOR_DASHBOARD_CONTENT.priorities,
+        priorities,
         quickLinks,
         updates: updates.length > 0 ? updates : DEFAULT_OPERATOR_DASHBOARD_CONTENT.updates,
         tasksDueToday:
@@ -234,10 +237,7 @@ export class OperatorDashboardStorage {
     tryLocalStorageSetItem(
       OPERATOR_DASHBOARD_CONTENT_KEY,
       JSON.stringify({
-        priorities:
-          priorities.length > 0
-            ? priorities
-            : DEFAULT_OPERATOR_DASHBOARD_CONTENT.priorities,
+        priorities,
         quickLinks,
         updates: updates.length > 0 ? updates : DEFAULT_OPERATOR_DASHBOARD_CONTENT.updates,
         tasksDueToday:

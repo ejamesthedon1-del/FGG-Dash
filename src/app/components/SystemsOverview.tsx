@@ -290,14 +290,22 @@ export function SystemsOverview() {
         </div>
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 md:grid-cols-2 xl:grid-cols-4">
           <div className="bg-white p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Priorities</p>
-            <ul className="mt-3 space-y-2.5">
-              {homeContent.priorities.map((item) => (
-                <li key={item} className="text-sm leading-snug text-gray-700">
-                  {item}
-                </li>
-              ))}
-            </ul>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+              Priorities
+            </p>
+            {homeContent.priorities.length > 0 ? (
+              <ul className="mt-3 space-y-2.5">
+                {homeContent.priorities.map((item) => (
+                  <li key={item} className="text-sm leading-snug text-gray-700">
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm leading-snug text-gray-500">
+                No new priorities at the moment
+              </p>
+            )}
           </div>
           <div className="bg-white p-4">
             <div className="flex items-baseline justify-between gap-2">
