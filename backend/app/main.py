@@ -108,12 +108,19 @@ async def generate_clothing_mockup(
     fabric_files = [f for f in (fabrics or []) if f and f.filename]
     if not fabric_files:
         raise HTTPException(status_code=400, detail="Upload at least one fabric reference image.")
-    if len(fabric_files) > 4:
-        raise HTTPException(status_code=400, detail="Maximum 4 fabric reference images.")
-
-    product_files = [f for f in (products or []) if f and f.filename][:4]
     if not inspiration.filename:
         raise HTTPException(status_code=400, detail="Inspiration image is required.")
+
+    product_files = [f for f in (products or []) if f and f.filename]
+
+    # fal-ai/flux-pro/kontext/multi allows 1–4 image_urls total (inspiration counts).
+    remaining_slots = 3  # after inspiration
+    if product_files:
+        fabric_budget = max(1, remaining_slots - 1)
+    else:
+        fabric_budget = remaining_slots
+    fabric_files = fabric_files[:fabric_budget]
+    product_files = product_files[: max(0, remaining_slots - len(fabric_files))]
 
     async def _read_upload(file: UploadFile) -> tuple[bytes, str, str]:
         data = await file.read()
@@ -144,7 +151,8 @@ async def generate_clothing_mockup(
                 urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
             for data, name, ctype in product_payloads:
                 urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
-            return urls
+            # Hard cap — Kontext multi rejects >4
+            return urls[:4]
 
         image_urls = await asyncio.to_thread(_upload_all)
         prompt = mockups.build_prompt(

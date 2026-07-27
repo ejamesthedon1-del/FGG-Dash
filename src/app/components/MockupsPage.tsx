@@ -197,6 +197,9 @@ export function MockupsPage() {
     return next;
   };
 
+  const fabricMax = Math.max(1, 3 - products.length);
+  const productMax = Math.max(0, 3 - fabrics.length);
+
   const canGenerate =
     inspiration.length === 1 && fabrics.length >= 1 && !loading;
 
@@ -243,7 +246,8 @@ export function MockupsPage() {
         </h2>
         <p className="text-sm text-gray-600">
           Recreate an inspiration shot with your fabric and product references —
-          photoreal camera look via FLUX Kontext.
+          photoreal camera look via FLUX Kontext. Max 4 images total (1 inspiration
+          + up to 3 fabric/product refs).
         </p>
       </header>
 
@@ -271,10 +275,13 @@ export function MockupsPage() {
             hint="Drop fabric texture / material refs"
             files={fabrics}
             multiple
-            max={4}
+            max={fabricMax}
             required
             onAdd={(files) =>
-              setFabrics((prev) => addCapped(prev, files, 4, false))
+              setFabrics((prev) => {
+                const max = Math.max(1, 3 - products.length);
+                return addCapped(prev, files, max, false);
+              })
             }
             onRemove={(id) =>
               setFabrics((prev) => {
@@ -289,9 +296,16 @@ export function MockupsPage() {
             hint="Optional garment shots for fit, seams, hardware"
             files={products}
             multiple
-            max={4}
+            max={productMax || 1}
             onAdd={(files) =>
-              setProducts((prev) => addCapped(prev, files, 4, false))
+              setProducts((prev) => {
+                const max = Math.max(0, 3 - fabrics.length);
+                if (max < 1) {
+                  toast.message("Remove a fabric ref to add a product shot (4-image limit)");
+                  return prev;
+                }
+                return addCapped(prev, files, max, false);
+              })
             }
             onRemove={(id) =>
               setProducts((prev) => {
