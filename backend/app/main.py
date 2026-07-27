@@ -106,21 +106,24 @@ async def generate_clothing_mockup(
         )
 
     fabric_files = [f for f in (fabrics or []) if f and f.filename]
-    if not fabric_files:
-        raise HTTPException(status_code=400, detail="Upload at least one fabric reference image.")
+    product_files = [f for f in (products or []) if f and f.filename]
     if not inspiration.filename:
         raise HTTPException(status_code=400, detail="Inspiration image is required.")
+    if not fabric_files and not product_files:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload a product shot and/or at least one fabric reference.",
+        )
 
-    product_files = [f for f in (products or []) if f and f.filename]
-
-    # fal-ai/flux-pro/kontext/multi allows 1–4 image_urls total (inspiration counts).
-    remaining_slots = 3  # after inspiration
+    # Kontext allows 1–4 images total. Prioritize product design over fabric swatches.
+    remaining_slots = 3
+    product_files = product_files[:remaining_slots]
+    remaining_slots -= len(product_files)
     if product_files:
-        fabric_budget = max(1, remaining_slots - 1)
+        # One texture ref max when product is present — extra fabrics confuse design.
+        fabric_files = fabric_files[: min(1, remaining_slots)]
     else:
-        fabric_budget = remaining_slots
-    fabric_files = fabric_files[:fabric_budget]
-    product_files = product_files[: max(0, remaining_slots - len(fabric_files))]
+        fabric_files = fabric_files[:remaining_slots]
 
     async def _read_upload(file: UploadFile) -> tuple[bytes, str, str]:
         data = await file.read()
@@ -145,13 +148,13 @@ async def generate_clothing_mockup(
         product_payloads = [await _read_upload(f) for f in product_files]
 
         def _upload_all() -> list[str]:
+            # Order: inspiration → product (design) → fabric (texture only)
             urls: list[str] = []
             urls.append(mockups.upload_bytes(insp_bytes, insp_name, insp_ctype, settings.fal_key))
-            for data, name, ctype in fabric_payloads:
-                urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
             for data, name, ctype in product_payloads:
                 urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
-            # Hard cap — Kontext multi rejects >4
+            for data, name, ctype in fabric_payloads:
+                urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
             return urls[:4]
 
         image_urls = await asyncio.to_thread(_upload_all)

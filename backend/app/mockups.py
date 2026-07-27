@@ -17,17 +17,6 @@ ALLOWED_ASPECT = {
     "9:21",
 }
 
-PHOTOREAL_TEMPLATE = (
-    "Photoreal product photo shot on a real camera. "
-    "Recreate the pose, framing, and lighting of the first reference image. "
-    "Apply the exact fabric color, weave, nap, and texture from the fabric close-up "
-    "reference images onto the garment. "
-    "Match construction details from any product reference images "
-    "(silhouette, seams, ribbing, hardware, fit). "
-    "Natural skin and fabric microdetail, authentic lens look, shallow depth of field "
-    "when appropriate. No illustration, no plastic CGI, no stock watermark, no text overlay."
-)
-
 
 def build_prompt(
     *,
@@ -35,19 +24,57 @@ def build_prompt(
     product_count: int,
     notes: str | None,
 ) -> str:
-    parts = [PHOTOREAL_TEMPLATE]
-    parts.append(
-        f"Image order: (1) inspiration scene to recreate; "
-        f"next {fabric_count} image(s) are fabric texture close-ups"
-        + (
-            f"; remaining {product_count} image(s) are product/construction refs."
-            if product_count
-            else "."
+    """Build a prompt that prioritizes exact product design over fabric swatches."""
+    # Image order sent to Kontext: [inspiration, ...products, ...fabrics]
+    idx = 1
+    insp_idx = idx
+    idx += 1
+    product_indices: list[int] = []
+    for _ in range(product_count):
+        product_indices.append(idx)
+        idx += 1
+    fabric_indices: list[int] = []
+    for _ in range(fabric_count):
+        fabric_indices.append(idx)
+        idx += 1
+
+    parts: list[str] = [
+        "Create a photoreal fashion photograph that looks shot on a real camera.",
+        f"Keep the SAME person, face, hair, pose, framing, lighting, and background as image #{insp_idx}.",
+        f"Only change the clothing: dress them in our garment.",
+    ]
+
+    if product_indices:
+        refs = ", ".join(f"#{i}" for i in product_indices)
+        parts.append(
+            f"The hoodie/garment to wear is in image(s) {refs}. "
+            "Copy that product EXACTLY: colorway, paint splatter / distressing / graphics, "
+            "chest logo or print placement, pocket shape, hood, drawcords, seams, and overall silhouette. "
+            "Do NOT invent a plain solid hoodie. Do NOT drop the print, pattern, or logo."
         )
+    if fabric_indices:
+        refs = ", ".join(f"#{i}" for i in fabric_indices)
+        parts.append(
+            f"Image(s) {refs} are fabric texture close-ups only — use them for material feel "
+            "(fleece nap, knit, hand) when helpful, but NEVER override the product's printed "
+            "design, colorway, or graphics from the product photo."
+        )
+    if not product_indices and fabric_indices:
+        refs = ", ".join(f"#{i}" for i in fabric_indices)
+        parts.append(
+            f"Build the garment using the fabric shown in image(s) {refs} "
+            "(exact color and texture)."
+        )
+
+    parts.append(
+        "Natural skin texture, fabric microdetail, realistic folds and shadows. "
+        "No illustration, no plastic CGI, no watermark, no extra text overlays."
     )
+
     cleaned = (notes or "").strip()
     if cleaned:
-        parts.append(f"Additional direction from the designer: {cleaned}")
+        parts.append(f"Designer notes: {cleaned}")
+
     return " ".join(parts)
 
 
@@ -96,6 +123,9 @@ def generate_mockup(
             "aspect_ratio": ratio,
             "output_format": "jpeg",
             "safety_tolerance": "2",
+            # Stronger adherence to product/design refs
+            "guidance_scale": 4.5,
+            "enhance_prompt": False,
         },
         with_logs=False,
     )

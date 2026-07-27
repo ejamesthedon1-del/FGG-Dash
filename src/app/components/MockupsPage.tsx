@@ -201,7 +201,9 @@ export function MockupsPage() {
   const productMax = Math.max(0, 3 - fabrics.length);
 
   const canGenerate =
-    inspiration.length === 1 && fabrics.length >= 1 && !loading;
+    inspiration.length === 1 &&
+    (fabrics.length >= 1 || products.length >= 1) &&
+    !loading;
 
   const onGenerate = async () => {
     if (!canGenerate || !inspiration[0]) return;
@@ -245,9 +247,9 @@ export function MockupsPage() {
           Mockups
         </h2>
         <p className="text-sm text-gray-600">
-          Recreate an inspiration shot with your fabric and product references —
-          photoreal camera look via FLUX Kontext. Max 4 images total (1 inspiration
-          + up to 3 fabric/product refs).
+          Put your exact hoodie on the inspiration model. Upload the full product
+          shot (prints/graphics) under Product — fabric close-ups are texture only.
+          Max 4 images total. Tip: inspiration + product (+ optional 1 fabric).
         </p>
       </header>
 
@@ -272,14 +274,13 @@ export function MockupsPage() {
           />
           <DropZone
             label="Fabric close-ups"
-            hint="Drop fabric texture / material refs"
+            hint="Optional texture only — skip conflicting colors if you have a product shot"
             files={fabrics}
             multiple
-            max={fabricMax}
-            required
+            max={products.length ? 1 : fabricMax}
             onAdd={(files) =>
               setFabrics((prev) => {
-                const max = Math.max(1, 3 - products.length);
+                const max = products.length ? 1 : Math.max(1, 3 - products.length);
                 return addCapped(prev, files, max, false);
               })
             }
@@ -293,17 +294,14 @@ export function MockupsPage() {
           />
           <DropZone
             label="Product / construction"
-            hint="Optional garment shots for fit, seams, hardware"
+            hint="Full hoodie with print/paint — this is the exact garment to wear"
             files={products}
             multiple
-            max={productMax || 1}
+            max={Math.min(2, productMax || 2)}
+            required
             onAdd={(files) =>
               setProducts((prev) => {
-                const max = Math.max(0, 3 - fabrics.length);
-                if (max < 1) {
-                  toast.message("Remove a fabric ref to add a product shot (4-image limit)");
-                  return prev;
-                }
+                const max = Math.min(2, Math.max(1, 3 - Math.min(fabrics.length, 1)));
                 return addCapped(prev, files, max, false);
               })
             }
@@ -326,7 +324,7 @@ export function MockupsPage() {
             <Textarea
               id="mockup-notes"
               rows={3}
-              placeholder="Fit, wash, stitching, camera vibe…"
+              placeholder="e.g. keep paint splatter + chest logo exactly, oversized fit…"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
