@@ -1,9 +1,10 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
+import asyncio
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
@@ -18,7 +19,7 @@ from .schemas import (
 from .shopify import ShopifyGraphQLError, get_shopify_client
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
-from . import order_flow_store, product_costs_store
+from . import mockups, order_flow_store, product_costs_store
 from .order_flow import build_order_flow
 from .shopify_color import PRODUCT_COLOR_GRAPHQL, product_label_with_color, resolve_product_color
 
@@ -81,7 +82,104 @@ async def health() -> dict:
             "durable": status["durable"],
             "recordCount": status["recordCount"],
         },
+        "mockups": {
+            "falConfigured": bool((get_settings().fal_key or "").strip()),
+        },
     }
+
+
+@app.post("/api/mockups/generate")
+async def generate_clothing_mockup(
+    inspiration: UploadFile = File(..., description="Scene / pose to recreate"),
+    fabrics: list[UploadFile] = File(..., description="Fabric close-up refs (1–4)"),
+    products: Optional[list[UploadFile]] = File(None),
+    notes: str = Form(default=""),
+    aspect_ratio: str = Form(default="3:4"),
+    num_images: int = Form(default=1),
+) -> dict:
+    """Generate photoreal clothing mockups with fal.ai FLUX Kontext multi."""
+    settings = get_settings()
+    if not (settings.fal_key or "").strip():
+        raise HTTPException(
+            status_code=503,
+            detail="FAL_KEY is not configured on the backend.",
+        )
+
+    fabric_files = [f for f in (fabrics or []) if f and f.filename]
+    if not fabric_files:
+        raise HTTPException(status_code=400, detail="Upload at least one fabric reference image.")
+    if len(fabric_files) > 4:
+        raise HTTPException(status_code=400, detail="Maximum 4 fabric reference images.")
+
+    product_files = [f for f in (products or []) if f and f.filename][:4]
+    if not inspiration.filename:
+        raise HTTPException(status_code=400, detail="Inspiration image is required.")
+
+    async def _read_upload(file: UploadFile) -> tuple[bytes, str, str]:
+        data = await file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail=f"Empty file: {file.filename}")
+        if len(data) > 12 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large (max 12MB): {file.filename}",
+            )
+        ctype = file.content_type or "image/jpeg"
+        if not ctype.startswith("image/"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Not an image: {file.filename}",
+            )
+        return data, file.filename or "image.jpg", ctype
+
+    try:
+        insp_bytes, insp_name, insp_ctype = await _read_upload(inspiration)
+        fabric_payloads = [await _read_upload(f) for f in fabric_files]
+        product_payloads = [await _read_upload(f) for f in product_files]
+
+        def _upload_all() -> list[str]:
+            urls: list[str] = []
+            urls.append(mockups.upload_bytes(insp_bytes, insp_name, insp_ctype, settings.fal_key))
+            for data, name, ctype in fabric_payloads:
+                urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
+            for data, name, ctype in product_payloads:
+                urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
+            return urls
+
+        image_urls = await asyncio.to_thread(_upload_all)
+        prompt = mockups.build_prompt(
+            fabric_count=len(fabric_payloads),
+            product_count=len(product_payloads),
+            notes=notes,
+        )
+        ratio = mockups.normalize_aspect(aspect_ratio)
+
+        result = await asyncio.to_thread(
+            mockups.generate_mockup,
+            image_urls=image_urls,
+            prompt=prompt,
+            aspect_ratio=ratio,
+            num_images=num_images,
+            fal_key=settings.fal_key,
+        )
+        return {
+            **result,
+            "aspectRatio": ratio,
+            "referenceCount": {
+                "inspiration": 1,
+                "fabrics": len(fabric_payloads),
+                "products": len(product_payloads),
+            },
+        }
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Mockup generation failed: {exc}",
+        ) from exc
 
 
 @app.get("/api/product-costs")

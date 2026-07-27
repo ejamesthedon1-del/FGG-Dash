@@ -11,6 +11,7 @@ import {
   LogOut,
   Package,
   Settings,
+  Shirt,
   Sparkles,
   Target,
   User,
@@ -34,6 +35,7 @@ const LOGO_SRC = "/fgg-logo.png?v=2";
 
 const CEO_ONLY_PREFIXES = [
   "/brand-hub",
+  "/mockups",
   "/creative-assets",
   "/training-center",
   "/our-mission",
@@ -303,6 +305,17 @@ export function DashboardLayout() {
                 >
                   <ClipboardList className="h-4 w-4 shrink-0 opacity-80" />
                   Knowledge Base
+                </NavLink>
+                <NavLink
+                  to="/mockups"
+                  className={({ isActive }) =>
+                    sidebarNavClass({
+                      isActive: isActive || pathname.startsWith("/mockups"),
+                    })
+                  }
+                >
+                  <Shirt className="h-4 w-4 shrink-0 opacity-80" />
+                  Mockups
                 </NavLink>
                 <NavLink
                   to="/creative-assets"

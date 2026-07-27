@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     supabase_url: Optional[str] = None
     supabase_service_role_key: Optional[str] = None
 
+    # Optional fal.ai key for photoreal clothing mockups (CEO Mockups page)
+    fal_key: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
