@@ -19,7 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "./ui/utils";
+import { MockupsAdCopySection } from "./MockupsAdCopySection";
 import {
   generateClothingMockup,
   type MockupAspectRatio,
@@ -176,31 +178,42 @@ export function MockupsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Mockups</h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Freeform image edit — write your prompt, add reference images in order, run.
-            Type <span className="font-medium text-gray-800">#1</span>,{" "}
-            <span className="font-medium text-gray-800">#2</span>… to reference inputs.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="tertiary"
-          size="sm"
-          className="gap-1.5 text-blue-600 hover:text-blue-700"
-          onClick={() => setLibraryOpen(true)}
-        >
-          <BookOpen className="h-3.5 w-3.5" />
-          Template library
-          {templates.length ? (
-            <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-              {templates.length}
-            </span>
-          ) : null}
-        </Button>
+      <header>
+        <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Mockups</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Generate product images, then store Facebook ad headlines and captions for campaign setup.
+        </p>
       </header>
+
+      <Tabs defaultValue="generate" className="gap-4">
+        <TabsList>
+          <TabsTrigger value="generate">Generate</TabsTrigger>
+          <TabsTrigger value="ad-copy">Ad copy</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="generate" className="space-y-4 outline-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="text-sm text-gray-600">
+              Freeform image edit — write your prompt, add reference images in order, run.
+              Type <span className="font-medium text-gray-800">#1</span>,{" "}
+              <span className="font-medium text-gray-800">#2</span>… to reference inputs.
+            </p>
+            <Button
+              type="button"
+              variant="tertiary"
+              size="sm"
+              className="gap-1.5 text-blue-600 hover:text-blue-700"
+              onClick={() => setLibraryOpen(true)}
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Template library
+              {templates.length ? (
+                <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                  {templates.length}
+                </span>
+              ) : null}
+            </Button>
+          </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {/* Input */}
@@ -525,6 +538,12 @@ export function MockupsPage() {
           ) : null}
         </section>
       </div>
+        </TabsContent>
+
+        <TabsContent value="ad-copy" className="outline-none">
+          <MockupsAdCopySection />
+        </TabsContent>
+      </Tabs>
 
       {saveOpen ? (
         <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
