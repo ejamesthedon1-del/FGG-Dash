@@ -373,7 +373,12 @@ export function CombinedLiveStoresPanel() {
   const periodHint = formatPeriodLabel(state.periodStart, state.periodEnd);
   const balanceTotal = useMemo(
     () =>
-      balances.rows.reduce((acc, row) => acc + (row.data?.totalUsd ?? 0), 0),
+      balances.rows.reduce((acc, row) => {
+        if (!row.data?.configured) return acc;
+        if (typeof row.data.totalUsd === "number") return acc + row.data.totalUsd;
+        if (row.data.primaryCurrency === "USD") return acc + row.data.primaryAmount;
+        return acc;
+      }, 0),
     [balances.rows],
   );
 
@@ -512,13 +517,15 @@ export function CombinedLiveStoresPanel() {
                 ) : (
                   <>
                     <p className="mt-4 text-2xl font-bold tracking-tight text-gray-950">
-                      {money(row.data.totalUsd)}
+                      {money(
+                        row.data.primaryAmount,
+                        row.data.primaryCurrency || "USD",
+                      )}
                     </p>
                     <p className="mt-1 text-xs text-gray-500">
-                      {row.data.activated ? "Available to payout" : "Setup incomplete"}
-                      {row.data.payoutSchedule
-                        ? ` · ${String(row.data.payoutSchedule).toLowerCase()}`
-                        : ""}
+                      {row.data.activated
+                        ? "Current Shopify Payments balance"
+                        : "Setup incomplete"}
                     </p>
                   </>
                 )}
@@ -539,7 +546,7 @@ export function CombinedLiveStoresPanel() {
               <p className="mt-4 text-2xl font-bold tracking-tight">
                 {money(balanceTotal)}
               </p>
-              <p className="mt-1 text-xs text-blue-100">Shopify Payments · USD</p>
+              <p className="mt-1 text-xs text-blue-100">Current account balances · USD</p>
             </div>
           </>
         )}

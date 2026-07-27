@@ -757,7 +757,12 @@ async def get_brand_kpis(
 
 @app.get("/api/shopify/payments-balance")
 async def get_payments_balance(brand: str = "live-don") -> dict:
-    """Shopify Payments available balance for a brand (CEO dashboard)."""
+    """Current Shopify Payments account balance for a brand (CEO dashboard).
+
+    Uses shopifyPaymentsAccount.balance — current balances in all currencies —
+    not payouts (bank transfers). See:
+    https://shopify.dev/docs/api/admin-graphql/latest/objects/ShopifyPaymentsAccount
+    """
     brand_key = resolve_brand(brand)
     try:
         client = get_shopify_client(brand_key)
@@ -766,20 +771,10 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
             query ShopifyPaymentsBalance {
               shopifyPaymentsAccount {
                 activated
+                defaultCurrency
                 balance {
                   amount
                   currencyCode
-                }
-                payouts(first: 3, reverse: true) {
-                  nodes {
-                    id
-                    issuedAt
-                    status
-                    net {
-                      amount
-                      currencyCode
-                    }
-                  }
                 }
               }
             }
@@ -793,8 +788,8 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
                 "activated": False,
                 "balances": [],
                 "totalUsd": 0,
-                "payoutSchedule": None,
-                "recentPayouts": [],
+                "primaryAmount": 0,
+                "primaryCurrency": "USD",
                 "error": "Shopify Payments account not available for this store",
             }
 
@@ -807,18 +802,11 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
             if currency == "USD":
                 total_usd += amount
 
-        payouts = []
-        for node in ((account.get("payouts") or {}).get("nodes")) or []:
-            net = node.get("net") or {}
-            payouts.append(
-                {
-                    "id": node.get("id"),
-                    "issuedAt": node.get("issuedAt"),
-                    "status": node.get("status"),
-                    "amount": round(float(net.get("amount") or 0), 2),
-                    "currency": net.get("currencyCode") or "USD",
-                }
-            )
+        default_currency = account.get("defaultCurrency") or "USD"
+        primary = next(
+            (b for b in balances if b["currency"] == default_currency),
+            balances[0] if balances else {"amount": 0.0, "currency": default_currency},
+        )
 
         return {
             "brand": brand_key,
@@ -826,8 +814,8 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
             "activated": bool(account.get("activated")),
             "balances": balances,
             "totalUsd": round(total_usd, 2),
-            "payoutSchedule": None,
-            "recentPayouts": payouts,
+            "primaryAmount": primary["amount"],
+            "primaryCurrency": primary["currency"],
             "error": None,
         }
     except RuntimeError as exc:
