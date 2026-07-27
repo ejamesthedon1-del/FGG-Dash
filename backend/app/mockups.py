@@ -380,31 +380,48 @@ def generate_mockup(
     *,
     image_urls: Sequence[str],
     prompt: str,
-    aspect_ratio: str = "3:4",
+    aspect_ratio: str = "auto",
     num_images: int = 1,
     fal_key: str | None = None,
     analysis: dict[str, Any] | None = None,
     notes: str | None = None,
-    composite_logo: bool = True,
+    composite_logo: bool = False,
+    model: str = "fal-ai/nano-banana-pro/edit",
 ) -> dict[str, Any]:
+    """Run freeform multi-image edit. Default model: Nano Banana Pro Edit."""
     _ensure_fal_key(fal_key)
     import fal_client
 
-    ratio = aspect_ratio if aspect_ratio in ALLOWED_ASPECT else "3:4"
-    count = max(1, min(int(num_images or 1), 2))
+    cleaned = (prompt or "").strip()
+    if not cleaned:
+        raise RuntimeError("Prompt is required")
+    urls = [u for u in image_urls if u]
+    if not urls:
+        raise RuntimeError("At least one image is required")
+
+    count = max(1, min(int(num_images or 1), 4))
+    ratio = (aspect_ratio or "auto").strip() or "auto"
+    if ratio != "auto" and ratio not in ALLOWED_ASPECT:
+        ratio = "auto"
+
+    arguments: dict[str, Any] = {
+        "prompt": cleaned,
+        "image_urls": list(urls)[:14],
+        "num_images": count,
+        "output_format": "jpeg",
+    }
+    if ratio != "auto":
+        arguments["aspect_ratio"] = ratio
+    else:
+        arguments["aspect_ratio"] = "auto"
+
+    # Nano Banana Pro supports resolution; safe default
+    if "nano-banana" in model:
+        arguments["resolution"] = "1K"
 
     result = fal_client.subscribe(
-        "fal-ai/flux-pro/kontext/multi",
-        arguments={
-            "prompt": prompt,
-            "image_urls": list(image_urls),
-            "num_images": count,
-            "aspect_ratio": ratio,
-            "output_format": "jpeg",
-            "safety_tolerance": "2",
-            "guidance_scale": 3.5,
-            "enhance_prompt": False,
-        },
+        model,
+        arguments=arguments,
         with_logs=False,
     )
 
@@ -428,7 +445,7 @@ def generate_mockup(
         images_out.append(
             {
                 "url": url,
-                "contentType": "image/jpeg",
+                "contentType": img.get("content_type") or "image/jpeg",
                 "width": img.get("width"),
                 "height": img.get("height"),
             }
@@ -439,15 +456,19 @@ def generate_mockup(
 
     return {
         "images": images_out,
-        "prompt": payload.get("prompt") or prompt,
+        "prompt": cleaned,
+        "description": payload.get("description"),
         "seed": payload.get("seed"),
-        "logoComposited": composite_logo,
+        "model": model,
+        "logoComposited": bool(composite_logo),
     }
 
 
 def normalize_aspect(value: Optional[str]) -> str:
-    v = (value or "3:4").strip()
-    return v if v in ALLOWED_ASPECT else "3:4"
+    v = (value or "auto").strip() or "auto"
+    if v == "auto":
+        return "auto"
+    return v if v in ALLOWED_ASPECT else "auto"
 
 
 def analysis_summary(analysis: dict[str, Any] | None) -> str:

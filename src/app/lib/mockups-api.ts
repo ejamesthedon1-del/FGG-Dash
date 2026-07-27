@@ -1,6 +1,7 @@
 import { apiUrl } from "./api-base";
 
 export type MockupAspectRatio =
+  | "auto"
   | "21:9"
   | "16:9"
   | "4:3"
@@ -12,13 +13,10 @@ export type MockupAspectRatio =
   | "9:21";
 
 export type MockupGenerateInput = {
-  inspiration: File;
-  fabrics?: File[];
-  products?: File[];
-  logo?: File | null;
-  notes?: string;
+  prompt: string;
+  images: File[];
   aspectRatio?: MockupAspectRatio;
-  numImages?: 1 | 2;
+  numImages?: 1 | 2 | 3 | 4;
 };
 
 export type MockupImage = {
@@ -33,33 +31,20 @@ export type MockupGenerateResult = {
   prompt: string;
   seed?: number;
   aspectRatio?: string;
-  designBrief?: string | null;
-  photographerBrief?: string | null;
-  referenceCount?: {
-    inspiration: number;
-    fabrics: number;
-    products: number;
-    logo?: number;
-    livdonWordmark?: number;
-  };
+  model?: string;
+  description?: string;
+  imageCount?: number;
 };
 
 export async function generateClothingMockup(
   input: MockupGenerateInput,
 ): Promise<MockupGenerateResult> {
   const form = new FormData();
-  form.append("inspiration", input.inspiration);
-  for (const file of input.fabrics ?? []) {
-    form.append("fabrics", file);
+  form.append("prompt", input.prompt.trim());
+  for (const file of input.images) {
+    form.append("images", file);
   }
-  for (const file of input.products ?? []) {
-    form.append("products", file);
-  }
-  if (input.logo) {
-    form.append("logo", input.logo);
-  }
-  form.append("notes", input.notes?.trim() ?? "");
-  form.append("aspect_ratio", input.aspectRatio ?? "3:4");
+  form.append("aspect_ratio", input.aspectRatio ?? "auto");
   form.append("num_images", String(input.numImages ?? 1));
 
   const res = await fetch(apiUrl("/api/mockups/generate"), {

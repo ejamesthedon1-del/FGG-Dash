@@ -90,15 +90,12 @@ async def health() -> dict:
 
 @app.post("/api/mockups/generate")
 async def generate_clothing_mockup(
-    inspiration: UploadFile = File(..., description="Scene / pose to recreate"),
-    fabrics: Optional[list[UploadFile]] = File(None),
-    products: Optional[list[UploadFile]] = File(None),
-    logo: Optional[UploadFile] = File(None),
-    notes: str = Form(default=""),
-    aspect_ratio: str = Form(default="3:4"),
+    prompt: str = Form(..., description="Freeform edit prompt"),
+    images: list[UploadFile] = File(..., description="Reference images in order (#1, #2, …)"),
+    aspect_ratio: str = Form(default="auto"),
     num_images: int = Form(default=1),
 ) -> dict:
-    """Generate photoreal clothing mockups with fal.ai FLUX Kontext multi."""
+    """Freeform multi-image edit via fal Nano Banana Pro Edit."""
     settings = get_settings()
     if not (settings.fal_key or "").strip():
         raise HTTPException(
@@ -106,25 +103,15 @@ async def generate_clothing_mockup(
             detail="FAL_KEY is not configured on the backend.",
         )
 
-    fabric_files = [f for f in (fabrics or []) if f and f.filename]
-    product_files = [f for f in (products or []) if f and f.filename]
-    logo_file = logo if logo and logo.filename else None
-    if not inspiration.filename:
-        raise HTTPException(status_code=400, detail="Inspiration image is required.")
-    if not fabric_files and not product_files and not logo_file:
-        raise HTTPException(
-            status_code=400,
-            detail="Upload a product shot, logo close-up, and/or fabric reference.",
-        )
+    cleaned_prompt = (prompt or "").strip()
+    if not cleaned_prompt:
+        raise HTTPException(status_code=400, detail="Prompt is required.")
 
-    # Kontext allows 1–4 images. Prefer few refs so inspiration proportions hold.
-    # Order: inspiration → product → optional fabric/logo crop. Wordmark is composited after.
-    remaining_slots = 3
-    product_files = product_files[: min(1, remaining_slots)]
-    remaining_slots -= len(product_files)
-    logo_files = [logo_file] if logo_file and remaining_slots > 0 else []
-    remaining_slots -= len(logo_files)
-    fabric_files = fabric_files[:remaining_slots]
+    image_files = [f for f in (images or []) if f and f.filename]
+    if not image_files:
+        raise HTTPException(status_code=400, detail="Add at least one image.")
+    if len(image_files) > 14:
+        raise HTTPException(status_code=400, detail="Maximum 14 images.")
 
     async def _read_upload(file: UploadFile) -> tuple[bytes, str, str]:
         data = await file.read()
@@ -144,76 +131,31 @@ async def generate_clothing_mockup(
         return data, file.filename or "image.jpg", ctype
 
     try:
-        insp_bytes, insp_name, insp_ctype = await _read_upload(inspiration)
-        fabric_payloads = [await _read_upload(f) for f in fabric_files]
-        product_payloads = [await _read_upload(f) for f in product_files]
-        logo_payloads = [await _read_upload(f) for f in logo_files]
+        payloads = [await _read_upload(f) for f in image_files]
 
-        def _upload_all() -> tuple[list[str], str, list[str], list[str]]:
+        def _upload_all() -> list[str]:
             urls: list[str] = []
-            insp_url = mockups.upload_bytes(insp_bytes, insp_name, insp_ctype, settings.fal_key)
-            urls.append(insp_url)
-            product_urls: list[str] = []
-            fabric_urls: list[str] = []
-            for data, name, ctype in product_payloads:
-                u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
-                urls.append(u)
-                product_urls.append(u)
-            for data, name, ctype in logo_payloads:
-                u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
-                urls.append(u)
-                product_urls.append(u)  # logo crop helps product/logo analysis
-            for data, name, ctype in fabric_payloads:
-                u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
-                urls.append(u)
-                fabric_urls.append(u)
-            return urls[:4], insp_url, product_urls, fabric_urls
+            for data, name, ctype in payloads:
+                urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
+            return urls
 
-        image_urls, insp_url, product_urls, fabric_urls = await asyncio.to_thread(_upload_all)
-
-        analysis: dict = {}
-        if product_urls:
-            analysis = await asyncio.to_thread(
-                mockups.deep_analyze_shoot,
-                inspiration_url=insp_url,
-                product_urls=product_urls,
-                fabric_urls=fabric_urls,
-                fal_key=settings.fal_key,
-            )
-
-        prompt = mockups.build_prompt(
-            fabric_count=len(fabric_payloads),
-            product_count=len(product_payloads),
-            logo_count=len(logo_payloads),
-            notes=notes,
-            analysis=analysis,
-        )
+        image_urls = await asyncio.to_thread(_upload_all)
         ratio = mockups.normalize_aspect(aspect_ratio)
 
         result = await asyncio.to_thread(
             mockups.generate_mockup,
             image_urls=image_urls,
-            prompt=prompt,
+            prompt=cleaned_prompt,
             aspect_ratio=ratio,
             num_images=num_images,
             fal_key=settings.fal_key,
-            analysis=analysis,
-            notes=notes,
-            composite_logo=True,
+            composite_logo=False,
+            model="fal-ai/nano-banana-pro/edit",
         )
         return {
             **result,
             "aspectRatio": ratio,
-            "designBrief": mockups.analysis_summary(analysis) or None,
-            "photographerBrief": mockups.CLOTHING_SWAP_BRIEF,
-            "livdonWordmarkIncluded": True,
-            "referenceCount": {
-                "inspiration": 1,
-                "fabrics": len(fabric_payloads),
-                "products": len(product_payloads),
-                "logo": len(logo_payloads),
-                "livdonWordmark": 1,
-            },
+            "imageCount": len(image_urls),
         }
     except HTTPException:
         raise

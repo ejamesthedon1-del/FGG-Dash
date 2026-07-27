@@ -1,13 +1,5 @@
 import { useId, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import {
-  Download,
-  ImagePlus,
-  Loader2,
-  Shirt,
-  Sparkles,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Download, ImagePlus, Loader2, RotateCcw, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -38,6 +30,7 @@ type PreviewFile = {
 };
 
 const ASPECT_OPTIONS: MockupAspectRatio[] = [
+  "auto",
   "3:4",
   "2:3",
   "1:1",
@@ -45,6 +38,8 @@ const ASPECT_OPTIONS: MockupAspectRatio[] = [
   "16:9",
   "9:16",
 ];
+
+const MAX_IMAGES = 14;
 
 function revokeAll(files: PreviewFile[]) {
   for (const f of files) URL.revokeObjectURL(f.url);
@@ -58,165 +53,57 @@ function toPreviewFiles(list: FileList | File[]): PreviewFile[] {
   }));
 }
 
-function DropZone({
-  label,
-  hint,
-  files,
-  multiple,
-  max,
-  onAdd,
-  onRemove,
-  required,
-}: {
-  label: string;
-  hint: string;
-  files: PreviewFile[];
-  multiple?: boolean;
-  max: number;
-  onAdd: (files: File[]) => void;
-  onRemove: (id: string) => void;
-  required?: boolean;
-}) {
-  const inputId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
-
-  const takeFiles = (incoming: FileList | null) => {
-    if (!incoming?.length) return;
-    const images = Array.from(incoming).filter((f) => f.type.startsWith("image/"));
-    if (!images.length) {
-      toast.error("Only image files are supported");
-      return;
-    }
-    onAdd(images);
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-sm font-medium text-gray-900">
-          {label}
-          {required ? <span className="text-red-500"> *</span> : null}
-        </p>
-        <p className="text-xs text-gray-400">
-          {files.length}/{max}
-        </p>
-      </div>
-      <label
-        htmlFor={inputId}
-        onDragOver={(e: DragEvent) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e: DragEvent) => {
-          e.preventDefault();
-          setDragOver(false);
-          takeFiles(e.dataTransfer.files);
-        }}
-        className={cn(
-          "flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center transition-colors",
-          dragOver
-            ? "border-blue-500 bg-blue-50/60"
-            : "border-gray-200 bg-gray-50/80 hover:border-gray-300 hover:bg-gray-50",
-        )}
-      >
-        <ImagePlus className="mb-2 h-5 w-5 text-gray-400" />
-        <span className="text-sm text-gray-700">{hint}</span>
-        <span className="mt-1 text-xs text-gray-400">PNG, JPG, WEBP · max 12MB each</span>
-        <input
-          id={inputId}
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          multiple={multiple}
-          className="sr-only"
-          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            takeFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
-      </label>
-      {files.length ? (
-        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {files.map((f) => (
-            <li key={f.id} className="group relative overflow-hidden rounded-lg bg-gray-100">
-              <img
-                src={f.url}
-                alt={f.file.name}
-                className="aspect-square w-full object-cover"
-              />
-              <button
-                type="button"
-                className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => onRemove(f.id)}
-                aria-label={`Remove ${f.file.name}`}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
 export function MockupsPage() {
-  const [inspiration, setInspiration] = useState<PreviewFile[]>([]);
-  const [fabrics, setFabrics] = useState<PreviewFile[]>([]);
-  const [products, setProducts] = useState<PreviewFile[]>([]);
-  const [logo, setLogo] = useState<PreviewFile[]>([]);
-  const [notes, setNotes] = useState("");
-  const [aspectRatio, setAspectRatio] = useState<MockupAspectRatio>("3:4");
+  const inputId = useId();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [prompt, setPrompt] = useState("");
+  const [images, setImages] = useState<PreviewFile[]>([]);
+  const [aspectRatio, setAspectRatio] = useState<MockupAspectRatio>("auto");
   const [numImages, setNumImages] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [result, setResult] = useState<MockupGenerateResult | null>(null);
   const [history, setHistory] = useState<MockupHistoryItem[]>(() => loadMockupHistory());
 
-  const addCapped = (
-    current: PreviewFile[],
-    incoming: File[],
-    max: number,
-    replace: boolean,
-  ) => {
-    const next = replace ? toPreviewFiles(incoming.slice(0, max)) : [
-      ...current,
-      ...toPreviewFiles(incoming),
-    ].slice(0, max);
-    if (!replace) {
-      const overflow = current.length + incoming.length - max;
-      if (overflow > 0) toast.message(`Kept the first ${max} images`);
-      const keptIds = new Set(next.map((n) => n.id));
-      for (const old of current) {
-        if (!keptIds.has(old.id)) URL.revokeObjectURL(old.url);
-      }
-    } else {
-      revokeAll(current);
+  const addImages = (incoming: File[]) => {
+    const onlyImages = incoming.filter((f) => f.type.startsWith("image/"));
+    if (!onlyImages.length) {
+      toast.error("Only image files are supported");
+      return;
     }
-    return next;
+    setImages((prev) => {
+      const next = [...prev, ...toPreviewFiles(onlyImages)].slice(0, MAX_IMAGES);
+      if (prev.length + onlyImages.length > MAX_IMAGES) {
+        toast.message(`Kept first ${MAX_IMAGES} images`);
+      }
+      return next;
+    });
   };
 
-  const extraSlots = 3 - (logo.length ? 1 : 0);
-  const fabricMax = products.length || logo.length ? 1 : Math.max(1, extraSlots);
-  const productMax = Math.max(0, extraSlots - Math.min(fabrics.length, 1));
+  const takeFiles = (list: FileList | null) => {
+    if (!list?.length) return;
+    addImages(Array.from(list));
+  };
 
-  const canGenerate =
-    inspiration.length === 1 &&
-    (fabrics.length >= 1 || products.length >= 1 || logo.length >= 1) &&
-    !loading;
+  const resetForm = () => {
+    revokeAll(images);
+    setImages([]);
+    setPrompt("");
+    setAspectRatio("auto");
+    setNumImages(1);
+    setResult(null);
+  };
 
-  const onGenerate = async () => {
-    if (!canGenerate || !inspiration[0]) return;
+  const canRun = prompt.trim().length > 0 && images.length >= 1 && !loading;
+
+  const onRun = async () => {
+    if (!canRun) return;
     setLoading(true);
     setResult(null);
     try {
       const data = await generateClothingMockup({
-        inspiration: inspiration[0].file,
-        fabrics: fabrics.map((f) => f.file),
-        products: products.map((f) => f.file),
-        logo: logo[0]?.file ?? null,
-        notes,
+        prompt: prompt.trim(),
+        images: images.map((i) => i.file),
         aspectRatio,
         numImages,
       });
@@ -226,15 +113,11 @@ export function MockupsPage() {
           prompt: data.prompt,
           seed: data.seed,
           aspectRatio: data.aspectRatio ?? aspectRatio,
-          notes: notes.trim() || undefined,
+          notes: prompt.trim().slice(0, 120),
           images: data.images.map((img) => ({ url: img.url })),
         }),
       );
-      toast.success(
-        data.images.length > 1
-          ? `Generated ${data.images.length} mockups`
-          : "Mockup ready",
-      );
+      toast.success(data.images.length > 1 ? `${data.images.length} images ready` : "Image ready");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Generation failed");
     } finally {
@@ -243,187 +126,233 @@ export function MockupsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <header className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-gray-950">
-          Mockups
-        </h2>
-        <p className="text-sm text-gray-600">
-          Clothing swap only: keep the inspiration photo, replace the model’s garment
-          with your product. Fabric = textile feel; product = color, paint, logo, construction.
+    <div className="mx-auto max-w-6xl space-y-4">
+      <header>
+        <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Mockups</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Freeform image edit — write your prompt, add reference images in order, run.
+          Type <span className="font-medium text-gray-800">#1</span>,{" "}
+          <span className="font-medium text-gray-800">#2</span>… to reference inputs.
         </p>
       </header>
 
-      <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-        <img
-          src="/brand/livdon-wordmark.png"
-          alt="Livdon wordmark"
-          className="h-8 w-auto object-contain"
-        />
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900">Clothing swap mode</p>
-          <p className="text-xs text-gray-500">
-            One job: change the model’s clothes to our product. Nothing else.
-          </p>
-        </div>
-      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Input */}
+        <section className="flex flex-col rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+            <h3 className="text-sm font-semibold text-gray-900">Input</h3>
+            <span className="text-xs text-gray-400">Nano Banana Pro Edit</span>
+          </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-          <DropZone
-            label="Inspiration"
-            hint="Drop the Pinterest / scene photo to recreate"
-            files={inspiration}
-            max={1}
-            required
-            onAdd={(files) =>
-              setInspiration((prev) => addCapped(prev, files, 1, true))
-            }
-            onRemove={(id) =>
-              setInspiration((prev) => {
-                const gone = prev.find((p) => p.id === id);
-                if (gone) URL.revokeObjectURL(gone.url);
-                return prev.filter((p) => p.id !== id);
-              })
-            }
-          />
-          <DropZone
-            label="Product / construction"
-            hint="Full hoodie with print/paint — exact garment to wear"
-            files={products}
-            max={1}
-            required
-            onAdd={(files) =>
-              setProducts((prev) => addCapped(prev, files, 1, true))
-            }
-            onRemove={(id) =>
-              setProducts((prev) => {
-                const gone = prev.find((p) => p.id === id);
-                if (gone) URL.revokeObjectURL(gone.url);
-                return prev.filter((p) => p.id !== id);
-              })
-            }
-          />
-          <DropZone
-            label="Logo close-up"
-            hint="Optional — garment logo crop for color/placement (format already locked)"
-            files={logo}
-            max={1}
-            onAdd={(files) => setLogo((prev) => addCapped(prev, files, 1, true))}
-            onRemove={(id) =>
-              setLogo((prev) => {
-                const gone = prev.find((p) => p.id === id);
-                if (gone) URL.revokeObjectURL(gone.url);
-                return prev.filter((p) => p.id !== id);
-              })
-            }
-          />
-          <DropZone
-            label="Fabric close-ups"
-            hint="Optional texture only — skip if product already shows the fabric"
-            files={fabrics}
-            multiple
-            max={fabricMax}
-            onAdd={(files) =>
-              setFabrics((prev) => {
-                const max =
-                  products.length || logo.length
-                    ? 1
-                    : Math.max(1, 3 - products.length - logo.length);
-                return addCapped(prev, files, max, false);
-              })
-            }
-            onRemove={(id) =>
-              setFabrics((prev) => {
-                const gone = prev.find((p) => p.id === id);
-                if (gone) URL.revokeObjectURL(gone.url);
-                return prev.filter((p) => p.id !== id);
-              })
-            }
-          />
+          <div className="flex flex-1 flex-col gap-4 p-5">
+            <div>
+              <label
+                htmlFor="mockup-prompt"
+                className="mb-1.5 block text-sm font-medium text-gray-900"
+              >
+                Prompt<span className="text-red-500"> *</span>
+              </label>
+              <Textarea
+                id="mockup-prompt"
+                rows={6}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder='e.g. Swap the hoodie on #1 with the exact product in #2. Keep the same model, pose, and lighting. Fabric in #3 is textile feel only.'
+                className="min-h-[140px] resize-y"
+              />
+              <p className="mt-1.5 text-xs text-gray-400">
+                Type # to reference inputs (image order = #1, #2, #3…).
+              </p>
+            </div>
 
-          <div>
-            <label
-              htmlFor="mockup-notes"
-              className="mb-1.5 block text-sm font-medium text-gray-900"
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-gray-900">Aspect ratio</p>
+                <Select
+                  value={aspectRatio}
+                  onValueChange={(v) => setAspectRatio(v as MockupAspectRatio)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ASPECT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-gray-900">Variants</p>
+                <Select
+                  value={String(numImages)}
+                  onValueChange={(v) => setNumImages(v === "2" ? 2 : 1)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 image</SelectItem>
+                    <SelectItem value="2">2 images</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-900">
+                  Images<span className="text-red-500"> *</span>
+                </p>
+                <p className="text-xs text-gray-400">
+                  {images.length}/{MAX_IMAGES}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="tertiary"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <ImagePlus className="h-3.5 w-3.5" />
+                  Add image
+                </Button>
+                <input
+                  id={inputId}
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="sr-only"
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                    takeFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+              <div
+                onDragOver={(e: DragEvent) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e: DragEvent) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  takeFiles(e.dataTransfer.files);
+                }}
+                className={cn(
+                  "mt-3 min-h-[120px] rounded-xl border border-dashed p-3 transition-colors",
+                  dragOver
+                    ? "border-blue-500 bg-blue-50/50"
+                    : "border-gray-200 bg-gray-50/60",
+                )}
+              >
+                {images.length ? (
+                  <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {images.map((img, i) => (
+                      <li
+                        key={img.id}
+                        className="group relative overflow-hidden rounded-lg bg-gray-100"
+                      >
+                        <img
+                          src={img.url}
+                          alt={`#${i + 1}`}
+                          className="aspect-square w-full object-cover"
+                        />
+                        <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                          #{i + 1}
+                        </span>
+                        <button
+                          type="button"
+                          className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          aria-label={`Remove image ${i + 1}`}
+                          onClick={() =>
+                            setImages((prev) => {
+                              const gone = prev.find((p) => p.id === img.id);
+                              if (gone) URL.revokeObjectURL(gone.url);
+                              return prev.filter((p) => p.id !== img.id);
+                            })
+                          }
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="flex h-[96px] items-center justify-center text-center text-xs text-gray-400">
+                    Drag and drop images, or use Add image.
+                    <br />
+                    Order matters — first image is #1.
+                  </p>
+                )}
+              </div>
+              {images.length ? (
+                <p className="mt-1.5 text-xs text-gray-400">
+                  {images.length} image{images.length === 1 ? "" : "s"} added
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-5 py-3">
+            <Button
+              type="button"
+              variant="tertiary"
+              size="sm"
+              className="gap-1.5"
+              onClick={resetForm}
+              disabled={loading}
             >
-              Notes
-            </label>
-            <Textarea
-              id="mockup-notes"
-              rows={3}
-              placeholder="e.g. left-chest logo must match crop exactly, keep paint splatter…"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset
+            </Button>
+            <Button
+              type="button"
+              className="min-w-[7rem] gap-2"
+              disabled={!canRun}
+              onClick={() => void onRun()}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Running…
+                </>
+              ) : (
+                "Run"
+              )}
+            </Button>
           </div>
-
-          <div className="flex flex-wrap gap-3">
-            <div className="min-w-[8rem] flex-1">
-              <p className="mb-1.5 text-sm font-medium text-gray-900">Aspect</p>
-              <Select
-                value={aspectRatio}
-                onValueChange={(v) => setAspectRatio(v as MockupAspectRatio)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ASPECT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt} value={opt}>
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="min-w-[8rem] flex-1">
-              <p className="mb-1.5 text-sm font-medium text-gray-900">Variants</p>
-              <Select
-                value={String(numImages)}
-                onValueChange={(v) => setNumImages(v === "2" ? 2 : 1)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1 image</SelectItem>
-                  <SelectItem value="2">2 images</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <Button
-            type="button"
-            className="w-full gap-2"
-            disabled={!canGenerate}
-            onClick={() => void onGenerate()}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Generating… this can take up to a minute
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                Generate mockup
-              </>
-            )}
-          </Button>
         </section>
 
-        <section className="space-y-4">
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-            <div className="mb-3 flex items-center gap-2">
-              <Shirt className="h-4 w-4 text-gray-500" />
-              <h3 className="text-sm font-semibold text-gray-900">Result</h3>
-            </div>
+        {/* Result */}
+        <section className="flex flex-col rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+            <h3 className="text-sm font-semibold text-gray-900">Result</h3>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                loading
+                  ? "bg-blue-50 text-blue-700"
+                  : result
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-gray-100 text-gray-500",
+              )}
+            >
+              {loading ? "Running" : result ? "Done" : "Idle"}
+            </span>
+          </div>
+
+          <div className="flex flex-1 flex-col p-5">
             {loading ? (
-              <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-sm text-gray-500">
+              <div className="flex min-h-[280px] flex-col items-center justify-center gap-2 text-sm text-gray-500">
                 <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                Analyzing inspiration + product (lighting, pose, logo placement)…
+                Generating…
               </div>
             ) : result?.images?.length ? (
               <div className="space-y-3">
@@ -440,7 +369,7 @@ export function MockupsPage() {
                     >
                       <img
                         src={img.url}
-                        alt={`Mockup ${i + 1}`}
+                        alt={`Result ${i + 1}`}
                         className="w-full object-cover"
                       />
                       <div className="flex justify-end border-t border-gray-100 p-2">
@@ -458,54 +387,43 @@ export function MockupsPage() {
                     </div>
                   ))}
                 </div>
-                {result.seed != null ? (
-                  <p className="text-xs text-gray-400">Seed {result.seed}</p>
-                ) : null}
-                {result.designBrief ? (
-                  <details className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                    <summary className="cursor-pointer font-medium text-gray-800">
-                      Design brief used
-                    </summary>
-                    <p className="mt-2 whitespace-pre-wrap leading-relaxed">
-                      {result.designBrief}
-                    </p>
-                  </details>
+                {result.model ? (
+                  <p className="text-xs text-gray-400">{result.model}</p>
                 ) : null}
               </div>
             ) : (
-              <p className="min-h-[220px] text-sm leading-relaxed text-gray-500">
-                Results appear here. For logos: add a tight crop of the chest
-                graphic under Logo close-up.
+              <p className="flex min-h-[280px] items-center justify-center text-center text-sm text-gray-500">
+                Results appear here after you run.
               </p>
             )}
           </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-gray-900">Recent</h3>
-              {history.length ? (
+          {history.length ? (
+            <div className="border-t border-gray-100 px-5 py-4">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Recent
+                </p>
                 <Button
                   type="button"
                   variant="tertiary"
                   size="sm"
-                  className="gap-1.5 text-xs"
+                  className="h-7 gap-1 text-xs"
                   onClick={() => {
                     clearMockupHistory();
                     setHistory([]);
                   }}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="h-3 w-3" />
                   Clear
                 </Button>
-              ) : null}
-            </div>
-            {history.length ? (
-              <ul className="space-y-3">
+              </div>
+              <ul className="flex gap-2 overflow-x-auto pb-1">
                 {history.slice(0, 8).map((item) => (
-                  <li key={item.id} className="flex gap-3">
+                  <li key={item.id}>
                     <button
                       type="button"
-                      className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100"
+                      className="h-14 w-14 overflow-hidden rounded-lg bg-gray-100"
                       onClick={() =>
                         setResult({
                           images: item.images,
@@ -523,22 +441,11 @@ export function MockupsPage() {
                         />
                       ) : null}
                     </button>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs text-gray-500">
-                        {new Date(item.createdAt).toLocaleString()}
-                        {item.aspectRatio ? ` · ${item.aspectRatio}` : ""}
-                      </p>
-                      <p className="mt-0.5 line-clamp-2 text-sm text-gray-800">
-                        {item.notes || "Photoreal mockup"}
-                      </p>
-                    </div>
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="text-sm text-gray-500">No generations yet.</p>
-            )}
-          </div>
+            </div>
+          ) : null}
         </section>
       </div>
     </div>
