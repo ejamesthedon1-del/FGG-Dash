@@ -205,7 +205,7 @@ async def generate_clothing_mockup(
             **result,
             "aspectRatio": ratio,
             "designBrief": mockups.analysis_summary(analysis) or None,
-            "photographerBrief": mockups.BRAND_PHOTOGRAPHER_BRIEF,
+            "photographerBrief": mockups.CLOTHING_SWAP_BRIEF,
             "livdonWordmarkIncluded": True,
             "referenceCount": {
                 "inspiration": 1,

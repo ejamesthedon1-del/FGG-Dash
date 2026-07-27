@@ -25,31 +25,37 @@ ALLOWED_ASPECT = {
 
 LIVDON_WORDMARK_PATH = Path(__file__).resolve().parent / "assets" / "livdon-wordmark.png"
 
-# Standing identity for every shoot — always injected so the model stays "familiar".
-BRAND_PHOTOGRAPHER_BRIEF = """
-You are Future Garment Group's in-house branding & marketing photographer for Livdon.
-Your only job: deliver highest-quality photoreal campaign stills.
+# Locked clothing-swap prompt (agreed with user) — primary instruction every generate.
+CLOTHING_SWAP_BRIEF = """
+ONE RULE: You are only changing the model's clothes. Completely swap the clothing on the inspiration model for our uploaded product. Nothing else changes.
 
-MISSION (never change):
-- Inspiration image = the final look we want: same model identity, pose, body proportions,
-  camera distance, lens feel, framing, background, and LIGHTING.
-- Product image = the EXACT garment the model must wear. Never redesign, simplify,
-  recolor incorrectly, drop prints, or invent details.
-- Fabric close-ups (if any) = material truth only (nap, knit, hand) — never override product design.
-- Output must look like a real camera capture when zoomed in: natural skin pores, fabric fibers,
-  real folds/shadows. No plastic CGI, no painterly AI, no oversharpened fake detail,
-  no watermarks, no extra text.
+What you are doing:
+- Inspiration = the scene, model, pose, lighting, camera, and background to keep.
+- Product = the exact garment that replaces what is on the model — every time.
+- Result = same photo, same person, new clothes only.
 
-PHYSICS / FIT (always):
-- Drape the product onto THIS pose with real-world gravity and fabric behavior.
-- Match how the garment should sit given camera angle and body angle (hood, pocket, sleeves,
-  hem, wrinkles). Perspective-correct — never a flat sticker of the product.
+Image roles (strict):
+1) Inspiration — final scene: model, pose, lighting, camera, background. Keep all of this.
+2) Product — the exact item that replaces the inspiration clothing. From the product ONLY: hoodie color, logo/paint/print placement, construction, silhouette. Always use this product as the replacement garment — never invent another.
+3) Fabric (if present) — textile reference only: material type / hand / nap. NOT for color, logo, or paint. Never let fabric override product design.
 
-LIVDON LOGO (always):
-- The interlocking LIVDON wordmark format is brand-locked and will be stamped after generate.
-- Leave the chest logo area CLEAR of any AI-drawn letters.
-- Logo COLOR follows the product photo; letter shapes never change.
+Swap instructions:
+- Identify the clothing on the inspiration model.
+- Remove it.
+- Put our product on that same body in that same pose.
+- Preserve ALL product details while placing it into the inspiration scenery and lighting.
+- Drape it realistically for this pose and camera angle.
+
+Do not:
+- Restage the photo
+- Change the model
+- Change lighting or background
+- Redesign or reinterpret the product
+- Pull hoodie color, logo, or paint from the fabric refs
 """.strip()
+
+# Back-compat alias for API responses
+BRAND_PHOTOGRAPHER_BRIEF = CLOTHING_SWAP_BRIEF
 
 DEEP_ANALYSIS_PROMPT = """
 You are briefing FGG's brand photographer for a garment swap edit.
@@ -180,7 +186,8 @@ def build_prompt(
     notes: str | None,
     analysis: dict[str, Any] | None = None,
 ) -> str:
-    """Strict brand-photographer edit prompt from standing brief + deep analysis."""
+    """Clothing-swap prompt only — image indices mapped to roles."""
+    # Order sent to Kontext: [inspiration, ...products, ...logos, ...fabrics]
     idx = 1
     insp_idx = idx
     idx += 1
@@ -190,74 +197,46 @@ def build_prompt(
     idx += logo_count
     fabric_indices = list(range(idx, idx + fabric_count))
 
-    analysis = analysis or {}
-    insp = analysis.get("inspiration") if isinstance(analysis.get("inspiration"), dict) else {}
-    prod = analysis.get("product") if isinstance(analysis.get("product"), dict) else {}
-    transfer = str(analysis.get("transfer_plan") or "").strip()
-
     parts: list[str] = [
-        BRAND_PHOTOGRAPHER_BRIEF,
-        f"TASK: Edit image #{insp_idx} only. Keep it as the outcome frame.",
-        f"Image #{insp_idx} is INSPIRATION (outcome). "
-        "Preserve EXACTLY: person/identity, face, hair, age, body proportions, height, "
-        "limb length, head-to-body ratio, pose, crop, camera distance, lens character, "
-        "background, and lighting direction/quality. "
-        "Do NOT invent a new photoshoot. Do NOT dwarf, stretch, cartoon, or beautify-morph the model.",
+        CLOTHING_SWAP_BRIEF,
+        f"Image #{insp_idx} is INSPIRATION (keep scene, model, pose, lighting, camera, background).",
     ]
-
-    if insp:
-        parts.append(
-            "Inspiration lock from analysis — "
-            f"lighting: {insp.get('lighting', 'n/a')}; "
-            f"camera: {insp.get('camera', 'n/a')}; "
-            f"pose: {insp.get('pose', 'n/a')}; "
-            f"framing: {insp.get('framing', 'n/a')}; "
-            f"model: {insp.get('model', 'n/a')}."
-        )
 
     if product_indices:
         refs = ", ".join(f"#{i}" for i in product_indices)
         parts.append(
-            f"Images {refs} are the PRODUCT. Replace ONLY the clothing in #{insp_idx} "
-            f"with this exact product. Never alter product design. "
-            f"Product truth: garment={prod.get('garment', 'n/a')}; "
-            f"base_color={prod.get('base_color', 'n/a')}; "
-            f"print={prod.get('print', 'n/a')}; "
-            f"construction={prod.get('construction', 'n/a')}."
+            f"Image(s) {refs} are PRODUCT — completely swap the inspiration clothing "
+            "for this exact item. Preserve all product details (color, paint/print, "
+            "construction, silhouette). This product always replaces the inspiration garment."
         )
+    else:
         parts.append(
-            "Drape realistically for this pose and camera angle — real fabric weight, "
-            "folds, compression, and how a hoodie sits on shoulders/arms/torso. "
-            "Perspective must match the inspiration camera."
-        )
-        parts.append(
-            "LOGO RULE: leave the wearer's left-chest logo area COMPLETELY CLEAR — "
-            "no letters, no AI wordmark, no fake text. Real Livdon logo is stamped after."
+            "No product image was provided — do not invent a garment; keep inspiration clothing."
         )
 
     if logo_indices:
         refs = ", ".join(f"#{i}" for i in logo_indices)
         parts.append(
-            f"Images {refs}: logo color/placement reference only — still no AI-drawn text."
+            f"Image(s) {refs} are extra product/logo placement reference — still use PRODUCT "
+            "as the garment; do not redesign from these alone."
         )
 
     if fabric_indices:
         refs = ", ".join(f"#{i}" for i in fabric_indices)
         parts.append(
-            f"Images {refs}: fabric texture microdetail only — never override product print."
+            f"Image(s) {refs} are FABRIC textile reference only (material/hand/nap). "
+            "Do not take hoodie color, logo, or paint from fabric."
         )
 
-    if transfer:
-        parts.append(f"Transfer plan: {transfer}")
-
+    # Logo stamp still happens after generate — keep chest from getting AI gibberish text.
     parts.append(
-        "QUALITY BAR: photoreal when zoomed 200% — pores, stitch, fleece nap, natural noise. "
-        "Reject painted, plastic, or AI-smoothed look."
+        "Leave the chest logo letterforms clear of invented AI text if possible; "
+        "product paint/print elsewhere must stay exact."
     )
 
     cleaned = (notes or "").strip()
     if cleaned:
-        parts.append(f"Designer notes (obey if they don't break product fidelity): {cleaned}")
+        parts.append(f"Designer notes: {cleaned}")
 
     return " ".join(parts)
 

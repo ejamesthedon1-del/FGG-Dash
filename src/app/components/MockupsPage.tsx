@@ -249,9 +249,8 @@ export function MockupsPage() {
           Mockups
         </h2>
         <p className="text-sm text-gray-600">
-          Acts as Livdon’s brand photographer every time: keeps inspiration lighting,
-          pose, and proportions; swaps in your exact product with real drape; stamps
-          the real wordmark using product logo placement.
+          Clothing swap only: keep the inspiration photo, replace the model’s garment
+          with your product. Fabric = textile feel; product = color, paint, logo, construction.
         </p>
       </header>
 
@@ -262,9 +261,9 @@ export function MockupsPage() {
           className="h-8 w-auto object-contain"
         />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900">Brand photographer mode</p>
+          <p className="text-sm font-medium text-gray-900">Clothing swap mode</p>
           <p className="text-xs text-gray-500">
-            Standing brief is always loaded — inspiration = outcome, product = exact garment.
+            One job: change the model’s clothes to our product. Nothing else.
           </p>
         </div>
       </div>
