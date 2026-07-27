@@ -770,9 +770,6 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
                   amount
                   currencyCode
                 }
-                payoutSchedule {
-                  interval
-                }
                 payouts(first: 3, reverse: true) {
                   nodes {
                     id
@@ -823,14 +820,13 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
                 }
             )
 
-        schedule = account.get("payoutSchedule") or {}
         return {
             "brand": brand_key,
             "configured": True,
             "activated": bool(account.get("activated")),
             "balances": balances,
             "totalUsd": round(total_usd, 2),
-            "payoutSchedule": schedule.get("interval"),
+            "payoutSchedule": None,
             "recentPayouts": payouts,
             "error": None,
         }
