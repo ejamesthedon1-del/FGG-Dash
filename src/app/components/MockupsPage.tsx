@@ -1,8 +1,17 @@
 import { useId, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { Download, ImagePlus, Loader2, RotateCcw, Trash2, X } from "lucide-react";
+import { BookOpen, Download, ImagePlus, Loader2, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import {
   Select,
   SelectContent,
@@ -22,6 +31,12 @@ import {
   prependMockupHistory,
   type MockupHistoryItem,
 } from "../lib/mockups-history-storage";
+import {
+  addMockupPromptTemplate,
+  deleteMockupPromptTemplate,
+  loadMockupPromptTemplates,
+  type MockupPromptTemplate,
+} from "../lib/mockups-prompt-templates-storage";
 
 type PreviewFile = {
   id: string;
@@ -64,6 +79,12 @@ export function MockupsPage() {
   const [dragOver, setDragOver] = useState(false);
   const [result, setResult] = useState<MockupGenerateResult | null>(null);
   const [history, setHistory] = useState<MockupHistoryItem[]>(() => loadMockupHistory());
+  const [templates, setTemplates] = useState<MockupPromptTemplate[]>(() =>
+    loadMockupPromptTemplates(),
+  );
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
 
   const addImages = (incoming: File[]) => {
     const onlyImages = incoming.filter((f) => f.type.startsWith("image/"));
@@ -96,6 +117,34 @@ export function MockupsPage() {
 
   const canRun = prompt.trim().length > 0 && images.length >= 1 && !loading;
 
+  const saveTemplate = () => {
+    const trimmedPrompt = prompt.trim();
+    const trimmedName = templateName.trim();
+    if (!trimmedPrompt) {
+      toast.error("Add a prompt before saving");
+      return;
+    }
+    if (!trimmedName) {
+      toast.error("Enter a template name");
+      return;
+    }
+    setTemplates(addMockupPromptTemplate(trimmedName, trimmedPrompt));
+    setTemplateName("");
+    setSaveOpen(false);
+    toast.success(`Saved "${trimmedName}"`);
+  };
+
+  const loadTemplate = (template: MockupPromptTemplate) => {
+    setPrompt(template.prompt);
+    setLibraryOpen(false);
+    toast.message(`Loaded "${template.name}"`);
+  };
+
+  const removeTemplate = (id: string) => {
+    setTemplates(deleteMockupPromptTemplate(id));
+    toast.message("Template deleted");
+  };
+
   const onRun = async () => {
     if (!canRun) return;
     setLoading(true);
@@ -127,13 +176,30 @@ export function MockupsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <header>
-        <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Mockups</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Freeform image edit — write your prompt, add reference images in order, run.
-          Type <span className="font-medium text-gray-800">#1</span>,{" "}
-          <span className="font-medium text-gray-800">#2</span>… to reference inputs.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Mockups</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Freeform image edit — write your prompt, add reference images in order, run.
+            Type <span className="font-medium text-gray-800">#1</span>,{" "}
+            <span className="font-medium text-gray-800">#2</span>… to reference inputs.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="tertiary"
+          size="sm"
+          className="gap-1.5 text-blue-600 hover:text-blue-700"
+          onClick={() => setLibraryOpen(true)}
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          Template library
+          {templates.length ? (
+            <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+              {templates.length}
+            </span>
+          ) : null}
+        </Button>
       </header>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -163,6 +229,17 @@ export function MockupsPage() {
               <p className="mt-1.5 text-xs text-gray-400">
                 Type # to reference inputs (image order = #1, #2, #3…).
               </p>
+              <Button
+                type="button"
+                variant="tertiary"
+                size="sm"
+                className="mt-2 gap-1.5"
+                disabled={!prompt.trim()}
+                onClick={() => setSaveOpen(true)}
+              >
+                <Save className="h-3.5 w-3.5" />
+                Save as template
+              </Button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -448,6 +525,95 @@ export function MockupsPage() {
           ) : null}
         </section>
       </div>
+
+      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save prompt template</DialogTitle>
+            <DialogDescription>
+              Save the current prompt to your library so you can reuse it later.
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <label htmlFor="template-name" className="mb-1.5 block text-sm font-medium text-gray-900">
+              Template name
+            </label>
+            <Input
+              id="template-name"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              placeholder="e.g. Flat lay hoodie swap"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveTemplate();
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="tertiary" onClick={() => setSaveOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={saveTemplate}>
+              Save template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
+        <DialogContent className="flex max-h-[min(80vh,640px)] flex-col sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Template library</DialogTitle>
+            <DialogDescription>
+              Load a saved prompt into the editor, or delete templates you no longer need.
+            </DialogDescription>
+          </DialogHeader>
+          {templates.length ? (
+            <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              {templates.map((template) => (
+                <li
+                  key={template.id}
+                  className="rounded-xl border border-gray-200 bg-gray-50/60 p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-gray-900">{template.name}</p>
+                      <p className="mt-1 line-clamp-3 text-xs text-gray-500 whitespace-pre-wrap">
+                        {template.prompt}
+                      </p>
+                      <p className="mt-2 text-[10px] text-gray-400">
+                        Saved {new Date(template.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => loadTemplate(template)}
+                      >
+                        Load
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => removeTemplate(template.id)}
+                        aria-label={`Delete ${template.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-8 text-center text-sm text-gray-500">
+              No saved templates yet. Write a prompt and use Save as template.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
