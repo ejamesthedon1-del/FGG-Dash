@@ -249,9 +249,9 @@ export function MockupsPage() {
           Mockups
         </h2>
         <p className="text-sm text-gray-600">
-          Livdon interlocking wordmark is always included automatically (format
-          locked; color follows the garment). Best setup: inspiration + product.
-          Optional logo crop for placement/color. Max 4 images total.
+          Keeps your inspiration model’s proportions, swaps in the garment, then
+          stamps the real Livdon wordmark on the chest (AI no longer redraws the logo).
+          Best: inspiration + product only.
         </p>
       </header>
 
@@ -262,9 +262,9 @@ export function MockupsPage() {
           className="h-8 w-auto object-contain"
         />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900">Livdon logo locked</p>
+          <p className="text-sm font-medium text-gray-900">Livdon logo stamped after generate</p>
           <p className="text-xs text-gray-500">
-            Interlocking LIVDON format is fed on every generate — only color changes.
+            Exact interlocking wordmark — not AI-redrawn. Color follows dark/light garment.
           </p>
         </div>
       </div>
