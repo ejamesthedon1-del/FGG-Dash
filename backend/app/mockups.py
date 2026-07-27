@@ -1,9 +1,11 @@
-"""Photoreal clothing mockups via fal.ai FLUX Kontext multi + Livdon logo composite."""
+"""FGG / Livdon brand-photographer mockup pipeline (fal Kontext + logo stamp)."""
 
 from __future__ import annotations
 
 import io
+import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -23,17 +25,151 @@ ALLOWED_ASPECT = {
 
 LIVDON_WORDMARK_PATH = Path(__file__).resolve().parent / "assets" / "livdon-wordmark.png"
 
-LIVDON_WORDMARK_SPEC = (
-    "LIVDON interlocking geometric wordmark (format fixed; color follows garment)."
-)
+# Standing identity for every shoot — always injected so the model stays "familiar".
+BRAND_PHOTOGRAPHER_BRIEF = """
+You are Future Garment Group's in-house branding & marketing photographer for Livdon.
+Your only job: deliver highest-quality photoreal campaign stills.
 
-GARMENT_ANALYSIS_PROMPT = """Analyze this garment photo for an exact product mockup.
-Return a compact plain-text brief covering:
-1) Garment type and base color
-2) All-over print/pattern (paint splatter colors, density, placement) — be specific
-3) Logo COLOR on this garment if any (white / cream / black) — placement left-chest or center
-4) Construction: hood, pocket, drawcords, seams
-No markdown. No preamble. Do not attempt to redraw letterforms."""
+MISSION (never change):
+- Inspiration image = the final look we want: same model identity, pose, body proportions,
+  camera distance, lens feel, framing, background, and LIGHTING.
+- Product image = the EXACT garment the model must wear. Never redesign, simplify,
+  recolor incorrectly, drop prints, or invent details.
+- Fabric close-ups (if any) = material truth only (nap, knit, hand) — never override product design.
+- Output must look like a real camera capture when zoomed in: natural skin pores, fabric fibers,
+  real folds/shadows. No plastic CGI, no painterly AI, no oversharpened fake detail,
+  no watermarks, no extra text.
+
+PHYSICS / FIT (always):
+- Drape the product onto THIS pose with real-world gravity and fabric behavior.
+- Match how the garment should sit given camera angle and body angle (hood, pocket, sleeves,
+  hem, wrinkles). Perspective-correct — never a flat sticker of the product.
+
+LIVDON LOGO (always):
+- The interlocking LIVDON wordmark format is brand-locked and will be stamped after generate.
+- Leave the chest logo area CLEAR of any AI-drawn letters.
+- Logo COLOR follows the product photo; letter shapes never change.
+""".strip()
+
+DEEP_ANALYSIS_PROMPT = """
+You are briefing FGG's brand photographer for a garment swap edit.
+
+Images (in order):
+1) INSPIRATION — target scene / model / lighting / pose (the desired OUTCOME frame)
+2+) PRODUCT and optional fabric/logo refs — the real garment to put on the model
+
+Deeply analyze and return ONLY valid JSON (no markdown) with this shape:
+{
+  "inspiration": {
+    "lighting": "specific lighting description to preserve",
+    "camera": "lens / distance / angle feel",
+    "pose": "body pose and orientation",
+    "framing": "crop and composition",
+    "model": "identity cues to preserve (face, hair, proportions)"
+  },
+  "product": {
+    "garment": "type + silhouette",
+    "base_color": "exact base color",
+    "print": "paint/print details — colors, density, placement",
+    "construction": "hood, pocket, cords, seams, fit",
+    "logo_color": "white|cream|black|other",
+    "logo_cx_pct": 0-100 number — horizontal center of logo on THIS product photo (0=left, 100=right),
+    "logo_cy_pct": 0-100 number — vertical center of logo on THIS product photo (0=top, 100=bottom),
+    "logo_width_pct": 0-100 number — logo width as % of product image width
+  },
+  "transfer_plan": "2-4 sentences: how to put THIS product on THIS pose with correct drape and perspective while keeping inspiration lighting/camera"
+}
+
+Be precise. If logo is not visible, still estimate typical left-chest placement on the product image.
+""".strip()
+
+CHEST_ANCHOR_PROMPT = """
+This is a photoreal hoodie photo where the chest logo area should be blank or nearly blank.
+Return ONLY JSON (no markdown):
+{"cx_pct": number, "cy_pct": number, "width_pct": number}
+cx_pct/cy_pct = center of wearer's LEFT CHEST logo placement on THIS image (0-100).
+width_pct = recommended logo width as % of full image width for a real brand mark on this pose.
+Use the garment folds and pocket to place it naturally — not floating.
+""".strip()
+
+
+def _extract_json(text: str) -> dict[str, Any]:
+    raw = (text or "").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", raw)
+        if not match:
+            return {}
+        try:
+            data = json.loads(match.group(0))
+            return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+
+def _vision_json(
+    *,
+    prompt: str,
+    image_urls: Sequence[str],
+    fal_key: str | None,
+    system: str,
+) -> dict[str, Any]:
+    urls = [u for u in image_urls if u][:4]
+    if not urls:
+        return {}
+    _ensure_fal_key(fal_key)
+    import fal_client
+
+    try:
+        result = fal_client.subscribe(
+            "fal-ai/any-llm/vision",
+            arguments={
+                "model": "google/gemini-2.5-flash",
+                "prompt": prompt,
+                "system_prompt": system,
+                "image_urls": list(urls),
+                "priority": "latency",
+            },
+            with_logs=False,
+        )
+    except Exception:
+        return {}
+
+    payload = result if isinstance(result, dict) else {}
+    for key in ("output", "response", "text", "answer", "caption"):
+        val = payload.get(key)
+        if isinstance(val, str) and val.strip():
+            return _extract_json(val)
+    return {}
+
+
+def deep_analyze_shoot(
+    *,
+    inspiration_url: str,
+    product_urls: Sequence[str],
+    fabric_urls: Sequence[str] | None = None,
+    fal_key: str | None = None,
+) -> dict[str, Any]:
+    """Deep vision brief: inspiration + product (+ fabric) → structured transfer plan."""
+    urls: list[str] = [inspiration_url]
+    urls.extend([u for u in product_urls if u])
+    for u in fabric_urls or []:
+        if u and len(urls) < 4:
+            urls.append(u)
+    analysis = _vision_json(
+        prompt=DEEP_ANALYSIS_PROMPT,
+        image_urls=urls,
+        fal_key=fal_key,
+        system=(
+            "You are a senior fashion photo director. Return strict JSON only. "
+            "Prioritize lighting match, proportion lock, and exact product fidelity."
+        ),
+    )
+    return analysis
 
 
 def build_prompt(
@@ -42,10 +178,9 @@ def build_prompt(
     product_count: int,
     logo_count: int,
     notes: str | None,
-    design_brief: str | None = None,
+    analysis: dict[str, Any] | None = None,
 ) -> str:
-    """Prompt focused on model fidelity + garment transfer. Logo is composited after."""
-    # Image order: [inspiration, ...products, ...optional logo crop, ...fabrics]
+    """Strict brand-photographer edit prompt from standing brief + deep analysis."""
     idx = 1
     insp_idx = idx
     idx += 1
@@ -55,52 +190,74 @@ def build_prompt(
     idx += logo_count
     fabric_indices = list(range(idx, idx + fabric_count))
 
+    analysis = analysis or {}
+    insp = analysis.get("inspiration") if isinstance(analysis.get("inspiration"), dict) else {}
+    prod = analysis.get("product") if isinstance(analysis.get("product"), dict) else {}
+    transfer = str(analysis.get("transfer_plan") or "").strip()
+
     parts: list[str] = [
-        "Photoreal fashion photo. This is an EDIT of image "
-        f"#{insp_idx}, not a new photoshoot.",
-        f"CRITICAL — preserve from image #{insp_idx} EXACTLY: the same person, "
-        "face, age, hair, body proportions, height, limb length, head-to-body ratio, "
-        "pose, camera distance, framing, and background. "
-        "Do NOT shorten, enlarge, cartoon, or dwarf the model. "
-        "Do NOT change the crop or camera angle.",
-        "ONLY change the clothing to our garment.",
+        BRAND_PHOTOGRAPHER_BRIEF,
+        f"TASK: Edit image #{insp_idx} only. Keep it as the outcome frame.",
+        f"Image #{insp_idx} is INSPIRATION (outcome). "
+        "Preserve EXACTLY: person/identity, face, hair, age, body proportions, height, "
+        "limb length, head-to-body ratio, pose, crop, camera distance, lens character, "
+        "background, and lighting direction/quality. "
+        "Do NOT invent a new photoshoot. Do NOT dwarf, stretch, cartoon, or beautify-morph the model.",
     ]
+
+    if insp:
+        parts.append(
+            "Inspiration lock from analysis — "
+            f"lighting: {insp.get('lighting', 'n/a')}; "
+            f"camera: {insp.get('camera', 'n/a')}; "
+            f"pose: {insp.get('pose', 'n/a')}; "
+            f"framing: {insp.get('framing', 'n/a')}; "
+            f"model: {insp.get('model', 'n/a')}."
+        )
 
     if product_indices:
         refs = ", ".join(f"#{i}" for i in product_indices)
         parts.append(
-            f"Dress them in the hoodie from image(s) {refs}: exact colorway, "
-            "paint-splatter pattern, pocket, hood, drawcords, seams, and fit. "
-            "Leave the LEFT CHEST (wearer's left / image right) CLEAR of any text, "
-            "letters, or logo — a clean fabric area only. "
-            "Do not invent chest text. The real logo will be added later."
+            f"Images {refs} are the PRODUCT. Replace ONLY the clothing in #{insp_idx} "
+            f"with this exact product. Never alter product design. "
+            f"Product truth: garment={prod.get('garment', 'n/a')}; "
+            f"base_color={prod.get('base_color', 'n/a')}; "
+            f"print={prod.get('print', 'n/a')}; "
+            f"construction={prod.get('construction', 'n/a')}."
+        )
+        parts.append(
+            "Drape realistically for this pose and camera angle — real fabric weight, "
+            "folds, compression, and how a hoodie sits on shoulders/arms/torso. "
+            "Perspective must match the inspiration camera."
+        )
+        parts.append(
+            "LOGO RULE: leave the wearer's left-chest logo area COMPLETELY CLEAR — "
+            "no letters, no AI wordmark, no fake text. Real Livdon logo is stamped after."
         )
 
     if logo_indices:
         refs = ", ".join(f"#{i}" for i in logo_indices)
         parts.append(
-            f"Image(s) {refs} are placement/color reference only — still leave the "
-            "chest text area blank for post compositing."
+            f"Images {refs}: logo color/placement reference only — still no AI-drawn text."
         )
 
     if fabric_indices:
         refs = ", ".join(f"#{i}" for i in fabric_indices)
         parts.append(
-            f"Image(s) {refs} are fabric texture only — material feel, never override "
-            "the product print pattern."
+            f"Images {refs}: fabric texture microdetail only — never override product print."
         )
 
-    brief = (design_brief or "").strip()
-    if brief:
-        parts.append("Garment details: " + brief)
+    if transfer:
+        parts.append(f"Transfer plan: {transfer}")
 
     parts.append(
-        "Natural skin and fabric microdetail. No CGI, no watermark, no invented logos."
+        "QUALITY BAR: photoreal when zoomed 200% — pores, stitch, fleece nap, natural noise. "
+        "Reject painted, plastic, or AI-smoothed look."
     )
 
     cleaned = (notes or "").strip()
     if cleaned:
-        parts.append(f"Designer notes: {cleaned}")
+        parts.append(f"Designer notes (obey if they don't break product fidelity): {cleaned}")
 
     return " ".join(parts)
 
@@ -126,49 +283,23 @@ def upload_bytes(data: bytes, filename: str, content_type: str, fal_key: str | N
     return str(url)
 
 
-def analyze_garment_design(
-    image_urls: Sequence[str],
-    fal_key: str | None = None,
-) -> str:
-    urls = [u for u in image_urls if u]
-    if not urls:
-        return ""
-    _ensure_fal_key(fal_key)
-    import fal_client
-
-    try:
-        result = fal_client.subscribe(
-            "fal-ai/any-llm/vision",
-            arguments={
-                "model": "google/gemini-2.5-flash",
-                "prompt": GARMENT_ANALYSIS_PROMPT,
-                "system_prompt": (
-                    "Extract garment print and logo COLOR/placement only. No markdown."
-                ),
-                "image_urls": list(urls)[:3],
-                "priority": "latency",
-            },
-            with_logs=False,
-        )
-    except Exception:
-        return ""
-
-    payload = result if isinstance(result, dict) else {}
-    for key in ("output", "response", "text", "answer", "caption"):
-        val = payload.get(key)
-        if isinstance(val, str) and val.strip():
-            return val.strip()[:900]
-    return ""
-
-
-def _guess_logo_rgb(design_brief: str | None, notes: str | None) -> tuple[int, int, int]:
-    text = f"{design_brief or ''} {notes or ''}".lower()
-    if any(w in text for w in ("black logo", "logo black", "dark logo")):
-        return (20, 20, 20)
-    if any(w in text for w in ("cream", "off-white", "ivory")):
+def _guess_logo_rgb(analysis: dict[str, Any] | None, notes: str | None) -> tuple[int, int, int]:
+    prod = (analysis or {}).get("product") if isinstance((analysis or {}).get("product"), dict) else {}
+    color = str(prod.get("logo_color") or "").lower()
+    text = f"{color} {notes or ''}".lower()
+    if "black" in text or "dark" in text:
+        return (18, 18, 18)
+    if "cream" in text or "ivory" in text or "off-white" in text:
         return (245, 240, 230)
-    # Default for navy / dark hoodies
-    return (250, 250, 250)
+    return (252, 252, 252)
+
+
+def _clamp_pct(value: Any, default: float) -> float:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0.0, min(100.0, n))
 
 
 def _wordmark_rgba(logo_rgb: tuple[int, int, int]):
@@ -186,9 +317,7 @@ def _wordmark_rgba(logo_rgb: tuple[int, int, int]):
     for y in range(h):
         for x in range(w):
             r, g, b, a = pixels[x, y]
-            # Dark ink on light bg (or inverse) → opacity from darkness
             luminance = (r + g + b) / 3
-            # Treat darker pixels as logo ink
             ink = max(0, min(255, int(255 - luminance)))
             if ink < 28:
                 continue
@@ -197,14 +326,44 @@ def _wordmark_rgba(logo_rgb: tuple[int, int, int]):
     return out
 
 
+def resolve_logo_placement(
+    *,
+    result_url: str,
+    analysis: dict[str, Any] | None,
+    fal_key: str | None,
+) -> tuple[float, float, float]:
+    """Return (cx_pct, cy_pct, width_pct) for compositing on the generated frame."""
+    prod = (analysis or {}).get("product") if isinstance((analysis or {}).get("product"), dict) else {}
+    # Prefer product photo placement as the brand truth for size; refine center on result.
+    prod_w = _clamp_pct(prod.get("logo_width_pct"), 16.0)
+    prod_cx = _clamp_pct(prod.get("logo_cx_pct"), 62.0)
+    prod_cy = _clamp_pct(prod.get("logo_cy_pct"), 36.0)
+
+    anchor = _vision_json(
+        prompt=CHEST_ANCHOR_PROMPT,
+        image_urls=[result_url],
+        fal_key=fal_key,
+        system="Return JSON only for logo placement on this hoodie photo.",
+    )
+    if anchor:
+        cx = _clamp_pct(anchor.get("cx_pct"), prod_cx)
+        cy = _clamp_pct(anchor.get("cy_pct"), prod_cy)
+        # Keep product logo scale unless result suggests something sane
+        w = _clamp_pct(anchor.get("width_pct"), prod_w)
+        w = max(10.0, min(22.0, w if 8 <= w <= 28 else prod_w))
+        return cx, cy, w
+
+    return prod_cx, prod_cy, max(10.0, min(22.0, prod_w))
+
+
 def composite_livdon_logo(
     image_url: str,
     *,
-    design_brief: str | None = None,
+    analysis: dict[str, Any] | None = None,
     notes: str | None = None,
     fal_key: str | None = None,
 ) -> str:
-    """Paste the real Livdon wordmark onto wearer's left chest; re-upload to fal."""
+    """Stamp the real Livdon wordmark using product-matched placement."""
     from PIL import Image
 
     _ensure_fal_key(fal_key)
@@ -213,16 +372,20 @@ def composite_livdon_logo(
     base = Image.open(io.BytesIO(resp.content)).convert("RGBA")
     bw, bh = base.size
 
-    mark = _wordmark_rgba(_guess_logo_rgb(design_brief, notes))
-    # ~16% of frame width — typical left-chest brand mark
-    target_w = max(48, int(bw * 0.16))
+    cx_pct, cy_pct, width_pct = resolve_logo_placement(
+        result_url=image_url,
+        analysis=analysis,
+        fal_key=fal_key,
+    )
+
+    mark = _wordmark_rgba(_guess_logo_rgb(analysis, notes))
+    target_w = max(40, int(bw * (width_pct / 100.0)))
     ratio = target_w / mark.width
-    target_h = max(16, int(mark.height * ratio))
+    target_h = max(14, int(mark.height * ratio))
     mark = mark.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
-    # Wearer's left chest ≈ viewer's right on a front-facing shot
-    x = int(bw * 0.58) - target_w // 2
-    y = int(bh * 0.36) - target_h // 2
+    x = int(bw * (cx_pct / 100.0)) - target_w // 2
+    y = int(bh * (cy_pct / 100.0)) - target_h // 2
     x = max(0, min(bw - target_w, x))
     y = max(0, min(bh - target_h, y))
 
@@ -230,7 +393,7 @@ def composite_livdon_logo(
     layered.alpha_composite(mark, (x, y))
     rgb = layered.convert("RGB")
     buf = io.BytesIO()
-    rgb.save(buf, format="JPEG", quality=94)
+    rgb.save(buf, format="JPEG", quality=95)
     return upload_bytes(buf.getvalue(), "mockup-with-livdon.jpg", "image/jpeg", fal_key)
 
 
@@ -241,7 +404,7 @@ def generate_mockup(
     aspect_ratio: str = "3:4",
     num_images: int = 1,
     fal_key: str | None = None,
-    design_brief: str | None = None,
+    analysis: dict[str, Any] | None = None,
     notes: str | None = None,
     composite_logo: bool = True,
 ) -> dict[str, Any]:
@@ -260,7 +423,6 @@ def generate_mockup(
             "aspect_ratio": ratio,
             "output_format": "jpeg",
             "safety_tolerance": "2",
-            # Keep closer to inspiration; high CFG was warping proportions
             "guidance_scale": 3.5,
             "enhance_prompt": False,
         },
@@ -278,12 +440,11 @@ def generate_mockup(
             try:
                 url = composite_livdon_logo(
                     url,
-                    design_brief=design_brief,
+                    analysis=analysis,
                     notes=notes,
                     fal_key=fal_key,
                 )
             except Exception:
-                # Keep raw generation if composite fails
                 pass
         images_out.append(
             {
@@ -308,3 +469,9 @@ def generate_mockup(
 def normalize_aspect(value: Optional[str]) -> str:
     v = (value or "3:4").strip()
     return v if v in ALLOWED_ASPECT else "3:4"
+
+
+def analysis_summary(analysis: dict[str, Any] | None) -> str:
+    if not analysis:
+        return ""
+    return json.dumps(analysis, ensure_ascii=False)[:2500]

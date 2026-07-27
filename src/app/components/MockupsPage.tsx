@@ -249,9 +249,9 @@ export function MockupsPage() {
           Mockups
         </h2>
         <p className="text-sm text-gray-600">
-          Keeps your inspiration model’s proportions, swaps in the garment, then
-          stamps the real Livdon wordmark on the chest (AI no longer redraws the logo).
-          Best: inspiration + product only.
+          Acts as Livdon’s brand photographer every time: keeps inspiration lighting,
+          pose, and proportions; swaps in your exact product with real drape; stamps
+          the real wordmark using product logo placement.
         </p>
       </header>
 
@@ -262,9 +262,9 @@ export function MockupsPage() {
           className="h-8 w-auto object-contain"
         />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900">Livdon logo stamped after generate</p>
+          <p className="text-sm font-medium text-gray-900">Brand photographer mode</p>
           <p className="text-xs text-gray-500">
-            Exact interlocking wordmark — not AI-redrawn. Color follows dark/light garment.
+            Standing brief is always loaded — inspiration = outcome, product = exact garment.
           </p>
         </div>
       </div>
@@ -424,7 +424,7 @@ export function MockupsPage() {
             {loading ? (
               <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-sm text-gray-500">
                 <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                Analyzing logo/print, then running Kontext…
+                Analyzing inspiration + product (lighting, pose, logo placement)…
               </div>
             ) : result?.images?.length ? (
               <div className="space-y-3">

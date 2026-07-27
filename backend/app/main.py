@@ -149,30 +149,36 @@ async def generate_clothing_mockup(
         product_payloads = [await _read_upload(f) for f in product_files]
         logo_payloads = [await _read_upload(f) for f in logo_files]
 
-        def _upload_all() -> tuple[list[str], list[str]]:
+        def _upload_all() -> tuple[list[str], str, list[str], list[str]]:
             urls: list[str] = []
-            analyze_urls: list[str] = []
-            urls.append(mockups.upload_bytes(insp_bytes, insp_name, insp_ctype, settings.fal_key))
+            insp_url = mockups.upload_bytes(insp_bytes, insp_name, insp_ctype, settings.fal_key)
+            urls.append(insp_url)
+            product_urls: list[str] = []
+            fabric_urls: list[str] = []
             for data, name, ctype in product_payloads:
                 u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
                 urls.append(u)
-                analyze_urls.append(u)
+                product_urls.append(u)
             for data, name, ctype in logo_payloads:
                 u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
                 urls.append(u)
-                analyze_urls.append(u)
+                product_urls.append(u)  # logo crop helps product/logo analysis
             for data, name, ctype in fabric_payloads:
-                urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
-            return urls[:4], analyze_urls
+                u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
+                urls.append(u)
+                fabric_urls.append(u)
+            return urls[:4], insp_url, product_urls, fabric_urls
 
-        image_urls, analyze_urls = await asyncio.to_thread(_upload_all)
+        image_urls, insp_url, product_urls, fabric_urls = await asyncio.to_thread(_upload_all)
 
-        design_brief = ""
-        if analyze_urls:
-            design_brief = await asyncio.to_thread(
-                mockups.analyze_garment_design,
-                analyze_urls,
-                settings.fal_key,
+        analysis: dict = {}
+        if product_urls:
+            analysis = await asyncio.to_thread(
+                mockups.deep_analyze_shoot,
+                inspiration_url=insp_url,
+                product_urls=product_urls,
+                fabric_urls=fabric_urls,
+                fal_key=settings.fal_key,
             )
 
         prompt = mockups.build_prompt(
@@ -180,7 +186,7 @@ async def generate_clothing_mockup(
             product_count=len(product_payloads),
             logo_count=len(logo_payloads),
             notes=notes,
-            design_brief=design_brief or None,
+            analysis=analysis,
         )
         ratio = mockups.normalize_aspect(aspect_ratio)
 
@@ -191,14 +197,15 @@ async def generate_clothing_mockup(
             aspect_ratio=ratio,
             num_images=num_images,
             fal_key=settings.fal_key,
-            design_brief=design_brief or None,
+            analysis=analysis,
             notes=notes,
             composite_logo=True,
         )
         return {
             **result,
             "aspectRatio": ratio,
-            "designBrief": design_brief or None,
+            "designBrief": mockups.analysis_summary(analysis) or None,
+            "photographerBrief": mockups.BRAND_PHOTOGRAPHER_BRIEF,
             "livdonWordmarkIncluded": True,
             "referenceCount": {
                 "inspiration": 1,

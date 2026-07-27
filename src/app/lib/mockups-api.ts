@@ -34,11 +34,13 @@ export type MockupGenerateResult = {
   seed?: number;
   aspectRatio?: string;
   designBrief?: string | null;
+  photographerBrief?: string | null;
   referenceCount?: {
     inspiration: number;
     fabrics: number;
     products: number;
     logo?: number;
+    livdonWordmark?: number;
   };
 };
 
