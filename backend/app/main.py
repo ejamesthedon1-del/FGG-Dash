@@ -755,6 +755,95 @@ async def get_brand_kpis(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.get("/api/shopify/payments-balance")
+async def get_payments_balance(brand: str = "live-don") -> dict:
+    """Shopify Payments available balance for a brand (CEO dashboard)."""
+    brand_key = resolve_brand(brand)
+    try:
+        client = get_shopify_client(brand_key)
+        data = await client.graphql(
+            """
+            query ShopifyPaymentsBalance {
+              shopifyPaymentsAccount {
+                activated
+                balance {
+                  amount
+                  currencyCode
+                }
+                payoutSchedule {
+                  interval
+                }
+                payouts(first: 3, reverse: true) {
+                  nodes {
+                    id
+                    issuedAt
+                    status
+                    net {
+                      amount
+                      currencyCode
+                    }
+                  }
+                }
+              }
+            }
+            """
+        )
+        account = data.get("shopifyPaymentsAccount")
+        if not account:
+            return {
+                "brand": brand_key,
+                "configured": False,
+                "activated": False,
+                "balances": [],
+                "totalUsd": 0,
+                "payoutSchedule": None,
+                "recentPayouts": [],
+                "error": "Shopify Payments account not available for this store",
+            }
+
+        balances = []
+        total_usd = 0.0
+        for row in account.get("balance") or []:
+            amount = float(row.get("amount") or 0)
+            currency = row.get("currencyCode") or "USD"
+            balances.append({"amount": round(amount, 2), "currency": currency})
+            if currency == "USD":
+                total_usd += amount
+
+        payouts = []
+        for node in ((account.get("payouts") or {}).get("nodes")) or []:
+            net = node.get("net") or {}
+            payouts.append(
+                {
+                    "id": node.get("id"),
+                    "issuedAt": node.get("issuedAt"),
+                    "status": node.get("status"),
+                    "amount": round(float(net.get("amount") or 0), 2),
+                    "currency": net.get("currencyCode") or "USD",
+                }
+            )
+
+        schedule = account.get("payoutSchedule") or {}
+        return {
+            "brand": brand_key,
+            "configured": True,
+            "activated": bool(account.get("activated")),
+            "balances": balances,
+            "totalUsd": round(total_usd, 2),
+            "payoutSchedule": schedule.get("interval"),
+            "recentPayouts": payouts,
+            "error": None,
+        }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ShopifyGraphQLError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"Shopify HTTP error: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.get("/api/shopify/products")
 async def get_products(brand: str = "live-don") -> dict:
     brand_key = resolve_brand(brand)

@@ -135,3 +135,39 @@ export async function fetchShopifyProducts(brand: string): Promise<ShopifyProduc
   const body = (await res.json()) as { products?: ShopifyProduct[] };
   return body.products ?? [];
 }
+
+export type ShopifyPaymentsBalance = {
+  brand: string;
+  configured: boolean;
+  activated: boolean;
+  balances: Array<{ amount: number; currency: string }>;
+  totalUsd: number;
+  payoutSchedule: string | null;
+  recentPayouts: Array<{
+    id?: string;
+    issuedAt?: string;
+    status?: string;
+    amount: number;
+    currency: string;
+  }>;
+  error?: string | null;
+};
+
+export async function fetchShopifyPaymentsBalance(
+  brand: string,
+): Promise<ShopifyPaymentsBalance> {
+  const res = await fetch(
+    apiUrl(`/api/shopify/payments-balance?brand=${encodeURIComponent(brand)}`),
+  );
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail || `Payments balance request failed (${res.status})`);
+  }
+  return res.json() as Promise<ShopifyPaymentsBalance>;
+}

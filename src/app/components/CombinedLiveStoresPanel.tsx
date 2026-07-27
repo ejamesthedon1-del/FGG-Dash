@@ -14,6 +14,7 @@ import {
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Landmark,
   Loader2,
   Package,
   ShoppingBag,
@@ -24,8 +25,10 @@ import {
   SHOPIFY_BRAND_LABELS,
   SHOPIFY_LIVE_BRAND_SLUGS,
   fetchShopifyBrandKpis,
+  fetchShopifyPaymentsBalance,
   formatShopifyMoney,
   type ShopifyBrandKpis,
+  type ShopifyPaymentsBalance,
 } from "../lib/shopify-dashboard";
 import {
   fetchProductCostsForBrand,
@@ -249,6 +252,49 @@ export function CombinedLiveStoresPanel() {
     periodStart: range.start,
     periodEnd: range.end,
   });
+  const [balances, setBalances] = useState<{
+    loading: boolean;
+    rows: Array<{
+      slug: string;
+      label: string;
+      data: ShopifyPaymentsBalance | null;
+      error?: string;
+    }>;
+  }>({ loading: true, rows: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    const slugs = [...SHOPIFY_LIVE_BRAND_SLUGS];
+
+    (async () => {
+      setBalances({ loading: true, rows: [] });
+      const rows = await Promise.all(
+        slugs.map(async (slug) => {
+          try {
+            const data = await fetchShopifyPaymentsBalance(slug);
+            return {
+              slug,
+              label: SHOPIFY_BRAND_LABELS[slug] ?? slug,
+              data,
+              error: data.error || undefined,
+            };
+          } catch (err) {
+            return {
+              slug,
+              label: SHOPIFY_BRAND_LABELS[slug] ?? slug,
+              data: null,
+              error: err instanceof Error ? err.message : "Could not load balance",
+            };
+          }
+        }),
+      );
+      if (!cancelled) setBalances({ loading: false, rows });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -325,6 +371,11 @@ export function CombinedLiveStoresPanel() {
   );
 
   const periodHint = formatPeriodLabel(state.periodStart, state.periodEnd);
+  const balanceTotal = useMemo(
+    () =>
+      balances.rows.reduce((acc, row) => acc + (row.data?.totalUsd ?? 0), 0),
+    [balances.rows],
+  );
 
   const profitTrend =
     totals.sales > 0
@@ -429,6 +480,70 @@ export function CombinedLiveStoresPanel() {
           </Button>
         </div>
       ) : null}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {balances.loading ? (
+          <div className="col-span-full flex items-center gap-2 rounded-2xl bg-white px-5 py-6 text-sm text-gray-500 shadow-sm">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            Loading Shopify balances…
+          </div>
+        ) : (
+          <>
+            {balances.rows.map((row) => (
+              <div
+                key={row.slug}
+                className="rounded-2xl bg-white p-4 shadow-sm sm:p-5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Shopify balance
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-gray-900">{row.label}</p>
+                  </div>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100 bg-blue-50/80 text-blue-600">
+                    <Landmark className="h-4 w-4" />
+                  </span>
+                </div>
+                {row.error || !row.data?.configured ? (
+                  <p className="mt-4 text-sm leading-snug text-amber-800">
+                    {row.error || row.data?.error || "Balance unavailable"}
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-4 text-2xl font-bold tracking-tight text-gray-950">
+                      {money(row.data.totalUsd)}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {row.data.activated ? "Available to payout" : "Setup incomplete"}
+                      {row.data.payoutSchedule
+                        ? ` · ${String(row.data.payoutSchedule).toLowerCase()}`
+                        : ""}
+                    </p>
+                  </>
+                )}
+              </div>
+            ))}
+            <div className="rounded-2xl bg-blue-600 p-4 text-white shadow-sm sm:p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-blue-100">
+                    Combined balance
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-white">All stores</p>
+                </div>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/35 text-white">
+                  <Wallet className="h-4 w-4" />
+                </span>
+              </div>
+              <p className="mt-4 text-2xl font-bold tracking-tight">
+                {money(balanceTotal)}
+              </p>
+              <p className="mt-1 text-xs text-blue-100">Shopify Payments · USD</p>
+            </div>
+          </>
+        )}
+      </div>
 
       {state.loading ? (
         <div className="flex items-center gap-2 rounded-2xl bg-white px-5 py-8 text-sm text-gray-500 shadow-sm">
