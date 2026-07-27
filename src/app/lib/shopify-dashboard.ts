@@ -141,19 +141,34 @@ export type ShopifyPaymentsBalance = {
   configured: boolean;
   activated: boolean;
   balances: Array<{ amount: number; currency: string }>;
-  /** Sum of USD Shopify Balance bank accounts. */
+  /** Latest deposit amount in USD when applicable (combined totals). */
   totalUsd: number;
-  /** Primary Shopify Balance account available balance. */
+  /** Latest payout/deposit amount to the linked bank account. */
   primaryAmount: number;
   primaryCurrency: string;
   accounts?: Array<{
     id?: string;
-    nickname?: string | null;
-    primary?: boolean;
+    bankName?: string | null;
+    accountNumberLastDigits?: string | null;
+    currency?: string;
     status?: string;
+    payouts?: Array<{
+      id?: string;
+      issuedAt?: string;
+      status?: string;
+      transactionType?: string;
+      amount: number;
+      currency: string;
+    }>;
+  }>;
+  latestPayout?: {
     amount: number;
     currency: string;
-  }>;
+    status?: string;
+    issuedAt?: string;
+    bankName?: string | null;
+    accountNumberLastDigits?: string | null;
+  } | null;
   error?: string | null;
 };
 

@@ -490,7 +490,7 @@ export function CombinedLiveStoresPanel() {
         {balances.loading ? (
           <div className="col-span-full flex items-center gap-2 rounded-2xl bg-white px-5 py-6 text-sm text-gray-500 shadow-sm">
             <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-            Loading Shopify Balance…
+            Loading payout bank accounts…
           </div>
         ) : (
           <>
@@ -502,7 +502,7 @@ export function CombinedLiveStoresPanel() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                      Shopify Balance
+                      Payout bank
                     </p>
                     <p className="mt-1 text-sm font-semibold text-gray-900">{row.label}</p>
                   </div>
@@ -512,7 +512,7 @@ export function CombinedLiveStoresPanel() {
                 </div>
                 {row.error || !row.data?.configured ? (
                   <p className="mt-4 text-sm leading-snug text-amber-800">
-                    {row.error || row.data?.error || "Balance unavailable"}
+                    {row.error || row.data?.error || "Bank account unavailable"}
                   </p>
                 ) : (
                   <>
@@ -523,7 +523,23 @@ export function CombinedLiveStoresPanel() {
                       )}
                     </p>
                     <p className="mt-1 text-xs text-gray-500">
-                      Bank account available balance
+                      {(() => {
+                        const acct = row.data.accounts?.[0];
+                        const bank =
+                          row.data.latestPayout?.bankName ||
+                          acct?.bankName ||
+                          "Bank";
+                        const last4 =
+                          row.data.latestPayout?.accountNumberLastDigits ||
+                          acct?.accountNumberLastDigits;
+                        const status = row.data.latestPayout?.status;
+                        const parts = [
+                          last4 ? `${bank} ···${last4}` : bank,
+                          status ? String(status).toLowerCase().replace(/_/g, " ") : null,
+                          "latest deposit",
+                        ].filter(Boolean);
+                        return parts.join(" · ");
+                      })()}
                     </p>
                   </>
                 )}
@@ -533,7 +549,7 @@ export function CombinedLiveStoresPanel() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-medium uppercase tracking-wide text-blue-100">
-                    Combined Balance
+                    Combined latest deposits
                   </p>
                   <p className="mt-1 text-sm font-semibold text-white">All stores</p>
                 </div>
@@ -544,7 +560,7 @@ export function CombinedLiveStoresPanel() {
               <p className="mt-4 text-2xl font-bold tracking-tight">
                 {money(balanceTotal)}
               </p>
-              <p className="mt-1 text-xs text-blue-100">Shopify Balance bank accounts · USD</p>
+              <p className="mt-1 text-xs text-blue-100">Payout bank deposits · USD</p>
             </div>
           </>
         )}
