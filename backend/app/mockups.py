@@ -17,21 +17,40 @@ ALLOWED_ASPECT = {
     "9:21",
 }
 
+GARMENT_ANALYSIS_PROMPT = """Analyze this garment photo for an exact product mockup.
+Return a compact plain-text brief covering:
+1) Garment type and base color
+2) All-over print/pattern (paint splatter colors, density, placement) — be specific
+3) LOGO / CHEST GRAPHIC — this is critical:
+   - Exact letters/words if readable (spell carefully)
+   - Font style (block, script, etc.)
+   - Colors of the logo and any outline/fill
+   - Placement (left chest, center, size relative to chest)
+   - Do NOT invent text you cannot read; say "illegible" if unsure
+4) Construction: hood, pocket, drawcords, seams
+No markdown. No preamble."""
+
 
 def build_prompt(
     *,
     fabric_count: int,
     product_count: int,
+    logo_count: int,
     notes: str | None,
+    design_brief: str | None = None,
 ) -> str:
-    """Build a prompt that prioritizes exact product design over fabric swatches."""
-    # Image order sent to Kontext: [inspiration, ...products, ...fabrics]
+    """Build a prompt that prioritizes exact product + logo fidelity."""
+    # Image order: [inspiration, ...products, ...logos, ...fabrics]
     idx = 1
     insp_idx = idx
     idx += 1
     product_indices: list[int] = []
     for _ in range(product_count):
         product_indices.append(idx)
+        idx += 1
+    logo_indices: list[int] = []
+    for _ in range(logo_count):
+        logo_indices.append(idx)
         idx += 1
     fabric_indices: list[int] = []
     for _ in range(fabric_count):
@@ -41,7 +60,7 @@ def build_prompt(
     parts: list[str] = [
         "Create a photoreal fashion photograph that looks shot on a real camera.",
         f"Keep the SAME person, face, hair, pose, framing, lighting, and background as image #{insp_idx}.",
-        f"Only change the clothing: dress them in our garment.",
+        "Only change the clothing: dress them in our exact garment.",
     ]
 
     if product_indices:
@@ -49,26 +68,46 @@ def build_prompt(
         parts.append(
             f"The hoodie/garment to wear is in image(s) {refs}. "
             "Copy that product EXACTLY: colorway, paint splatter / distressing / graphics, "
-            "chest logo or print placement, pocket shape, hood, drawcords, seams, and overall silhouette. "
-            "Do NOT invent a plain solid hoodie. Do NOT drop the print, pattern, or logo."
+            "pocket shape, hood, drawcords, seams, and silhouette."
         )
+
+    if logo_indices:
+        refs = ", ".join(f"#{i}" for i in logo_indices)
+        parts.append(
+            f"Image(s) {refs} are a CLOSE-UP of the logo/graphic. "
+            "Reproduce that logo EXACTLY on the garment — same letterforms, spelling, "
+            "colors, proportions, and left-chest placement. "
+            "Do NOT redraw, stylize, glitch, or invent alternate letters."
+        )
+    elif product_indices:
+        refs = ", ".join(f"#{i}" for i in product_indices)
+        parts.append(
+            f"Preserve the chest logo/graphic from image(s) {refs} EXACTLY — "
+            "same spelling, letter shapes, and colors. Do not alter or invent the logo."
+        )
+
     if fabric_indices:
         refs = ", ".join(f"#{i}" for i in fabric_indices)
         parts.append(
-            f"Image(s) {refs} are fabric texture close-ups only — use them for material feel "
-            "(fleece nap, knit, hand) when helpful, but NEVER override the product's printed "
-            "design, colorway, or graphics from the product photo."
+            f"Image(s) {refs} are fabric texture only — material feel, never override "
+            "prints, paint, or logo from the product/logo refs."
         )
-    if not product_indices and fabric_indices:
+    if not product_indices and not logo_indices and fabric_indices:
         refs = ", ".join(f"#{i}" for i in fabric_indices)
         parts.append(
-            f"Build the garment using the fabric shown in image(s) {refs} "
-            "(exact color and texture)."
+            f"Build the garment using the fabric in image(s) {refs} (exact color and texture)."
+        )
+
+    brief = (design_brief or "").strip()
+    if brief:
+        parts.append(
+            "LOCKED DESIGN BRIEF FROM PRODUCT ANALYSIS (follow precisely): " + brief
         )
 
     parts.append(
-        "Natural skin texture, fabric microdetail, realistic folds and shadows. "
-        "No illustration, no plastic CGI, no watermark, no extra text overlays."
+        "Critical: logos and text must stay crisp and correct — never morph into "
+        "paint splatters. Natural skin and fabric microdetail. No CGI, no watermark, "
+        "no extra text overlays."
     )
 
     cleaned = (notes or "").strip()
@@ -100,6 +139,63 @@ def upload_bytes(data: bytes, filename: str, content_type: str, fal_key: str | N
     return str(url)
 
 
+def analyze_garment_design(
+    image_urls: Sequence[str],
+    fal_key: str | None = None,
+) -> str:
+    """Vision pass — extract logo/print details to lock into the Kontext prompt."""
+    urls = [u for u in image_urls if u]
+    if not urls:
+        return ""
+    _ensure_fal_key(fal_key)
+    import fal_client
+
+    try:
+        result = fal_client.subscribe(
+            "fal-ai/any-llm/vision",
+            arguments={
+                "model": "google/gemini-2.5-flash",
+                "prompt": GARMENT_ANALYSIS_PROMPT,
+                "system_prompt": (
+                    "You extract exact garment branding details for product mockups. "
+                    "Be literal about logo text. No markdown."
+                ),
+                "image_urls": list(urls)[:4],
+                "priority": "latency",
+            },
+            with_logs=False,
+        )
+    except Exception:
+        # Fallback: lighter vision model if any-llm/vision is unavailable
+        try:
+            result = fal_client.subscribe(
+                "fal-ai/moondream-next",
+                arguments={
+                    "image_url": urls[0],
+                    "task_type": "query",
+                    "prompt": GARMENT_ANALYSIS_PROMPT,
+                    "max_tokens": 256,
+                },
+                with_logs=False,
+            )
+        except Exception:
+            return ""
+
+    payload = result if isinstance(result, dict) else {}
+    for key in ("output", "response", "text", "answer", "caption"):
+        val = payload.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()[:1200]
+    # nested shapes
+    data = payload.get("data")
+    if isinstance(data, dict):
+        for key in ("output", "response", "text"):
+            val = data.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()[:1200]
+    return ""
+
+
 def generate_mockup(
     *,
     image_urls: Sequence[str],
@@ -123,8 +219,7 @@ def generate_mockup(
             "aspect_ratio": ratio,
             "output_format": "jpeg",
             "safety_tolerance": "2",
-            # Stronger adherence to product/design refs
-            "guidance_scale": 4.5,
+            "guidance_scale": 5.0,
             "enhance_prompt": False,
         },
         with_logs=False,

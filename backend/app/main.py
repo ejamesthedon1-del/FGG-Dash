@@ -91,8 +91,9 @@ async def health() -> dict:
 @app.post("/api/mockups/generate")
 async def generate_clothing_mockup(
     inspiration: UploadFile = File(..., description="Scene / pose to recreate"),
-    fabrics: list[UploadFile] = File(..., description="Fabric close-up refs (1–4)"),
+    fabrics: Optional[list[UploadFile]] = File(None),
     products: Optional[list[UploadFile]] = File(None),
+    logo: Optional[UploadFile] = File(None),
     notes: str = Form(default=""),
     aspect_ratio: str = Form(default="3:4"),
     num_images: int = Form(default=1),
@@ -107,20 +108,22 @@ async def generate_clothing_mockup(
 
     fabric_files = [f for f in (fabrics or []) if f and f.filename]
     product_files = [f for f in (products or []) if f and f.filename]
+    logo_file = logo if logo and logo.filename else None
     if not inspiration.filename:
         raise HTTPException(status_code=400, detail="Inspiration image is required.")
-    if not fabric_files and not product_files:
+    if not fabric_files and not product_files and not logo_file:
         raise HTTPException(
             status_code=400,
-            detail="Upload a product shot and/or at least one fabric reference.",
+            detail="Upload a product shot, logo close-up, and/or fabric reference.",
         )
 
-    # Kontext allows 1–4 images total. Prioritize product design over fabric swatches.
+    # Kontext allows 1–4 images. Priority: product → logo → fabric.
     remaining_slots = 3
-    product_files = product_files[:remaining_slots]
+    product_files = product_files[: min(1, remaining_slots)]
     remaining_slots -= len(product_files)
-    if product_files:
-        # One texture ref max when product is present — extra fabrics confuse design.
+    logo_files = [logo_file] if logo_file and remaining_slots > 0 else []
+    remaining_slots -= len(logo_files)
+    if product_files or logo_files:
         fabric_files = fabric_files[: min(1, remaining_slots)]
     else:
         fabric_files = fabric_files[:remaining_slots]
@@ -146,22 +149,41 @@ async def generate_clothing_mockup(
         insp_bytes, insp_name, insp_ctype = await _read_upload(inspiration)
         fabric_payloads = [await _read_upload(f) for f in fabric_files]
         product_payloads = [await _read_upload(f) for f in product_files]
+        logo_payloads = [await _read_upload(f) for f in logo_files]
 
-        def _upload_all() -> list[str]:
-            # Order: inspiration → product (design) → fabric (texture only)
+        def _upload_all() -> tuple[list[str], list[str]]:
+            # Order: inspiration → product → logo → fabric
             urls: list[str] = []
+            analyze_urls: list[str] = []
             urls.append(mockups.upload_bytes(insp_bytes, insp_name, insp_ctype, settings.fal_key))
             for data, name, ctype in product_payloads:
-                urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
+                u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
+                urls.append(u)
+                analyze_urls.append(u)
+            for data, name, ctype in logo_payloads:
+                u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
+                urls.append(u)
+                analyze_urls.append(u)
             for data, name, ctype in fabric_payloads:
                 urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
-            return urls[:4]
+            return urls[:4], analyze_urls
 
-        image_urls = await asyncio.to_thread(_upload_all)
+        image_urls, analyze_urls = await asyncio.to_thread(_upload_all)
+
+        design_brief = ""
+        if analyze_urls:
+            design_brief = await asyncio.to_thread(
+                mockups.analyze_garment_design,
+                analyze_urls,
+                settings.fal_key,
+            )
+
         prompt = mockups.build_prompt(
             fabric_count=len(fabric_payloads),
             product_count=len(product_payloads),
+            logo_count=len(logo_payloads),
             notes=notes,
+            design_brief=design_brief or None,
         )
         ratio = mockups.normalize_aspect(aspect_ratio)
 
@@ -176,10 +198,12 @@ async def generate_clothing_mockup(
         return {
             **result,
             "aspectRatio": ratio,
+            "designBrief": design_brief or None,
             "referenceCount": {
                 "inspiration": 1,
                 "fabrics": len(fabric_payloads),
                 "products": len(product_payloads),
+                "logo": len(logo_payloads),
             },
         }
     except HTTPException:

@@ -166,6 +166,7 @@ export function MockupsPage() {
   const [inspiration, setInspiration] = useState<PreviewFile[]>([]);
   const [fabrics, setFabrics] = useState<PreviewFile[]>([]);
   const [products, setProducts] = useState<PreviewFile[]>([]);
+  const [logo, setLogo] = useState<PreviewFile[]>([]);
   const [notes, setNotes] = useState("");
   const [aspectRatio, setAspectRatio] = useState<MockupAspectRatio>("3:4");
   const [numImages, setNumImages] = useState<1 | 2>(1);
@@ -186,7 +187,6 @@ export function MockupsPage() {
     if (!replace) {
       const overflow = current.length + incoming.length - max;
       if (overflow > 0) toast.message(`Kept the first ${max} images`);
-      // revoke dropped extras that won't be used
       const keptIds = new Set(next.map((n) => n.id));
       for (const old of current) {
         if (!keptIds.has(old.id)) URL.revokeObjectURL(old.url);
@@ -197,12 +197,13 @@ export function MockupsPage() {
     return next;
   };
 
-  const fabricMax = Math.max(1, 3 - products.length);
-  const productMax = Math.max(0, 3 - fabrics.length);
+  const extraSlots = 3 - (logo.length ? 1 : 0);
+  const fabricMax = products.length || logo.length ? 1 : Math.max(1, extraSlots);
+  const productMax = Math.max(0, extraSlots - Math.min(fabrics.length, 1));
 
   const canGenerate =
     inspiration.length === 1 &&
-    (fabrics.length >= 1 || products.length >= 1) &&
+    (fabrics.length >= 1 || products.length >= 1 || logo.length >= 1) &&
     !loading;
 
   const onGenerate = async () => {
@@ -214,6 +215,7 @@ export function MockupsPage() {
         inspiration: inspiration[0].file,
         fabrics: fabrics.map((f) => f.file),
         products: products.map((f) => f.file),
+        logo: logo[0]?.file ?? null,
         notes,
         aspectRatio,
         numImages,
@@ -247,9 +249,9 @@ export function MockupsPage() {
           Mockups
         </h2>
         <p className="text-sm text-gray-600">
-          Put your exact hoodie on the inspiration model. Upload the full product
-          shot (prints/graphics) under Product — fabric close-ups are texture only.
-          Max 4 images total. Tip: inspiration + product (+ optional 1 fabric).
+          Best setup for logo accuracy: inspiration + full product + logo
+          close-up. We auto-analyze the logo/print behind the scenes before
+          generating. Max 4 images total.
         </p>
       </header>
 
@@ -273,19 +275,16 @@ export function MockupsPage() {
             }
           />
           <DropZone
-            label="Fabric close-ups"
-            hint="Optional texture only — skip conflicting colors if you have a product shot"
-            files={fabrics}
-            multiple
-            max={products.length ? 1 : fabricMax}
+            label="Product / construction"
+            hint="Full hoodie with print/paint — exact garment to wear"
+            files={products}
+            max={1}
+            required
             onAdd={(files) =>
-              setFabrics((prev) => {
-                const max = products.length ? 1 : Math.max(1, 3 - products.length);
-                return addCapped(prev, files, max, false);
-              })
+              setProducts((prev) => addCapped(prev, files, 1, true))
             }
             onRemove={(id) =>
-              setFabrics((prev) => {
+              setProducts((prev) => {
                 const gone = prev.find((p) => p.id === id);
                 if (gone) URL.revokeObjectURL(gone.url);
                 return prev.filter((p) => p.id !== id);
@@ -293,20 +292,36 @@ export function MockupsPage() {
             }
           />
           <DropZone
-            label="Product / construction"
-            hint="Full hoodie with print/paint — this is the exact garment to wear"
-            files={products}
+            label="Logo close-up"
+            hint="Cropped chest logo / graphic for exact letterforms"
+            files={logo}
+            max={1}
+            onAdd={(files) => setLogo((prev) => addCapped(prev, files, 1, true))}
+            onRemove={(id) =>
+              setLogo((prev) => {
+                const gone = prev.find((p) => p.id === id);
+                if (gone) URL.revokeObjectURL(gone.url);
+                return prev.filter((p) => p.id !== id);
+              })
+            }
+          />
+          <DropZone
+            label="Fabric close-ups"
+            hint="Optional texture only — skip if product already shows the fabric"
+            files={fabrics}
             multiple
-            max={Math.min(2, productMax || 2)}
-            required
+            max={fabricMax}
             onAdd={(files) =>
-              setProducts((prev) => {
-                const max = Math.min(2, Math.max(1, 3 - Math.min(fabrics.length, 1)));
+              setFabrics((prev) => {
+                const max =
+                  products.length || logo.length
+                    ? 1
+                    : Math.max(1, 3 - products.length - logo.length);
                 return addCapped(prev, files, max, false);
               })
             }
             onRemove={(id) =>
-              setProducts((prev) => {
+              setFabrics((prev) => {
                 const gone = prev.find((p) => p.id === id);
                 if (gone) URL.revokeObjectURL(gone.url);
                 return prev.filter((p) => p.id !== id);
@@ -324,7 +339,7 @@ export function MockupsPage() {
             <Textarea
               id="mockup-notes"
               rows={3}
-              placeholder="e.g. keep paint splatter + chest logo exactly, oversized fit…"
+              placeholder="e.g. left-chest logo must match crop exactly, keep paint splatter…"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
@@ -395,7 +410,7 @@ export function MockupsPage() {
             {loading ? (
               <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-sm text-gray-500">
                 <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                Uploading refs and running Kontext…
+                Analyzing logo/print, then running Kontext…
               </div>
             ) : result?.images?.length ? (
               <div className="space-y-3">
@@ -433,11 +448,21 @@ export function MockupsPage() {
                 {result.seed != null ? (
                   <p className="text-xs text-gray-400">Seed {result.seed}</p>
                 ) : null}
+                {result.designBrief ? (
+                  <details className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                    <summary className="cursor-pointer font-medium text-gray-800">
+                      Design brief used
+                    </summary>
+                    <p className="mt-2 whitespace-pre-wrap leading-relaxed">
+                      {result.designBrief}
+                    </p>
+                  </details>
+                ) : null}
               </div>
             ) : (
               <p className="min-h-[220px] text-sm leading-relaxed text-gray-500">
-                Results appear here. Use a clear inspiration photo, tight fabric
-                close-ups, and optional product shots for construction.
+                Results appear here. For logos: add a tight crop of the chest
+                graphic under Logo close-up.
               </p>
             )}
           </div>

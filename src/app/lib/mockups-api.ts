@@ -13,8 +13,9 @@ export type MockupAspectRatio =
 
 export type MockupGenerateInput = {
   inspiration: File;
-  fabrics: File[];
+  fabrics?: File[];
   products?: File[];
+  logo?: File | null;
   notes?: string;
   aspectRatio?: MockupAspectRatio;
   numImages?: 1 | 2;
@@ -32,10 +33,12 @@ export type MockupGenerateResult = {
   prompt: string;
   seed?: number;
   aspectRatio?: string;
+  designBrief?: string | null;
   referenceCount?: {
     inspiration: number;
     fabrics: number;
     products: number;
+    logo?: number;
   };
 };
 
@@ -44,11 +47,14 @@ export async function generateClothingMockup(
 ): Promise<MockupGenerateResult> {
   const form = new FormData();
   form.append("inspiration", input.inspiration);
-  for (const file of input.fabrics) {
+  for (const file of input.fabrics ?? []) {
     form.append("fabrics", file);
   }
   for (const file of input.products ?? []) {
     form.append("products", file);
+  }
+  if (input.logo) {
+    form.append("logo", input.logo);
   }
   form.append("notes", input.notes?.trim() ?? "");
   form.append("aspect_ratio", input.aspectRatio ?? "3:4");
