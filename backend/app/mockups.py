@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Optional, Sequence
 
 ALLOWED_ASPECT = {
@@ -17,18 +18,49 @@ ALLOWED_ASPECT = {
     "9:21",
 }
 
+# Canonical Livdon interlocking wordmark (format is fixed; color may change per garment).
+LIVDON_WORDMARK_PATH = Path(__file__).resolve().parent / "assets" / "livdon-wordmark.png"
+
+LIVDON_WORDMARK_SPEC = (
+    "LIVDON wordmark: bold interlocking geometric sans-serif letters spelling LIVDON "
+    "as one continuous linked unit — L joins into V, V merges into D, D overlaps O "
+    "(lens intersection), O merges into N (lowercase-n shape at full cap height). "
+    "Flat baseline, uniform height, heavy strokes. Color may match the garment "
+    "(white, black, cream, etc.) but the interlocking letter shapes NEVER change."
+)
+
 GARMENT_ANALYSIS_PROMPT = """Analyze this garment photo for an exact product mockup.
 Return a compact plain-text brief covering:
 1) Garment type and base color
 2) All-over print/pattern (paint splatter colors, density, placement) — be specific
 3) LOGO / CHEST GRAPHIC — this is critical:
-   - Exact letters/words if readable (spell carefully)
-   - Font style (block, script, etc.)
-   - Colors of the logo and any outline/fill
-   - Placement (left chest, center, size relative to chest)
+   - If the brand is LIVDON / Livdon, note logo COLOR on this garment only
+     (the interlocking LIVDON wordmark format is already known — do not redesign it)
+   - Exact letters if readable; placement (left chest, size)
    - Do NOT invent text you cannot read; say "illegible" if unsure
 4) Construction: hood, pocket, drawcords, seams
 No markdown. No preamble."""
+
+_wordmark_fal_url: str | None = None
+
+
+def livdon_wordmark_bytes() -> tuple[bytes, str, str]:
+    if not LIVDON_WORDMARK_PATH.is_file():
+        raise RuntimeError(f"Missing Livdon wordmark asset at {LIVDON_WORDMARK_PATH}")
+    data = LIVDON_WORDMARK_PATH.read_bytes()
+    # File may be JPEG bytes saved with .png extension
+    ctype = "image/jpeg" if data[:2] == b"\xff\xd8" else "image/png"
+    return data, "livdon-wordmark.png", ctype
+
+
+def upload_livdon_wordmark(fal_key: str | None) -> str:
+    """Upload canonical wordmark once per process; reuse fal URL."""
+    global _wordmark_fal_url
+    if _wordmark_fal_url:
+        return _wordmark_fal_url
+    data, name, ctype = livdon_wordmark_bytes()
+    _wordmark_fal_url = upload_bytes(data, name, ctype, fal_key)
+    return _wordmark_fal_url
 
 
 def build_prompt(
@@ -36,17 +68,22 @@ def build_prompt(
     fabric_count: int,
     product_count: int,
     logo_count: int,
+    wordmark_count: int,
     notes: str | None,
     design_brief: str | None = None,
 ) -> str:
-    """Build a prompt that prioritizes exact product + logo fidelity."""
-    # Image order: [inspiration, ...products, ...logos, ...fabrics]
+    """Build a prompt that prioritizes exact product + locked Livdon wordmark."""
+    # Image order: [inspiration, ...products, ...wordmark, ...user logos, ...fabrics]
     idx = 1
     insp_idx = idx
     idx += 1
     product_indices: list[int] = []
     for _ in range(product_count):
         product_indices.append(idx)
+        idx += 1
+    wordmark_indices: list[int] = []
+    for _ in range(wordmark_count):
+        wordmark_indices.append(idx)
         idx += 1
     logo_indices: list[int] = []
     for _ in range(logo_count):
@@ -71,26 +108,29 @@ def build_prompt(
             "pocket shape, hood, drawcords, seams, and silhouette."
         )
 
+    if wordmark_indices:
+        refs = ", ".join(f"#{i}" for i in wordmark_indices)
+        parts.append(
+            f"CANONICAL LIVDON LOGO — image(s) {refs}. "
+            f"{LIVDON_WORDMARK_SPEC} "
+            "Whenever a LIVDON / Livdon logo appears on the garment, use THIS exact "
+            "interlocking wordmark format. Match logo COLOR to the product reference "
+            "(or designer notes); never change the letter construction."
+        )
+
     if logo_indices:
         refs = ", ".join(f"#{i}" for i in logo_indices)
         parts.append(
-            f"Image(s) {refs} are a CLOSE-UP of the logo/graphic. "
-            "Reproduce that logo EXACTLY on the garment — same letterforms, spelling, "
-            "colors, proportions, and left-chest placement. "
-            "Do NOT redraw, stylize, glitch, or invent alternate letters."
-        )
-    elif product_indices:
-        refs = ", ".join(f"#{i}" for i in product_indices)
-        parts.append(
-            f"Preserve the chest logo/graphic from image(s) {refs} EXACTLY — "
-            "same spelling, letter shapes, and colors. Do not alter or invent the logo."
+            f"Image(s) {refs} show logo placement/color on the real garment. "
+            "Use them for size, color, and chest placement — but letter shapes must "
+            f"still match the canonical wordmark ({LIVDON_WORDMARK_SPEC})."
         )
 
     if fabric_indices:
         refs = ", ".join(f"#{i}" for i in fabric_indices)
         parts.append(
             f"Image(s) {refs} are fabric texture only — material feel, never override "
-            "prints, paint, or logo from the product/logo refs."
+            "prints, paint, or the Livdon wordmark."
         )
     if not product_indices and not logo_indices and fabric_indices:
         refs = ", ".join(f"#{i}" for i in fabric_indices)
@@ -105,9 +145,9 @@ def build_prompt(
         )
 
     parts.append(
-        "Critical: logos and text must stay crisp and correct — never morph into "
-        "paint splatters. Natural skin and fabric microdetail. No CGI, no watermark, "
-        "no extra text overlays."
+        "Critical: the LIVDON logo must stay crisp and correctly interlocking — "
+        "never morph letters into paint splatters or invent a different font. "
+        "Natural skin and fabric microdetail. No CGI, no watermark, no extra text overlays."
     )
 
     cleaned = (notes or "").strip()
@@ -143,7 +183,7 @@ def analyze_garment_design(
     image_urls: Sequence[str],
     fal_key: str | None = None,
 ) -> str:
-    """Vision pass — extract logo/print details to lock into the Kontext prompt."""
+    """Vision pass — extract print/logo color/placement; wordmark format is already locked."""
     urls = [u for u in image_urls if u]
     if not urls:
         return ""
@@ -157,8 +197,9 @@ def analyze_garment_design(
                 "model": "google/gemini-2.5-flash",
                 "prompt": GARMENT_ANALYSIS_PROMPT,
                 "system_prompt": (
-                    "You extract exact garment branding details for product mockups. "
-                    "Be literal about logo text. No markdown."
+                    "You extract garment branding details for product mockups. "
+                    "For LIVDON logos, report color and placement only — the interlocking "
+                    "wordmark format is fixed. No markdown."
                 ),
                 "image_urls": list(urls)[:4],
                 "priority": "latency",
@@ -166,7 +207,6 @@ def analyze_garment_design(
             with_logs=False,
         )
     except Exception:
-        # Fallback: lighter vision model if any-llm/vision is unavailable
         try:
             result = fal_client.subscribe(
                 "fal-ai/moondream-next",
@@ -186,7 +226,6 @@ def analyze_garment_design(
         val = payload.get(key)
         if isinstance(val, str) and val.strip():
             return val.strip()[:1200]
-    # nested shapes
     data = payload.get("data")
     if isinstance(data, dict):
         for key in ("output", "response", "text"):

@@ -117,16 +117,14 @@ async def generate_clothing_mockup(
             detail="Upload a product shot, logo close-up, and/or fabric reference.",
         )
 
-    # Kontext allows 1–4 images. Priority: product → logo → fabric.
-    remaining_slots = 3
+    # Kontext allows 1–4 images. Always reserve 1 for the canonical Livdon wordmark.
+    # Remaining after inspiration+wordmark: 2 → product, then user logo OR fabric.
+    remaining_slots = 2
     product_files = product_files[: min(1, remaining_slots)]
     remaining_slots -= len(product_files)
     logo_files = [logo_file] if logo_file and remaining_slots > 0 else []
     remaining_slots -= len(logo_files)
-    if product_files or logo_files:
-        fabric_files = fabric_files[: min(1, remaining_slots)]
-    else:
-        fabric_files = fabric_files[:remaining_slots]
+    fabric_files = fabric_files[:remaining_slots]
 
     async def _read_upload(file: UploadFile) -> tuple[bytes, str, str]:
         data = await file.read()
@@ -151,8 +149,8 @@ async def generate_clothing_mockup(
         product_payloads = [await _read_upload(f) for f in product_files]
         logo_payloads = [await _read_upload(f) for f in logo_files]
 
-        def _upload_all() -> tuple[list[str], list[str]]:
-            # Order: inspiration → product → logo → fabric
+        def _upload_all() -> tuple[list[str], list[str], int]:
+            # Order: inspiration → product → Livdon wordmark → user logo → fabric
             urls: list[str] = []
             analyze_urls: list[str] = []
             urls.append(mockups.upload_bytes(insp_bytes, insp_name, insp_ctype, settings.fal_key))
@@ -160,15 +158,18 @@ async def generate_clothing_mockup(
                 u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
                 urls.append(u)
                 analyze_urls.append(u)
+            wordmark_url = mockups.upload_livdon_wordmark(settings.fal_key)
+            urls.append(wordmark_url)
+            wordmark_count = 1
             for data, name, ctype in logo_payloads:
                 u = mockups.upload_bytes(data, name, ctype, settings.fal_key)
                 urls.append(u)
                 analyze_urls.append(u)
             for data, name, ctype in fabric_payloads:
                 urls.append(mockups.upload_bytes(data, name, ctype, settings.fal_key))
-            return urls[:4], analyze_urls
+            return urls[:4], analyze_urls, wordmark_count
 
-        image_urls, analyze_urls = await asyncio.to_thread(_upload_all)
+        image_urls, analyze_urls, wordmark_count = await asyncio.to_thread(_upload_all)
 
         design_brief = ""
         if analyze_urls:
@@ -177,11 +178,17 @@ async def generate_clothing_mockup(
                 analyze_urls,
                 settings.fal_key,
             )
+        # Always prepend locked wordmark spec into the brief.
+        design_brief = (
+            f"{mockups.LIVDON_WORDMARK_SPEC} "
+            + (design_brief or "")
+        ).strip()
 
         prompt = mockups.build_prompt(
             fabric_count=len(fabric_payloads),
             product_count=len(product_payloads),
             logo_count=len(logo_payloads),
+            wordmark_count=wordmark_count,
             notes=notes,
             design_brief=design_brief or None,
         )
@@ -199,11 +206,13 @@ async def generate_clothing_mockup(
             **result,
             "aspectRatio": ratio,
             "designBrief": design_brief or None,
+            "livdonWordmarkIncluded": True,
             "referenceCount": {
                 "inspiration": 1,
                 "fabrics": len(fabric_payloads),
                 "products": len(product_payloads),
                 "logo": len(logo_payloads),
+                "livdonWordmark": wordmark_count,
             },
         }
     except HTTPException:

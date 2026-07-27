@@ -249,11 +249,25 @@ export function MockupsPage() {
           Mockups
         </h2>
         <p className="text-sm text-gray-600">
-          Best setup for logo accuracy: inspiration + full product + logo
-          close-up. We auto-analyze the logo/print behind the scenes before
-          generating. Max 4 images total.
+          Livdon interlocking wordmark is always included automatically (format
+          locked; color follows the garment). Best setup: inspiration + product.
+          Optional logo crop for placement/color. Max 4 images total.
         </p>
       </header>
+
+      <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+        <img
+          src="/brand/livdon-wordmark.png"
+          alt="Livdon wordmark"
+          className="h-8 w-auto object-contain"
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-900">Livdon logo locked</p>
+          <p className="text-xs text-gray-500">
+            Interlocking LIVDON format is fed on every generate — only color changes.
+          </p>
+        </div>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
@@ -293,7 +307,7 @@ export function MockupsPage() {
           />
           <DropZone
             label="Logo close-up"
-            hint="Cropped chest logo / graphic for exact letterforms"
+            hint="Optional — garment logo crop for color/placement (format already locked)"
             files={logo}
             max={1}
             onAdd={(files) => setLogo((prev) => addCapped(prev, files, 1, true))}
