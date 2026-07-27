@@ -382,7 +382,6 @@ def generate_mockup(
     prompt: str,
     aspect_ratio: str = "auto",
     num_images: int = 1,
-    resolution: str = "1K",
     fal_key: str | None = None,
     analysis: dict[str, Any] | None = None,
     notes: str | None = None,
@@ -416,12 +415,9 @@ def generate_mockup(
     else:
         arguments["aspect_ratio"] = "auto"
 
-    # Nano Banana Pro supports resolution
+    # Nano Banana Pro supports resolution; safe default
     if "nano-banana" in model:
-        res = (resolution or "1K").strip().upper()
-        if res not in {"1K", "2K", "4K"}:
-            res = "1K"
-        arguments["resolution"] = res
+        arguments["resolution"] = "1K"
 
     result = fal_client.subscribe(
         model,

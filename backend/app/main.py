@@ -94,7 +94,6 @@ async def generate_clothing_mockup(
     images: list[UploadFile] = File(..., description="Reference images in order (#1, #2, …)"),
     aspect_ratio: str = Form(default="auto"),
     num_images: int = Form(default=1),
-    resolution: str = Form(default="1K"),
 ) -> dict:
     """Freeform multi-image edit via fal Nano Banana Pro Edit."""
     settings = get_settings()
@@ -149,7 +148,6 @@ async def generate_clothing_mockup(
             prompt=cleaned_prompt,
             aspect_ratio=ratio,
             num_images=num_images,
-            resolution=resolution,
             fal_key=settings.fal_key,
             composite_logo=False,
             model="fal-ai/nano-banana-pro/edit",
@@ -157,7 +155,6 @@ async def generate_clothing_mockup(
         return {
             **result,
             "aspectRatio": ratio,
-            "resolution": resolution,
             "imageCount": len(image_urls),
         }
     except HTTPException:
