@@ -141,11 +141,19 @@ export type ShopifyPaymentsBalance = {
   configured: boolean;
   activated: boolean;
   balances: Array<{ amount: number; currency: string }>;
-  /** Sum of USD balances only (for combined totals). */
+  /** Sum of USD Shopify Balance bank accounts. */
   totalUsd: number;
-  /** Primary / default-currency account balance. */
+  /** Primary Shopify Balance account available balance. */
   primaryAmount: number;
   primaryCurrency: string;
+  accounts?: Array<{
+    id?: string;
+    nickname?: string | null;
+    primary?: boolean;
+    status?: string;
+    amount: number;
+    currency: string;
+  }>;
   error?: string | null;
 };
 

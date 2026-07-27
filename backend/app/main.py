@@ -757,30 +757,39 @@ async def get_brand_kpis(
 
 @app.get("/api/shopify/payments-balance")
 async def get_payments_balance(brand: str = "live-don") -> dict:
-    """Current Shopify Payments account balance for a brand (CEO dashboard).
+    """Shopify Balance bank-account available balance (where payouts land).
 
-    Uses shopifyPaymentsAccount.balance — current balances in all currencies —
-    not payouts (bank transfers). See:
-    https://shopify.dev/docs/api/admin-graphql/latest/objects/ShopifyPaymentsAccount
+    This is NOT shopifyPaymentsAccount.balance (pre-payout Payments balance).
+    Uses balanceAccount on the unstable Admin API:
+    https://shopify.dev/docs/api/admin-graphql/unstable/objects/BalanceBankAccount
+
+    Requires scope read_shopify_balance_accounts_information and a Shopify Balance
+    account (not an external bank — Shopify cannot read Chase/etc. balances).
     """
     brand_key = resolve_brand(brand)
     try:
         client = get_shopify_client(brand_key)
+        # balanceAccount is only on the unstable Admin API version.
         data = await client.graphql(
             """
-            query ShopifyPaymentsBalance {
-              shopifyPaymentsAccount {
-                activated
-                defaultCurrency
-                balance {
-                  amount
-                  currencyCode
+            query ShopifyBalanceBankAccount {
+              balanceAccount {
+                bankAccounts {
+                  id
+                  nickname
+                  primary
+                  status
+                  availableBalance {
+                    amount
+                    currencyCode
+                  }
                 }
               }
             }
-            """
+            """,
+            api_version="unstable",
         )
-        account = data.get("shopifyPaymentsAccount")
+        account = data.get("balanceAccount")
         if not account:
             return {
                 "brand": brand_key,
@@ -790,38 +799,81 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
                 "totalUsd": 0,
                 "primaryAmount": 0,
                 "primaryCurrency": "USD",
-                "error": "Shopify Payments account not available for this store",
+                "accounts": [],
+                "error": (
+                    "No Shopify Balance account found. "
+                    "This is the bank account where payouts land — not Shopify Payments."
+                ),
             }
 
+        accounts = []
         balances = []
         total_usd = 0.0
-        for row in account.get("balance") or []:
-            amount = float(row.get("amount") or 0)
-            currency = row.get("currencyCode") or "USD"
+        primary_amount = 0.0
+        primary_currency = "USD"
+        found_primary = False
+
+        for row in account.get("bankAccounts") or []:
+            money = row.get("availableBalance") or {}
+            amount = float(money.get("amount") or 0)
+            currency = money.get("currencyCode") or "USD"
+            is_primary = bool(row.get("primary"))
+            accounts.append(
+                {
+                    "id": row.get("id"),
+                    "nickname": row.get("nickname"),
+                    "primary": is_primary,
+                    "status": row.get("status"),
+                    "amount": round(amount, 2),
+                    "currency": currency,
+                }
+            )
             balances.append({"amount": round(amount, 2), "currency": currency})
             if currency == "USD":
                 total_usd += amount
+            if is_primary or not found_primary:
+                primary_amount = amount
+                primary_currency = currency
+                found_primary = is_primary or found_primary
 
-        default_currency = account.get("defaultCurrency") or "USD"
-        primary = next(
-            (b for b in balances if b["currency"] == default_currency),
-            balances[0] if balances else {"amount": 0.0, "currency": default_currency},
-        )
+        if not accounts:
+            return {
+                "brand": brand_key,
+                "configured": False,
+                "activated": False,
+                "balances": [],
+                "totalUsd": 0,
+                "primaryAmount": 0,
+                "primaryCurrency": "USD",
+                "accounts": [],
+                "error": "Shopify Balance has no bank accounts yet",
+            }
 
         return {
             "brand": brand_key,
             "configured": True,
-            "activated": bool(account.get("activated")),
+            "activated": True,
             "balances": balances,
             "totalUsd": round(total_usd, 2),
-            "primaryAmount": primary["amount"],
-            "primaryCurrency": primary["currency"],
+            "primaryAmount": round(primary_amount, 2),
+            "primaryCurrency": primary_currency,
+            "accounts": accounts,
             "error": None,
         }
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ShopifyGraphQLError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        detail = str(exc)
+        if "ACCESS_DENIED" in detail or "access" in detail.lower() or "scope" in detail.lower():
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Shopify Balance access denied. Add scope "
+                    "read_shopify_balance_accounts_information to both brand apps, "
+                    "and ensure each store uses Shopify Balance (not only Shopify Payments)."
+                ),
+            ) from exc
+        raise HTTPException(status_code=502, detail=detail) from exc
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=502, detail=f"Shopify HTTP error: {exc}") from exc
     except Exception as exc:

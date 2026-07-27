@@ -57,9 +57,16 @@ class ShopifyClient:
         self._expires_at = now + timedelta(seconds=max(expires_in - 300, 60))
         return token
 
-    async def graphql(self, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def graphql(
+        self,
+        query: str,
+        variables: Optional[Dict[str, Any]] = None,
+        *,
+        api_version: Optional[str] = None,
+    ) -> Dict[str, Any]:
         token = await self.get_access_token()
-        _, graphql_url, _ = self._urls()
+        version = (api_version or self.api_version).strip()
+        graphql_url = f"https://{self.store_domain}/admin/api/{version}/graphql.json"
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(

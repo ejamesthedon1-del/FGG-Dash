@@ -490,7 +490,7 @@ export function CombinedLiveStoresPanel() {
         {balances.loading ? (
           <div className="col-span-full flex items-center gap-2 rounded-2xl bg-white px-5 py-6 text-sm text-gray-500 shadow-sm">
             <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-            Loading Shopify balances…
+            Loading Shopify Balance…
           </div>
         ) : (
           <>
@@ -502,7 +502,7 @@ export function CombinedLiveStoresPanel() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                      Shopify balance
+                      Shopify Balance
                     </p>
                     <p className="mt-1 text-sm font-semibold text-gray-900">{row.label}</p>
                   </div>
@@ -523,9 +523,7 @@ export function CombinedLiveStoresPanel() {
                       )}
                     </p>
                     <p className="mt-1 text-xs text-gray-500">
-                      {row.data.activated
-                        ? "Current Shopify Payments balance"
-                        : "Setup incomplete"}
+                      Bank account available balance
                     </p>
                   </>
                 )}
@@ -535,7 +533,7 @@ export function CombinedLiveStoresPanel() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-medium uppercase tracking-wide text-blue-100">
-                    Combined balance
+                    Combined Balance
                   </p>
                   <p className="mt-1 text-sm font-semibold text-white">All stores</p>
                 </div>
@@ -546,7 +544,7 @@ export function CombinedLiveStoresPanel() {
               <p className="mt-4 text-2xl font-bold tracking-tight">
                 {money(balanceTotal)}
               </p>
-              <p className="mt-1 text-xs text-blue-100">Current account balances · USD</p>
+              <p className="mt-1 text-xs text-blue-100">Shopify Balance bank accounts · USD</p>
             </div>
           </>
         )}
