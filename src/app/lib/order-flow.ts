@@ -50,6 +50,20 @@ export type BlanksReceipt = {
   uploadedAt?: string;
 };
 
+export type RiskRecommendation = "NONE" | "ACCEPT" | "INVESTIGATE" | "CANCEL" | string;
+export type RiskLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH" | "PENDING" | string;
+export type RiskStatus = "approved" | "denied";
+
+export type RiskReviewDecision = {
+  status: RiskStatus;
+  note?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  shopifyCancelOk?: boolean;
+  shopifyError?: string;
+  snapshot?: Record<string, unknown>;
+};
+
 export type OrderFlowOrder = {
   id: string;
   brand: string;
@@ -76,6 +90,7 @@ export type OrderFlowOrder = {
   stageLabel: string;
   shopifyFinancialStatus?: string;
   shopifyFulfillmentStatus?: string;
+  cancelledAt?: string | null;
   notes: string;
   blanksReceipt?: BlanksReceipt | null;
   history: OrderFlowHistoryEntry[];
@@ -83,7 +98,15 @@ export type OrderFlowOrder = {
   tags?: string[];
   total?: { amount: number; currency: string };
   shippingAddress?: Record<string, string>;
+  billingAddress?: Record<string, string>;
   updatedAt?: string;
+  riskRecommendation?: RiskRecommendation;
+  riskLevel?: RiskLevel;
+  riskFacts?: string[];
+  needsRiskReview?: boolean;
+  riskStatus?: RiskStatus | null;
+  riskReview?: RiskReviewDecision | null;
+  riskPendingHold?: boolean;
 };
 
 export type OrderFlowStageCount = {
@@ -92,11 +115,19 @@ export type OrderFlowStageCount = {
   count: number;
 };
 
+export type OrderFlowRiskQueue = {
+  pending: OrderFlowOrder[];
+  approved: OrderFlowOrder[];
+  denied: OrderFlowOrder[];
+  pendingCount: number;
+};
+
 export type OrderFlowResponse = {
   generatedAt: string;
   today: string;
   stages: OrderFlowStageCount[];
   orders: OrderFlowOrder[];
+  riskQueue?: OrderFlowRiskQueue;
   errors?: Record<string, string>;
 };
 
@@ -189,7 +220,78 @@ export async function fetchOrderFlow(params?: {
   const enriched = sortByPriority(
     (data.orders || []).map((o) => withOrderPriority(o, data.today)),
   );
-  return { ...data, orders: enriched };
+  const riskQueue: OrderFlowRiskQueue = {
+    pending: (data.riskQueue?.pending || []).map((o) => withOrderPriority(o, data.today)),
+    approved: (data.riskQueue?.approved || []).map((o) => withOrderPriority(o, data.today)),
+    denied: (data.riskQueue?.denied || []).map((o) => withOrderPriority(o, data.today)),
+    pendingCount: data.riskQueue?.pendingCount ?? data.riskQueue?.pending?.length ?? 0,
+  };
+  return { ...data, orders: enriched, riskQueue };
+}
+
+function riskSnapshot(order: OrderFlowOrder): Record<string, unknown> {
+  return {
+    orderNumber: order.orderNumber,
+    customer: order.customer,
+    email: order.email,
+    phone: order.phone,
+    product: order.product,
+    variant: order.variant,
+    color: order.color,
+    size: order.size,
+    quantity: order.quantity,
+    lineItems: order.lineItems,
+    orderDate: order.orderDate,
+    orderDateTime: order.orderDateTime,
+    orderAgeDays: order.orderAgeDays,
+    shopifyFinancialStatus: order.shopifyFinancialStatus,
+    shopifyFulfillmentStatus: order.shopifyFulfillmentStatus,
+    cancelledAt: order.cancelledAt,
+    tags: order.tags,
+    total: order.total,
+    shippingAddress: order.shippingAddress,
+    billingAddress: order.billingAddress,
+    riskRecommendation: order.riskRecommendation,
+    riskLevel: order.riskLevel,
+    riskFacts: order.riskFacts,
+  };
+}
+
+async function postRiskDecision(
+  path: "/api/order-flow/risk/approve" | "/api/order-flow/risk/deny",
+  order: OrderFlowOrder,
+  note: string,
+): Promise<void> {
+  const res = await fetch(apiUrl(path), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      brand: order.brand,
+      shopifyOrderId: order.id,
+      orderName: order.orderNumber,
+      note,
+      actor: "ops",
+      snapshot: riskSnapshot(order),
+    }),
+  });
+  if (!res.ok) {
+    let detail = `Risk decision failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+}
+
+export async function approveRiskOrder(order: OrderFlowOrder, note = ""): Promise<void> {
+  await postRiskDecision("/api/order-flow/risk/approve", order, note);
+}
+
+export async function denyRiskOrder(order: OrderFlowOrder, note = ""): Promise<void> {
+  await postRiskDecision("/api/order-flow/risk/deny", order, note);
 }
 
 export async function updateOrderFlowStatus(

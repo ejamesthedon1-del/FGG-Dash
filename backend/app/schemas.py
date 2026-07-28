@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -48,3 +48,12 @@ class OrderFlowNotesUpdateRequest(BaseModel):
     brand: str = Field(..., min_length=1)
     shopifyOrderId: str = Field(..., min_length=1)
     notes: str = ""
+
+
+class OrderFlowRiskDecisionRequest(BaseModel):
+    brand: str = Field(..., min_length=1)
+    shopifyOrderId: str = Field(..., min_length=1)
+    orderName: Optional[str] = None
+    note: str = ""
+    actor: str = "ops"
+    snapshot: Optional[Dict[str, Any]] = None

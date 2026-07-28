@@ -50,14 +50,36 @@ query OrderFlowOrders($queryString: String!, $cursor: String) {{
         }}
         shippingAddress {{
           name
+          address1
+          address2
           city
           provinceCode
           countryCodeV2
+          zip
+        }}
+        billingAddress {{
+          name
+          address1
+          address2
+          city
+          provinceCode
+          countryCodeV2
+          zip
         }}
         currentTotalPriceSet {{
           shopMoney {{
             amount
             currencyCode
+          }}
+        }}
+        risk {{
+          recommendation
+          assessments {{
+            riskLevel
+            facts {{
+              description
+              sentiment
+            }}
           }}
         }}
         lineItems(first: 50) {{
@@ -88,6 +110,46 @@ query OrderFlowOrders($queryString: String!, $cursor: String) {{
   }}
 }}
 """
+
+
+_RISK_LEVEL_RANK = {
+    "HIGH": 3,
+    "MEDIUM": 2,
+    "LOW": 1,
+    "NONE": 0,
+    "PENDING": 0,
+}
+
+
+def _extract_risk(node: Dict[str, Any]) -> Dict[str, Any]:
+    risk = node.get("risk") or {}
+    recommendation = str(risk.get("recommendation") or "NONE").upper()
+    facts: List[str] = []
+    highest = "NONE"
+    highest_rank = -1
+    for assessment in risk.get("assessments") or []:
+        if not isinstance(assessment, dict):
+            continue
+        level = str(assessment.get("riskLevel") or "NONE").upper()
+        rank = _RISK_LEVEL_RANK.get(level, 0)
+        if rank > highest_rank:
+            highest_rank = rank
+            highest = level
+        for fact in assessment.get("facts") or []:
+            if not isinstance(fact, dict):
+                continue
+            desc = str(fact.get("description") or "").strip()
+            if desc and desc not in facts:
+                facts.append(desc)
+            if len(facts) >= 12:
+                break
+    needs_review = recommendation in {"INVESTIGATE", "CANCEL"} or highest == "HIGH"
+    return {
+        "riskRecommendation": recommendation,
+        "riskLevel": highest,
+        "riskFacts": facts,
+        "needsRiskReview": needs_review,
+    }
 
 
 def _parse_option(options: List[Dict[str, Any]], *names: str) -> Optional[str]:
@@ -214,7 +276,7 @@ def _primary_item_summary(items: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 async def fetch_brand_orders(brand: str, days: int = 90) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    """Fetch recent non-cancelled orders for a brand. Returns (nodes, error)."""
+    """Fetch recent orders for a brand (includes cancelled for denied queue). Returns (nodes, error)."""
     try:
         client = get_shopify_client(brand)
     except RuntimeError as exc:
@@ -234,9 +296,8 @@ async def fetch_brand_orders(brand: str, days: int = 90) -> Tuple[List[Dict[str,
             block = data.get("orders") or {}
             for edge in block.get("edges") or []:
                 node = edge.get("node") or {}
-                if node.get("cancelledAt"):
-                    continue
-                nodes.append(node)
+                if node.get("id"):
+                    nodes.append(node)
             page = block.get("pageInfo") or {}
             if not page.get("hasNextPage"):
                 break
@@ -273,11 +334,25 @@ def merge_order(
     money = ((node.get("currentTotalPriceSet") or {}).get("shopMoney")) or {}
     order_date = str(node.get("createdAt") or "")[:10]
     age_days = _order_age_days(order_date, today)
-    open_order = stage != "shipped"
+    open_order = stage != "shipped" and not node.get("cancelledAt")
     # Open orders older than 7 days are high priority (red).
     high_priority = open_order and age_days > 7
     # Day 3–7: early warning before late/high priority.
     early_warning = open_order and not high_priority and age_days >= 3
+
+    risk = _extract_risk(node)
+    risk_review = order_flow_store.get_risk_review(record)
+    risk_status = None
+    if isinstance(risk_review, dict):
+        status = str(risk_review.get("status") or "").lower()
+        if status in {"approved", "denied"}:
+            risk_status = status
+
+    pending_hold = bool(
+        risk["needsRiskReview"]
+        and risk_status is None
+        and not node.get("cancelledAt")
+    )
 
     return {
         "id": shopify_id,
@@ -304,6 +379,7 @@ def merge_order(
         "stageLabel": STAGE_LABELS.get(stage, stage),
         "shopifyFinancialStatus": node.get("displayFinancialStatus"),
         "shopifyFulfillmentStatus": fulfillment,
+        "cancelledAt": node.get("cancelledAt"),
         "autoShippedFromShopify": auto_shipped,
         "notes": record.get("notes") or "",
         "blanksReceipt": order_flow_store.get_blanks_receipt(record),
@@ -315,7 +391,65 @@ def merge_order(
             "currency": money.get("currencyCode") or "USD",
         },
         "shippingAddress": node.get("shippingAddress") or {},
+        "billingAddress": node.get("billingAddress") or {},
         "updatedAt": record.get("updatedAt"),
+        "riskRecommendation": risk["riskRecommendation"],
+        "riskLevel": risk["riskLevel"],
+        "riskFacts": risk["riskFacts"],
+        "needsRiskReview": risk["needsRiskReview"],
+        "riskStatus": risk_status,
+        "riskReview": risk_review,
+        "riskPendingHold": pending_hold,
+    }
+
+
+def _order_from_denied_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a lightweight order card from a stored denied decision."""
+    brand = str(record.get("brand") or "")
+    review = order_flow_store.get_risk_review(record) or {}
+    snapshot = review.get("snapshot") if isinstance(review.get("snapshot"), dict) else {}
+    return {
+        "id": record.get("shopifyOrderId") or "",
+        "brand": brand,
+        "brandLabel": BRAND_LABELS.get(brand, brand),
+        "orderNumber": snapshot.get("orderNumber") or record.get("orderName") or "—",
+        "customer": snapshot.get("customer") or "—",
+        "email": snapshot.get("email") or "",
+        "phone": snapshot.get("phone") or "",
+        "product": snapshot.get("product") or "—",
+        "variant": snapshot.get("variant") or "—",
+        "color": snapshot.get("color") or "—",
+        "size": snapshot.get("size") or "—",
+        "quantity": snapshot.get("quantity") or 0,
+        "lineItems": snapshot.get("lineItems") or [],
+        "orderDate": snapshot.get("orderDate") or "",
+        "orderDateTime": snapshot.get("orderDateTime"),
+        "orderAgeDays": snapshot.get("orderAgeDays") or 0,
+        "highPriority": False,
+        "earlyWarning": False,
+        "expectedShipDate": None,
+        "deadlineState": "none",
+        "stage": "needs_blanks",
+        "stageLabel": STAGE_LABELS["needs_blanks"],
+        "shopifyFinancialStatus": snapshot.get("shopifyFinancialStatus"),
+        "shopifyFulfillmentStatus": snapshot.get("shopifyFulfillmentStatus"),
+        "cancelledAt": snapshot.get("cancelledAt") or review.get("decidedAt"),
+        "notes": record.get("notes") or "",
+        "blanksReceipt": None,
+        "history": record.get("history") or [],
+        "shopifyNote": "",
+        "tags": snapshot.get("tags") or [],
+        "total": snapshot.get("total") or {"amount": 0, "currency": "USD"},
+        "shippingAddress": snapshot.get("shippingAddress") or {},
+        "billingAddress": snapshot.get("billingAddress") or {},
+        "updatedAt": record.get("updatedAt"),
+        "riskRecommendation": snapshot.get("riskRecommendation") or "CANCEL",
+        "riskLevel": snapshot.get("riskLevel") or "HIGH",
+        "riskFacts": snapshot.get("riskFacts") or [],
+        "needsRiskReview": True,
+        "riskStatus": "denied",
+        "riskReview": review,
+        "riskPendingHold": False,
     }
 
 
@@ -339,8 +473,9 @@ async def build_order_flow(
         else:
             brands = (key,)
 
-    orders: List[Dict[str, Any]] = []
+    all_merged: List[Dict[str, Any]] = []
     errors: Dict[str, str] = {}
+    seen_ids: set[str] = set()
 
     for brand in brands:
         nodes, err = await fetch_brand_orders(brand, days=days)
@@ -348,7 +483,7 @@ async def build_order_flow(
             errors[brand] = err
         for node in nodes:
             merged = merge_order(brand, node, stored, today)
-            if persist_auto_shipped and merged.get("autoShippedFromShopify"):
+            if persist_auto_shipped and merged.get("autoShippedFromShopify") and not merged.get("cancelledAt"):
                 try:
                     order_flow_store.upsert_stage(
                         brand,
@@ -357,14 +492,50 @@ async def build_order_flow(
                         actor="shopify",
                         order_name=merged["orderNumber"],
                     )
-                    # refresh history/notes from store
                     rec = order_flow_store.get_record(brand, merged["id"]) or {}
                     merged["history"] = rec.get("history") or merged["history"]
                     merged["updatedAt"] = rec.get("updatedAt")
                     merged["autoShippedFromShopify"] = False
                 except Exception:
                     pass
-            orders.append(merged)
+            all_merged.append(merged)
+            seen_ids.add(f"{brand}::{merged['id']}")
+
+    # Denied decisions that dropped out of the Shopify window still appear in the queue.
+    for key, record in stored.items():
+        if not isinstance(record, dict):
+            continue
+        review = order_flow_store.get_risk_review(record)
+        if not review or str(review.get("status") or "").lower() != "denied":
+            continue
+        brand = str(record.get("brand") or "")
+        if brands and brand not in brands:
+            continue
+        rid = str(record.get("shopifyOrderId") or "")
+        store_key = f"{brand}::{rid}"
+        if store_key in seen_ids:
+            continue
+        all_merged.append(_order_from_denied_record(record))
+
+    pending: List[Dict[str, Any]] = []
+    approved: List[Dict[str, Any]] = []
+    denied: List[Dict[str, Any]] = []
+    production: List[Dict[str, Any]] = []
+
+    for o in all_merged:
+        status = o.get("riskStatus")
+        if status == "denied" or (o.get("cancelledAt") and status == "denied"):
+            denied.append(o)
+            continue
+        if o.get("cancelledAt"):
+            # Cancelled without our deny decision — skip production & pending
+            continue
+        if o.get("riskPendingHold"):
+            pending.append(o)
+            continue
+        if status == "approved":
+            approved.append(o)
+        production.append(o)
 
     # Sort: open first, then 7+ day high priority, then 3+ day early warning, then deadlines
     priority = {"overdue": 0, "due_today": 1, "upcoming": 2, "ok": 3, "none": 4}
@@ -379,14 +550,25 @@ async def build_order_flow(
             o.get("orderDateTime") or "",
         )
 
-    orders.sort(key=sort_key)
+    def sort_risk(o: Dict[str, Any]):
+        level_rank = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "NONE": 3}.get(str(o.get("riskLevel") or ""), 9)
+        rec_rank = {"CANCEL": 0, "INVESTIGATE": 1, "ACCEPT": 2, "NONE": 3}.get(
+            str(o.get("riskRecommendation") or ""), 9
+        )
+        return (rec_rank, level_rank, o.get("orderDateTime") or "")
+
+    production.sort(key=sort_key)
+    pending.sort(key=sort_risk)
+    approved.sort(key=sort_key)
+    denied.sort(key=lambda o: o.get("riskReview", {}).get("decidedAt") or o.get("cancelledAt") or "", reverse=True)
 
     counts = {stage: 0 for stage in order_flow_store.STAGES}
-    for o in orders:
+    for o in production:
         counts[o["stage"]] = counts.get(o["stage"], 0) + 1
 
+    orders = production
     if stage_filter and stage_filter != "all":
-        orders = [o for o in orders if o["stage"] == stage_filter]
+        orders = [o for o in production if o["stage"] == stage_filter]
 
     return {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -400,5 +582,11 @@ async def build_order_flow(
             for s in order_flow_store.STAGES
         ],
         "orders": orders,
+        "riskQueue": {
+            "pending": pending,
+            "approved": approved,
+            "denied": denied,
+            "pendingCount": len(pending),
+        },
         "errors": errors,
     }

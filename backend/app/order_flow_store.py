@@ -99,6 +99,32 @@ def get_blanks_receipt(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return _extract_blanks_receipt(record)
 
 
+def _extract_risk_review(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    review = record.get("riskReview")
+    if isinstance(review, dict) and str(review.get("status") or "").lower() in {
+        "approved",
+        "denied",
+    }:
+        return review
+    history = record.get("history") or []
+    if not isinstance(history, list):
+        return None
+    for entry in reversed(history):
+        if not isinstance(entry, dict):
+            continue
+        nested = entry.get("riskReview")
+        if isinstance(nested, dict) and str(nested.get("status") or "").lower() in {
+            "approved",
+            "denied",
+        }:
+            return nested
+    return None
+
+
+def get_risk_review(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    return _extract_risk_review(record)
+
+
 def _normalize_blanks_receipt(value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not isinstance(value, dict):
         return None
@@ -138,11 +164,34 @@ def _row_to_record(row: Dict[str, Any]) -> Dict[str, Any]:
     receipt = _extract_blanks_receipt(record)
     if receipt:
         record["blanksReceipt"] = receipt
+    risk = _extract_risk_review(record)
+    if risk:
+        record["riskReview"] = risk
     return record
 
 
 def _record_to_row(record: Dict[str, Any], record_id: str) -> Dict[str, Any]:
-    # blanksReceipt lives inside history so no schema migration is required.
+    # blanksReceipt + riskReview live inside history so no schema migration is required.
+    history = list(record.get("history") or [])
+    risk = _extract_risk_review(record)
+    if risk:
+        # Ensure latest risk decision is present in history for durable storage.
+        last = history[-1] if history else None
+        if not (
+            isinstance(last, dict)
+            and isinstance(last.get("riskReview"), dict)
+            and last["riskReview"].get("status") == risk.get("status")
+            and last["riskReview"].get("decidedAt") == risk.get("decidedAt")
+        ):
+            history.append(
+                {
+                    "stage": record.get("stage") or "needs_blanks",
+                    "at": risk.get("decidedAt") or _now(),
+                    "by": risk.get("decidedBy") or "ops",
+                    "from": record.get("stage"),
+                    "riskReview": risk,
+                }
+            )
     return {
         "id": record_id,
         "brand": record["brand"],
@@ -150,7 +199,7 @@ def _record_to_row(record: Dict[str, Any], record_id: str) -> Dict[str, Any]:
         "order_name": record.get("orderName") or "",
         "stage": record["stage"],
         "notes": record.get("notes") or "",
-        "history": record.get("history") or [],
+        "history": history[-100:],
         "updated_at": record.get("updatedAt") or _now(),
         "created_at": record.get("createdAt") or _now(),
     }
@@ -332,6 +381,7 @@ def upsert_stage(
         )
 
     existing_receipt = _extract_blanks_receipt(existing)
+    existing_risk = _extract_risk_review(existing)
     record = {
         "brand": brand,
         "shopifyOrderId": shopify_order_id,
@@ -343,6 +393,8 @@ def upsert_stage(
         "createdAt": existing.get("createdAt") or now,
         "blanksReceipt": receipt or existing_receipt,
     }
+    if existing_risk:
+        record["riskReview"] = existing_risk
     if not record.get("blanksReceipt"):
         record.pop("blanksReceipt", None)
 
@@ -397,3 +449,82 @@ def bulk_upsert_stage(
             )
         )
     return out
+
+
+def upsert_risk_review(
+    brand: str,
+    shopify_order_id: str,
+    *,
+    status: str,
+    note: str = "",
+    actor: str = "ops",
+    order_name: Optional[str] = None,
+    snapshot: Optional[Dict[str, Any]] = None,
+    shopify_cancel_ok: Optional[bool] = None,
+    shopify_error: Optional[str] = None,
+    stage: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Persist approve/deny decision inside history (no schema migration)."""
+    status_norm = (status or "").strip().lower()
+    if status_norm not in {"approved", "denied"}:
+        raise ValueError("Risk status must be approved or denied")
+
+    key = _record_key(brand, shopify_order_id)
+    now = _now()
+    existing = get_record(brand, shopify_order_id) or {}
+    history: List[Dict[str, Any]] = list(existing.get("history") or [])
+    next_stage = normalize_stage(stage or existing.get("stage") or "needs_blanks")
+
+    review: Dict[str, Any] = {
+        "status": status_norm,
+        "note": (note or "").strip()[:2000],
+        "decidedBy": actor,
+        "decidedAt": now,
+    }
+    if snapshot:
+        review["snapshot"] = snapshot
+    if shopify_cancel_ok is not None:
+        review["shopifyCancelOk"] = bool(shopify_cancel_ok)
+    if shopify_error:
+        review["shopifyError"] = str(shopify_error)[:800]
+
+    history.append(
+        {
+            "stage": next_stage,
+            "at": now,
+            "by": actor,
+            "from": existing.get("stage"),
+            "riskReview": review,
+        }
+    )
+
+    receipt = _extract_blanks_receipt(existing)
+    record = {
+        "brand": brand,
+        "shopifyOrderId": shopify_order_id,
+        "orderName": order_name or existing.get("orderName") or "",
+        "stage": next_stage,
+        "notes": existing.get("notes") or "",
+        "history": history[-100:],
+        "updatedAt": now,
+        "createdAt": existing.get("createdAt") or now,
+        "riskReview": review,
+    }
+    if receipt:
+        record["blanksReceipt"] = receipt
+
+    cfg = _supabase_config()
+    if cfg:
+        saved = _upsert_supabase(*cfg, record, key)
+        try:
+            data = _load_all_file()
+            data.setdefault("orders", {})[key] = saved
+            _write_all_file(data)
+        except Exception:
+            pass
+        return saved
+
+    data = _load_all_file()
+    data.setdefault("orders", {})[key] = record
+    _write_all_file(data)
+    return record

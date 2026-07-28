@@ -10,6 +10,7 @@ import {
   updateOrderFlowStatus,
   type BlanksReceipt,
   type OrderFlowOrder,
+  type OrderFlowRiskQueue,
   type OrderFlowStage,
   type OrderFlowStageCount,
 } from "../lib/order-flow";
@@ -49,7 +50,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "./ui/utils";
+import { OrderFlowRiskReviewSection } from "./OrderFlowRiskReviewSection";
 import { buildBlanksPrintHtml, printBlanksSlip } from "../lib/blanks-print-slip";
 import {
   Calendar,
@@ -72,6 +75,13 @@ import { toast } from "sonner";
 
 type BrandFilter = "all" | "live-don" | "sinners-testimony";
 type StageFilter = OrderFlowStage;
+
+const EMPTY_RISK_QUEUE: OrderFlowRiskQueue = {
+  pending: [],
+  approved: [],
+  denied: [],
+  pendingCount: 0,
+};
 
 function deadlineClass(state: OrderFlowOrder["deadlineState"]) {
   switch (state) {
@@ -191,6 +201,8 @@ export function OrderFlowPage() {
   const [saving, setSaving] = useState(false);
   const [stages, setStages] = useState<OrderFlowStageCount[]>([]);
   const [orders, setOrders] = useState<OrderFlowOrder[]>([]);
+  const [riskQueue, setRiskQueue] = useState<OrderFlowRiskQueue>(EMPTY_RISK_QUEUE);
+  const [boardTab, setBoardTab] = useState<"production" | "risk">("production");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [detail, setDetail] = useState<OrderFlowOrder | null>(null);
@@ -226,6 +238,7 @@ export function OrderFlowPage() {
 
       setStages(data.stages);
       setOrders(data.orders);
+      setRiskQueue(data.riskQueue || EMPTY_RISK_QUEUE);
       setErrors(data.errors || {});
       if (!opts?.preserveSelection) {
         // Drop selections for orders that are no longer in the loaded set.
@@ -458,7 +471,7 @@ export function OrderFlowPage() {
           </p>
           <h2 className="mt-1 text-2xl font-semibold text-gray-900">Order Flow</h2>
           <p className="mt-1 text-gray-600">
-            Track orders through blanks, production, and ship.
+            Review high-risk Shopify orders, then track production through blanks and ship.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -479,6 +492,44 @@ export function OrderFlowPage() {
         </div>
       </div>
 
+      {Object.keys(errors).length > 0 ? (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="py-3 text-sm text-amber-900">
+            {Object.entries(errors).map(([b, msg]) => (
+              <p key={b}>
+                <span className="font-medium">{b}:</span> {msg}
+              </p>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Tabs
+        value={boardTab}
+        onValueChange={(v) => setBoardTab(v === "risk" ? "risk" : "production")}
+        className="gap-4"
+      >
+        <TabsList>
+          <TabsTrigger value="production">Production</TabsTrigger>
+          <TabsTrigger value="risk" className="gap-2">
+            Risk review
+            {riskQueue.pendingCount > 0 ? (
+              <span className="rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                {riskQueue.pendingCount}
+              </span>
+            ) : null}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="risk" className="outline-none">
+          <OrderFlowRiskReviewSection
+            riskQueue={riskQueue}
+            busy={loading}
+            onChanged={() => load({ preserveSelection: true })}
+          />
+        </TabsContent>
+
+        <TabsContent value="production" className="space-y-6 outline-none">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {(stages.length
           ? stages.filter((s) => s.id !== "all")
@@ -509,18 +560,6 @@ export function OrderFlowPage() {
           );
         })}
       </div>
-
-      {Object.keys(errors).length > 0 ? (
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardContent className="py-3 text-sm text-amber-900">
-            {Object.entries(errors).map(([b, msg]) => (
-              <p key={b}>
-                <span className="font-medium">{b}:</span> {msg}
-              </p>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
         <Button
@@ -715,6 +754,8 @@ export function OrderFlowPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={blanksSlipOpen} onOpenChange={setBlanksSlipOpen}>
         <DialogContent className="flex h-[90vh] max-w-4xl flex-col gap-3 overflow-hidden p-4 sm:p-6">

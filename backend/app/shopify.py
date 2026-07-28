@@ -169,3 +169,72 @@ shopify_client = None  # set after settings load via get_shopify_client
 
 def default_shopify_client() -> ShopifyClient:
     return get_shopify_client("live-don")
+
+
+ORDER_CANCEL_MUTATION = """
+mutation OrderCancel(
+  $orderId: ID!
+  $notifyCustomer: Boolean
+  $refundMethod: OrderCancelRefundMethodInput!
+  $restock: Boolean!
+  $reason: OrderCancelReason!
+  $staffNote: String
+) {
+  orderCancel(
+    orderId: $orderId
+    notifyCustomer: $notifyCustomer
+    refundMethod: $refundMethod
+    restock: $restock
+    reason: $reason
+    staffNote: $staffNote
+  ) {
+    job {
+      id
+      done
+    }
+    orderCancelUserErrors {
+      field
+      message
+      code
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+"""
+
+
+async def cancel_order_for_fraud(
+    brand: str,
+    shopify_order_id: str,
+    *,
+    staff_note: str = "",
+) -> Dict[str, Any]:
+    """
+    Cancel an order in Shopify as fraud.
+
+    Requires the Shopify app `write_orders` scope. Returns the mutation payload.
+    Raises ShopifyGraphQLError / RuntimeError on failure.
+    """
+    client = get_shopify_client(brand)
+    data = await client.graphql(
+        ORDER_CANCEL_MUTATION,
+        {
+            "orderId": shopify_order_id,
+            "notifyCustomer": False,
+            "refundMethod": {"originalPaymentMethodsRefund": True},
+            "restock": True,
+            "reason": "FRAUD",
+            "staffNote": (staff_note or "Denied in FGG Risk review")[:255],
+        },
+    )
+    block = data.get("orderCancel") or {}
+    user_errors = list(block.get("orderCancelUserErrors") or []) + list(block.get("userErrors") or [])
+    if user_errors:
+        messages = "; ".join(
+            str(e.get("message") or e) for e in user_errors if isinstance(e, dict) or e
+        )
+        raise ShopifyGraphQLError(messages or "Shopify orderCancel failed")
+    return block

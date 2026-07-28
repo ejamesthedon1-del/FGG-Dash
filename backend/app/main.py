@@ -10,13 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .schemas import (
     OrderFlowNotesUpdateRequest,
+    OrderFlowRiskDecisionRequest,
     OrderFlowStatusUpdateRequest,
     ProductCostsPutRequest,
     ProductCreateRequest,
     ProductRenameRequest,
     ShopifyqlRequest,
 )
-from .shopify import ShopifyGraphQLError, get_shopify_client
+from .shopify import ShopifyGraphQLError, cancel_order_for_fraud, get_shopify_client
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
 from . import mockups, order_flow_store, product_costs_store
@@ -266,6 +267,83 @@ async def post_order_flow_notes(body: OrderFlowNotesUpdateRequest) -> dict:
     brand_key = resolve_brand(body.brand)
     record = order_flow_store.update_notes(brand_key, body.shopifyOrderId, body.notes)
     return {"ok": True, "record": record}
+
+
+@app.post("/api/order-flow/risk/approve")
+async def post_order_flow_risk_approve(body: OrderFlowRiskDecisionRequest) -> dict:
+    """Approve a high-risk order — releases it into production Order Flow."""
+    brand_key = resolve_brand(body.brand)
+    existing = order_flow_store.get_record(brand_key, body.shopifyOrderId) or {}
+    # Keep existing stage if already progressed; otherwise start at needs_blanks.
+    stage = order_flow_store.normalize_stage(existing.get("stage") or "needs_blanks")
+    try:
+        record = order_flow_store.upsert_risk_review(
+            brand_key,
+            body.shopifyOrderId,
+            status="approved",
+            note=body.note,
+            actor=(body.actor or "ops").strip() or "ops",
+            order_name=body.orderName or existing.get("orderName"),
+            snapshot=body.snapshot,
+            stage=stage,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not save approval: {exc}") from exc
+    return {"ok": True, "record": record}
+
+
+@app.post("/api/order-flow/risk/deny")
+async def post_order_flow_risk_deny(body: OrderFlowRiskDecisionRequest) -> dict:
+    """
+    Deny a high-risk order — cancels & refunds in Shopify (requires write_orders),
+    then records the decision in FGG.
+    """
+    brand_key = resolve_brand(body.brand)
+    existing = order_flow_store.get_record(brand_key, body.shopifyOrderId) or {}
+    staff_note = (body.note or "").strip() or "Denied in FGG Risk review"
+    try:
+        cancel_payload = await cancel_order_for_fraud(
+            brand_key,
+            body.shopifyOrderId,
+            staff_note=staff_note,
+        )
+    except ShopifyGraphQLError as exc:
+        detail = str(exc)
+        if "ACCESS" in detail.upper() or "scope" in detail.lower() or "denied" in detail.lower():
+            detail = (
+                f"{detail} — Ensure the Shopify app has the write_orders access scope, "
+                "then reinstall/reconnect the app."
+            )
+        raise HTTPException(status_code=502, detail=detail) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Shopify cancel failed: {exc}",
+        ) from exc
+
+    try:
+        record = order_flow_store.upsert_risk_review(
+            brand_key,
+            body.shopifyOrderId,
+            status="denied",
+            note=body.note,
+            actor=(body.actor or "ops").strip() or "ops",
+            order_name=body.orderName or existing.get("orderName"),
+            snapshot=body.snapshot,
+            shopify_cancel_ok=True,
+            stage=existing.get("stage") or "needs_blanks",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Order was cancelled in Shopify, but saving the FGG decision failed: "
+                f"{exc}"
+            ),
+        ) from exc
+    return {"ok": True, "record": record, "shopify": cancel_payload}
 
 
 @app.post("/api/slack/test")
