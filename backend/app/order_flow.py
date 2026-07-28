@@ -143,7 +143,8 @@ def _extract_risk(node: Dict[str, Any]) -> Dict[str, Any]:
                 facts.append(desc)
             if len(facts) >= 12:
                 break
-    needs_review = recommendation in {"INVESTIGATE", "CANCEL"} or highest == "HIGH"
+    # Only HIGH risk enters the review queue (not MEDIUM / INVESTIGATE-only).
+    needs_review = highest == "HIGH"
     return {
         "riskRecommendation": recommendation,
         "riskLevel": highest,

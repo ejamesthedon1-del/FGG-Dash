@@ -34,7 +34,7 @@ type RiskFilter = "pending" | "approved" | "denied";
 const DECISION_GUIDE = [
   "Compare shipping vs billing name/address — mismatch is a caution signal.",
   "New customer + high order value needs extra scrutiny.",
-  "Read Shopify risk facts. If Shopify recommends Cancel, default to Deny unless you have a clear legitimate signal.",
+  "Read Shopify risk facts. High risk usually means Deny unless you have a clear legitimate signal.",
   "Suspicious email, phone, or rush shipping to a different country = caution.",
   "When unsure: Deny (safer) or ask the CEO — never fulfill a pending risk order.",
   "Approve only when the customer and payment look legitimate and the facts support it.",
