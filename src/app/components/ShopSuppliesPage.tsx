@@ -38,8 +38,22 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "./ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import { cn } from "./ui/utils";
-import { ImagePlus, Minus, Package, Plus, Trash2 } from "lucide-react";
+import { ImagePlus, MoreHorizontal, Package, Trash2 } from "lucide-react";
 
 type CategoryFilter = "all" | SupplyCategory;
 
@@ -56,9 +70,9 @@ function MaterialPhotoThumb({
 }: {
   photoDataUrl?: string;
   name: string;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
 }) {
-  const dim = size === "sm" ? "h-9 w-9" : "h-12 w-12";
+  const dim = size === "sm" ? "h-9 w-9" : size === "lg" ? "h-20 w-20" : "h-12 w-12";
   if (photoDataUrl) {
     return (
       <img
@@ -77,7 +91,7 @@ function MaterialPhotoThumb({
       aria-hidden
       title={name}
     >
-      <Package className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
+      <Package className={size === "lg" ? "h-6 w-6" : size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
     </div>
   );
 }
@@ -102,8 +116,14 @@ export function ShopSuppliesPage() {
   const [matUnit, setMatUnit] = useState<SupplyUnit>("ea");
   const [matPhoto, setMatPhoto] = useState<string | null>(null);
   const addPhotoInputRef = useRef<HTMLInputElement>(null);
-  const rowPhotoInputRef = useRef<HTMLInputElement>(null);
-  const [photoTargetId, setPhotoTargetId] = useState<string | null>(null);
+  const detailPhotoInputRef = useRef<HTMLInputElement>(null);
+  const [detailMaterialId, setDetailMaterialId] = useState<string | null>(null);
+  const [receiveQty, setReceiveQty] = useState("10");
+  const [editName, setEditName] = useState("");
+  const [editCategory, setEditCategory] = useState<SupplyCategory>("other");
+  const [editLow, setEditLow] = useState("10");
+  const [editUnit, setEditUnit] = useState<SupplyUnit>("ea");
+  const [editOnHand, setEditOnHand] = useState("0");
 
   // Recipe form
   const [recipeProductId, setRecipeProductId] = useState("");
@@ -199,11 +219,25 @@ export function ShopSuppliesPage() {
     }
   };
 
-  const onPickRowPhoto = async (file: File | null) => {
-    if (!file || !photoTargetId) return;
+  const openMaterialDetail = (material: SupplyMaterial) => {
+    setDetailMaterialId(material.id);
+    setReceiveQty("10");
+    setEditName(material.name);
+    setEditCategory(material.category);
+    setEditLow(String(material.lowStockAt));
+    setEditUnit(material.unit);
+    setEditOnHand(String(material.qtyOnHand));
+  };
+
+  const detailMaterial = detailMaterialId
+    ? materialById(data, detailMaterialId) ?? null
+    : null;
+
+  const onPickDetailPhoto = async (file: File | null) => {
+    if (!file || !detailMaterialId) return;
     try {
       const dataUrl = await readSupplyPhoto(file);
-      setData(updateMaterial(brand, photoTargetId, { photoDataUrl: dataUrl }));
+      setData(updateMaterial(brand, detailMaterialId, { photoDataUrl: dataUrl }));
       toast.success("Photo updated");
     } catch (err) {
       if (err instanceof FileTooLargeError) {
@@ -212,9 +246,58 @@ export function ShopSuppliesPage() {
         toast.error(err instanceof Error ? err.message : "Could not read photo");
       }
     } finally {
-      setPhotoTargetId(null);
-      if (rowPhotoInputRef.current) rowPhotoInputRef.current.value = "";
+      if (detailPhotoInputRef.current) detailPhotoInputRef.current.value = "";
     }
+  };
+
+  const onReceiveStock = () => {
+    if (!detailMaterialId) return;
+    const n = Number(receiveQty);
+    if (!Number.isFinite(n) || n <= 0) {
+      toast.error("Enter how many were added");
+      return;
+    }
+    const next = adjustMaterialQty(brand, detailMaterialId, n, { type: "receive" });
+    setData(next);
+    const updated = next.materials.find((m) => m.id === detailMaterialId);
+    if (updated) setEditOnHand(String(updated.qtyOnHand));
+    toast.success(`Added ${n} to stock`);
+    setReceiveQty("10");
+  };
+
+  const onSaveMaterialEdits = () => {
+    if (!detailMaterialId) return;
+    if (!editName.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    const onHand = Number(editOnHand);
+    const low = Number(editLow);
+    if (!Number.isFinite(onHand) || onHand < 0) {
+      toast.error("Enter a valid on-hand quantity");
+      return;
+    }
+    if (!Number.isFinite(low) || low < 0) {
+      toast.error("Enter a valid low-stock threshold");
+      return;
+    }
+    setData(
+      updateMaterial(brand, detailMaterialId, {
+        name: editName,
+        category: editCategory,
+        qtyOnHand: onHand,
+        lowStockAt: low,
+        unit: editUnit,
+      }),
+    );
+    toast.success("Material updated");
+  };
+
+  const onDeleteMaterial = (material: SupplyMaterial) => {
+    if (!window.confirm(`Delete ${material.name}?`)) return;
+    setData(deleteMaterial(brand, material.id));
+    if (detailMaterialId === material.id) setDetailMaterialId(null);
+    toast.message("Material deleted");
   };
 
   const onSaveRecipe = () => {
@@ -394,11 +477,11 @@ export function ShopSuppliesPage() {
           </section>
 
           <input
-            ref={rowPhotoInputRef}
+            ref={detailPhotoInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp,image/gif"
             className="hidden"
-            onChange={(e) => void onPickRowPhoto(e.target.files?.[0] ?? null)}
+            onChange={(e) => void onPickDetailPhoto(e.target.files?.[0] ?? null)}
           />
 
           <div className="flex flex-wrap gap-2">
@@ -438,132 +521,66 @@ export function ShopSuppliesPage() {
                   key={m.id}
                   className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <MaterialPhotoThumb photoDataUrl={m.photoDataUrl} name={m.name} />
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-gray-950">{m.name}</p>
-                          <Badge variant="outline" className="text-xs">
-                            {SUPPLY_CATEGORY_LABELS[m.category]}
+                  <div className="flex items-start gap-3">
+                    <MaterialPhotoThumb photoDataUrl={m.photoDataUrl} name={m.name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-gray-950">{m.name}</p>
+                        <Badge variant="outline" className="text-xs">
+                          {SUPPLY_CATEGORY_LABELS[m.category]}
+                        </Badge>
+                        {isLowStock(m) ? (
+                          <Badge
+                            variant="outline"
+                            className="border-amber-300 bg-amber-50 text-xs text-amber-950"
+                          >
+                            Low stock
                           </Badge>
-                          {isLowStock(m) ? (
-                            <Badge
-                              variant="outline"
-                              className="border-amber-300 bg-amber-50 text-xs text-amber-950"
-                            >
-                              Low stock
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-sm text-gray-600">
-                          <span className="font-semibold tabular-nums text-gray-950">
-                            {m.qtyOnHand}
-                          </span>{" "}
-                          {m.unit} on hand · low at {m.lowStockAt}
-                        </p>
+                        ) : null}
                       </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      <Button
+                      <p className="mt-1 text-sm text-gray-600">
+                        <span className="font-semibold tabular-nums text-gray-950">
+                          {m.qtyOnHand}
+                        </span>{" "}
+                        {m.unit} on hand · low at {m.lowStockAt}
+                      </p>
+                      <button
                         type="button"
-                        size="sm"
-                        variant="tertiary"
-                        className="gap-1"
-                        onClick={() => {
-                          setPhotoTargetId(m.id);
-                          rowPhotoInputRef.current?.click();
-                        }}
+                        className="mt-1.5 text-xs font-medium text-brand underline-offset-2 hover:underline"
+                        onClick={() => openMaterialDetail(m)}
                       >
-                        <ImagePlus className="h-3.5 w-3.5" />
-                        {m.photoDataUrl ? "Change photo" : "Add photo"}
-                      </Button>
-                      {m.photoDataUrl ? (
+                        Manage stock
+                      </button>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
                         <Button
                           type="button"
-                          size="sm"
+                          size="icon"
                           variant="tertiary"
-                          onClick={() => {
-                            setData(updateMaterial(brand, m.id, { photoDataUrl: "" }));
-                            toast.message("Photo removed");
-                          }}
+                          className="h-8 w-8 shrink-0"
+                          aria-label={`More options for ${m.name}`}
                         >
-                          Remove photo
+                          <MoreHorizontal className="h-4 w-4" />
                         </Button>
-                      ) : null}
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="tertiary"
-                        className="gap-1"
-                        onClick={() => {
-                          setData(adjustMaterialQty(brand, m.id, 1, { type: "receive" }));
-                        }}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Receive 1
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="tertiary"
-                        className="gap-1"
-                        onClick={() => {
-                          const raw = window.prompt("Receive how many?", "10");
-                          if (!raw) return;
-                          const n = Number(raw);
-                          if (!Number.isFinite(n) || n <= 0) {
-                            toast.error("Enter a positive number");
-                            return;
-                          }
-                          setData(adjustMaterialQty(brand, m.id, n, { type: "receive" }));
-                        }}
-                      >
-                        Receive…
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="tertiary"
-                        className="gap-1"
-                        onClick={() => {
-                          setData(adjustMaterialQty(brand, m.id, -1, { type: "adjust" }));
-                        }}
-                      >
-                        <Minus className="h-3.5 w-3.5" />
-                        Use 1
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="tertiary"
-                        onClick={() => {
-                          const raw = window.prompt("Set on-hand quantity", String(m.qtyOnHand));
-                          if (raw == null) return;
-                          const n = Number(raw);
-                          if (!Number.isFinite(n) || n < 0) {
-                            toast.error("Enter a valid quantity");
-                            return;
-                          }
-                          setData(updateMaterial(brand, m.id, { qtyOnHand: n }));
-                          toast.message("Quantity updated");
-                        }}
-                      >
-                        Set qty
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="tertiary"
-                        className="text-red-600"
-                        onClick={() => {
-                          if (!window.confirm(`Delete ${m.name}?`)) return;
-                          setData(deleteMaterial(brand, m.id));
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openMaterialDetail(m)}>
+                          Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openMaterialDetail(m)}>
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-red-600 focus:text-red-600"
+                          onClick={() => onDeleteMaterial(m)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </li>
               ))}
@@ -573,6 +590,152 @@ export function ShopSuppliesPage() {
               No materials yet. Add tags, prints, bags, and shipping supplies above.
             </div>
           )}
+
+          <Sheet
+            open={Boolean(detailMaterial)}
+            onOpenChange={(open) => {
+              if (!open) setDetailMaterialId(null);
+            }}
+          >
+            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto border-l border-gray-200 bg-white p-0 sm:max-w-md">
+              {detailMaterial ? (
+                <>
+                  <SheetHeader className="border-b border-gray-100 px-5 py-4 text-left">
+                    <div className="flex items-start gap-3 pr-6">
+                      <MaterialPhotoThumb
+                        photoDataUrl={detailMaterial.photoDataUrl}
+                        name={detailMaterial.name}
+                        size="lg"
+                      />
+                      <div className="min-w-0">
+                        <SheetTitle className="text-lg">{detailMaterial.name}</SheetTitle>
+                        <SheetDescription className="mt-1">
+                          {SUPPLY_CATEGORY_LABELS[detailMaterial.category]} ·{" "}
+                          <span className="font-semibold tabular-nums text-gray-800">
+                            {detailMaterial.qtyOnHand}
+                          </span>{" "}
+                          {detailMaterial.unit} on hand
+                        </SheetDescription>
+                      </div>
+                    </div>
+                  </SheetHeader>
+
+                  <div className="space-y-6 px-5 py-5">
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-semibold text-gray-900">Receive stock</h3>
+                      <p className="text-xs text-gray-500">
+                        Enter how many were added to inventory.
+                      </p>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={receiveQty}
+                          onChange={(e) => setReceiveQty(e.target.value)}
+                          className="w-28"
+                          aria-label="Quantity added"
+                        />
+                        <Button type="button" onClick={onReceiveStock}>
+                          Add to stock
+                        </Button>
+                      </div>
+                    </section>
+
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-semibold text-gray-900">Photo</h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => detailPhotoInputRef.current?.click()}
+                        >
+                          <ImagePlus className="h-3.5 w-3.5" />
+                          {detailMaterial.photoDataUrl ? "Change photo" : "Add photo"}
+                        </Button>
+                        {detailMaterial.photoDataUrl ? (
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            size="sm"
+                            onClick={() => {
+                              setData(
+                                updateMaterial(brand, detailMaterial.id, {
+                                  photoDataUrl: "",
+                                }),
+                              );
+                              toast.message("Photo removed");
+                            }}
+                          >
+                            Remove photo
+                          </Button>
+                        ) : null}
+                      </div>
+                    </section>
+
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-semibold text-gray-900">Edit details</h3>
+                      <div className="grid gap-2">
+                        <Input
+                          placeholder="Name"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                        />
+                        <Select
+                          value={editCategory}
+                          onValueChange={(v) => setEditCategory(v as SupplyCategory)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SUPPLY_CATEGORIES.map((c) => (
+                              <SelectItem key={c} value={c}>
+                                {SUPPLY_CATEGORY_LABELS[c]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <div className="grid grid-cols-3 gap-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="On hand"
+                            value={editOnHand}
+                            onChange={(e) => setEditOnHand(e.target.value)}
+                          />
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="Low at"
+                            value={editLow}
+                            onChange={(e) => setEditLow(e.target.value)}
+                          />
+                          <Select
+                            value={editUnit}
+                            onValueChange={(v) => setEditUnit(v as SupplyUnit)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ea">Each</SelectItem>
+                              <SelectItem value="roll">Roll</SelectItem>
+                              <SelectItem value="pack">Pack</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button type="button" variant="tertiary" onClick={onSaveMaterialEdits}>
+                          Save changes
+                        </Button>
+                      </div>
+                    </section>
+                  </div>
+                </>
+              ) : null}
+            </SheetContent>
+          </Sheet>
         </TabsContent>
 
         <TabsContent value="recipes" className="space-y-4 outline-none">
