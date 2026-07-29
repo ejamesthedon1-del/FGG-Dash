@@ -115,6 +115,7 @@ export function ShopSuppliesPage() {
   const [matLow, setMatLow] = useState("10");
   const [matUnit, setMatUnit] = useState<SupplyUnit>("ea");
   const [matPhoto, setMatPhoto] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const addPhotoInputRef = useRef<HTMLInputElement>(null);
   const detailPhotoInputRef = useRef<HTMLInputElement>(null);
   const [detailMaterialId, setDetailMaterialId] = useState<string | null>(null);
@@ -184,6 +185,21 @@ export function ShopSuppliesPage() {
 
   const lowCount = data.materials.filter(isLowStock).length;
 
+  const resetAddForm = () => {
+    setMatName("");
+    setMatCategory("dtf_prints");
+    setMatQty("0");
+    setMatLow("10");
+    setMatUnit("ea");
+    setMatPhoto(null);
+    if (addPhotoInputRef.current) addPhotoInputRef.current.value = "";
+  };
+
+  const openAddMaterial = () => {
+    resetAddForm();
+    setAddOpen(true);
+  };
+
   const onAddMaterial = () => {
     if (!matName.trim()) {
       toast.error("Enter a material name");
@@ -199,9 +215,8 @@ export function ShopSuppliesPage() {
         photoDataUrl: matPhoto || undefined,
       }),
     );
-    setMatName("");
-    setMatQty("0");
-    setMatPhoto(null);
+    resetAddForm();
+    setAddOpen(false);
     toast.success("Material added — set on-hand qty and we track from here");
   };
 
@@ -385,97 +400,49 @@ export function ShopSuppliesPage() {
         </TabsList>
 
         <TabsContent value="inventory" className="space-y-4 outline-none">
-          <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900">Add material</h3>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                className="group relative shrink-0"
-                onClick={() => addPhotoInputRef.current?.click()}
-                title="Add photo"
+                onClick={() => setCategoryFilter("all")}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-medium",
+                  categoryFilter === "all"
+                    ? "border-gray-900 bg-gray-900 text-white"
+                    : "border-gray-200 bg-white text-gray-700",
+                )}
               >
-                <MaterialPhotoThumb
-                  photoDataUrl={matPhoto || undefined}
-                  name={matName || "New material"}
-                />
-                <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                  <ImagePlus className="h-4 w-4 text-white" />
-                </span>
+                All
               </button>
-              <input
-                ref={addPhotoInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="hidden"
-                onChange={(e) => void onPickAddPhoto(e.target.files?.[0] ?? null)}
-              />
-              {matPhoto ? (
-                <Button
+              {SUPPLY_CATEGORIES.map((c) => (
+                <button
+                  key={c}
                   type="button"
-                  size="sm"
-                  variant="tertiary"
-                  onClick={() => setMatPhoto(null)}
+                  onClick={() => setCategoryFilter(c)}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium",
+                    categoryFilter === c
+                      ? "border-gray-900 bg-gray-900 text-white"
+                      : "border-gray-200 bg-white text-gray-700",
+                  )}
                 >
-                  Remove photo
-                </Button>
-              ) : (
-                <p className="text-xs text-gray-500">Optional photo (left of name in the list)</p>
-              )}
+                  {SUPPLY_CATEGORY_LABELS[c]}
+                </button>
+              ))}
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-              <Input
-                className="lg:col-span-2"
-                placeholder="Name (e.g. Left chest DTF)"
-                value={matName}
-                onChange={(e) => setMatName(e.target.value)}
-              />
-              <Select
-                value={matCategory}
-                onValueChange={(v) => setMatCategory(v as SupplyCategory)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUPPLY_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {SUPPLY_CATEGORY_LABELS[c]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="number"
-                min={0}
-                placeholder="On hand"
-                value={matQty}
-                onChange={(e) => setMatQty(e.target.value)}
-              />
-              <Input
-                type="number"
-                min={0}
-                placeholder="Low at"
-                value={matLow}
-                onChange={(e) => setMatLow(e.target.value)}
-              />
-              <Select value={matUnit} onValueChange={(v) => setMatUnit(v as SupplyUnit)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ea">Each</SelectItem>
-                  <SelectItem value="roll">Roll</SelectItem>
-                  <SelectItem value="pack">Pack</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <Button type="button" onClick={onAddMaterial}>
-                Add material
-              </Button>
-            </div>
-          </section>
+            <Button type="button" className="gap-1.5" onClick={openAddMaterial}>
+              <Plus className="h-4 w-4" />
+              Add material
+            </Button>
+          </div>
 
+          <input
+            ref={addPhotoInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => void onPickAddPhoto(e.target.files?.[0] ?? null)}
+          />
           <input
             ref={detailPhotoInputRef}
             type="file"
@@ -484,35 +451,105 @@ export function ShopSuppliesPage() {
             onChange={(e) => void onPickDetailPhoto(e.target.files?.[0] ?? null)}
           />
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setCategoryFilter("all")}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-medium",
-                categoryFilter === "all"
-                  ? "border-gray-900 bg-gray-900 text-white"
-                  : "border-gray-200 bg-white text-gray-700",
-              )}
-            >
-              All
-            </button>
-            {SUPPLY_CATEGORIES.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCategoryFilter(c)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium",
-                  categoryFilter === c
-                    ? "border-gray-900 bg-gray-900 text-white"
-                    : "border-gray-200 bg-white text-gray-700",
-                )}
-              >
-                {SUPPLY_CATEGORY_LABELS[c]}
-              </button>
-            ))}
-          </div>
+          <Sheet
+            open={addOpen}
+            onOpenChange={(open) => {
+              setAddOpen(open);
+              if (!open) resetAddForm();
+            }}
+          >
+            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto border-l border-gray-200 bg-white p-0 sm:max-w-md">
+              <SheetHeader className="border-b border-gray-100 px-5 py-4 text-left">
+                <SheetTitle>Add material</SheetTitle>
+                <SheetDescription>
+                  Create a supply item for {SUPPLY_BRAND_LABELS[brand]}. You can receive more stock
+                  later from Manage stock.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="space-y-5 px-5 py-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    className="group relative shrink-0"
+                    onClick={() => addPhotoInputRef.current?.click()}
+                    title="Add photo"
+                  >
+                    <MaterialPhotoThumb
+                      photoDataUrl={matPhoto || undefined}
+                      name={matName || "New material"}
+                      size="lg"
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                      <ImagePlus className="h-5 w-5 text-white" />
+                    </span>
+                  </button>
+                  {matPhoto ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="tertiary"
+                      onClick={() => setMatPhoto(null)}
+                    >
+                      Remove photo
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-gray-500">Optional photo</p>
+                  )}
+                </div>
+                <div className="grid gap-2">
+                  <Input
+                    placeholder="Name (e.g. Left chest DTF)"
+                    value={matName}
+                    onChange={(e) => setMatName(e.target.value)}
+                  />
+                  <Select
+                    value={matCategory}
+                    onValueChange={(v) => setMatCategory(v as SupplyCategory)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SUPPLY_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {SUPPLY_CATEGORY_LABELS[c]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="On hand"
+                      value={matQty}
+                      onChange={(e) => setMatQty(e.target.value)}
+                    />
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Low at"
+                      value={matLow}
+                      onChange={(e) => setMatLow(e.target.value)}
+                    />
+                    <Select value={matUnit} onValueChange={(v) => setMatUnit(v as SupplyUnit)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ea">Each</SelectItem>
+                        <SelectItem value="roll">Roll</SelectItem>
+                        <SelectItem value="pack">Pack</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Button type="button" className="w-full" onClick={onAddMaterial}>
+                  Add material
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
 
           {materials.length ? (
             <ul className="space-y-2">
