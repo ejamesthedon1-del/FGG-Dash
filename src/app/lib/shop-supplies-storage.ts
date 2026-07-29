@@ -264,11 +264,15 @@ export function adjustMaterialQty(
   brand: SupplyBrand,
   materialId: string,
   delta: number,
-  *,
-  type: "receive" | "adjust",
-  note = "",
-  by = "ops",
+  opts: {
+    type: "receive" | "adjust";
+    note?: string;
+    by?: string;
+  },
 ): BrandSupplies {
+  const type = opts.type;
+  const note = opts.note ?? "";
+  const by = opts.by ?? "ops";
   return updateBrand(brand, (current) => {
     const material = current.materials.find((m) => m.id === materialId);
     if (!material) return current;
