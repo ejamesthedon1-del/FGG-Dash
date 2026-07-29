@@ -309,9 +309,6 @@ export function SOPsPage() {
             <h2 className="text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">
               Knowledge Base
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Procedures and docs for the floor — open an area to dig in.
-            </p>
           </div>
           {isCeo ? (
             <Link to="/sops/create">

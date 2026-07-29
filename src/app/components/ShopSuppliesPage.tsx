@@ -389,16 +389,9 @@ export function ShopSuppliesPage() {
     <div className="mx-auto max-w-6xl space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
-            Ops / Productions
-          </p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-gray-950">
+          <h2 className="text-2xl font-semibold tracking-tight text-gray-950">
             Shop supplies
           </h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Track tags, DTF prints, bags, and shipping supplies per brand. Set on-hand qty, map
-            recipes to products, then apply supplies from Order Flow.
-          </p>
         </div>
         <Select
           value={brand}

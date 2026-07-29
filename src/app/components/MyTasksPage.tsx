@@ -237,9 +237,6 @@ export function MyTasksPage() {
             Add task
           </Button>
         </div>
-        <p className="mt-1.5 max-w-xl text-sm text-gray-500">
-          Your personal board — order, status, and edits stay with your account.
-        </p>
       </header>
 
       <div

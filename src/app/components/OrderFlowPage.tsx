@@ -564,13 +564,7 @@ export function OrderFlowPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
-            Ops / Productions
-          </p>
-          <h2 className="mt-1 text-2xl font-semibold text-gray-900">Order Flow</h2>
-          <p className="mt-1 text-gray-600">
-            Review high-risk Shopify orders, then track production through blanks and ship.
-          </p>
+          <h2 className="text-2xl font-semibold text-gray-900">Order Flow</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={brand} onValueChange={(v) => setBrand(v as BrandFilter)}>
@@ -783,9 +777,9 @@ export function OrderFlowPage() {
                         className={cn(
                           "px-2 py-2.5 tabular-nums",
                           order.highPriority
-                            ? "bg-rose-50 font-semibold text-rose-800"
+                            ? "font-semibold text-rose-800"
                             : order.earlyWarning
-                              ? "bg-amber-50 font-semibold text-amber-900"
+                              ? "font-semibold text-amber-900"
                               : "text-gray-700",
                         )}
                       >
