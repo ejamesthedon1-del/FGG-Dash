@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Textarea } from "./ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -53,14 +54,22 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { cn } from "./ui/utils";
-import { ImagePlus, MoreHorizontal, Package, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, ImagePlus, MoreHorizontal, Package, Plus, Trash2 } from "lucide-react";
 
 type CategoryFilter = "all" | SupplyCategory;
+type DetailFocus = "settings" | "info";
 
 const PHOTO_MAX_BYTES = 1.5 * 1024 * 1024;
 
 function materialById(data: BrandSupplies, id: string): SupplyMaterial | undefined {
   return data.materials.find((m) => m.id === id);
+}
+
+function normalizeReorderUrl(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://${value}`;
 }
 
 function MaterialPhotoThumb({
@@ -125,6 +134,10 @@ export function ShopSuppliesPage() {
   const [editLow, setEditLow] = useState("10");
   const [editUnit, setEditUnit] = useState<SupplyUnit>("ea");
   const [editOnHand, setEditOnHand] = useState("0");
+  const [editNotes, setEditNotes] = useState("");
+  const [editReorderUrl, setEditReorderUrl] = useState("");
+  const itemInfoRef = useRef<HTMLElement | null>(null);
+  const settingsRef = useRef<HTMLElement | null>(null);
 
   // Recipe form
   const [recipeProductId, setRecipeProductId] = useState("");
@@ -183,8 +196,6 @@ export function ShopSuppliesPage() {
     return [...list].sort((a, b) => a.name.localeCompare(b.name));
   }, [data.materials, categoryFilter]);
 
-  const lowCount = data.materials.filter(isLowStock).length;
-
   const resetAddForm = () => {
     setMatName("");
     setMatCategory("dtf_prints");
@@ -234,7 +245,10 @@ export function ShopSuppliesPage() {
     }
   };
 
-  const openMaterialDetail = (material: SupplyMaterial) => {
+  const openMaterialDetail = (
+    material: SupplyMaterial,
+    focus: DetailFocus = "settings",
+  ) => {
     setDetailMaterialId(material.id);
     setReceiveQty("10");
     setEditName(material.name);
@@ -242,6 +256,12 @@ export function ShopSuppliesPage() {
     setEditLow(String(material.lowStockAt));
     setEditUnit(material.unit);
     setEditOnHand(String(material.qtyOnHand));
+    setEditNotes(material.notes || "");
+    setEditReorderUrl(material.reorderUrl || "");
+    window.setTimeout(() => {
+      const el = focus === "info" ? itemInfoRef.current : settingsRef.current;
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   };
 
   const detailMaterial = detailMaterialId
@@ -305,7 +325,23 @@ export function ShopSuppliesPage() {
         unit: editUnit,
       }),
     );
-    toast.success("Material updated");
+    toast.success("Settings saved");
+  };
+
+  const onSaveItemInfo = () => {
+    if (!detailMaterialId) return;
+    const url = editReorderUrl.trim();
+    if (url && !normalizeReorderUrl(url)) {
+      toast.error("Enter a valid reorder link");
+      return;
+    }
+    setData(
+      updateMaterial(brand, detailMaterialId, {
+        notes: editNotes,
+        reorderUrl: url ? normalizeReorderUrl(url) || url : "",
+      }),
+    );
+    toast.success("Item info saved");
   };
 
   const onDeleteMaterial = (material: SupplyMaterial) => {
@@ -384,13 +420,6 @@ export function ShopSuppliesPage() {
           </SelectContent>
         </Select>
       </header>
-
-      {lowCount > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          <span className="font-semibold">{lowCount}</span> material
-          {lowCount === 1 ? "" : "s"} at or below low-stock for {SUPPLY_BRAND_LABELS[brand]}.
-        </div>
-      ) : null}
 
       <Tabs defaultValue="inventory" className="gap-4">
         <TabsList>
@@ -602,11 +631,11 @@ export function ShopSuppliesPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openMaterialDetail(m)}>
-                          Details
+                        <DropdownMenuItem onClick={() => openMaterialDetail(m, "settings")}>
+                          Settings
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openMaterialDetail(m)}>
-                          Edit
+                        <DropdownMenuItem onClick={() => openMaterialDetail(m, "info")}>
+                          Item info
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -634,7 +663,7 @@ export function ShopSuppliesPage() {
               if (!open) setDetailMaterialId(null);
             }}
           >
-            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto border-l border-gray-200 bg-white p-0 sm:max-w-md">
+            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto border-l border-gray-200 bg-white p-0 sm:max-w-lg">
               {detailMaterial ? (
                 <>
                   <SheetHeader className="border-b border-gray-100 px-5 py-4 text-left">
@@ -711,8 +740,8 @@ export function ShopSuppliesPage() {
                       </div>
                     </section>
 
-                    <section className="space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-900">Edit details</h3>
+                    <section ref={settingsRef} className="space-y-3 scroll-mt-4">
+                      <h3 className="text-sm font-semibold text-gray-900">Settings</h3>
                       <div className="grid gap-2">
                         <Input
                           placeholder="Name"
@@ -764,8 +793,80 @@ export function ShopSuppliesPage() {
                           </Select>
                         </div>
                         <Button type="button" variant="tertiary" onClick={onSaveMaterialEdits}>
-                          Save changes
+                          Save settings
                         </Button>
+                      </div>
+                    </section>
+
+                    <section
+                      ref={itemInfoRef}
+                      className="space-y-4 scroll-mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4"
+                    >
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-950">Item info</h3>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Identification notes and a reorder link for ops managers.
+                        </p>
+                      </div>
+
+                      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                        {detailMaterial.photoDataUrl ? (
+                          <img
+                            src={detailMaterial.photoDataUrl}
+                            alt={detailMaterial.name}
+                            className="max-h-56 w-full object-contain bg-white"
+                          />
+                        ) : (
+                          <div className="flex h-40 flex-col items-center justify-center gap-2 text-gray-400">
+                            <Package className="h-8 w-8" />
+                            <p className="text-xs">No photo yet — add one above</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-gray-700">
+                          How to identify this item
+                        </label>
+                        <Textarea
+                          rows={5}
+                          placeholder="Vendor, SKU, size, color, bin location, what it looks like…"
+                          value={editNotes}
+                          onChange={(e) => setEditNotes(e.target.value)}
+                          className="min-h-[120px] resize-y bg-white text-sm"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-gray-700">Reorder link</label>
+                        <Input
+                          type="url"
+                          placeholder="https://supplier.com/product/…"
+                          value={editReorderUrl}
+                          onChange={(e) => setEditReorderUrl(e.target.value)}
+                          className="bg-white"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" variant="tertiary" onClick={onSaveItemInfo}>
+                            Save item info
+                          </Button>
+                          {normalizeReorderUrl(editReorderUrl || detailMaterial.reorderUrl || "") ? (
+                            <Button type="button" asChild className="gap-1.5">
+                              <a
+                                href={
+                                  normalizeReorderUrl(
+                                    editReorderUrl || detailMaterial.reorderUrl || "",
+                                  )!
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                Open reorder site
+                              </a>
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
                     </section>
                   </div>

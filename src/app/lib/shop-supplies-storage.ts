@@ -42,7 +42,10 @@ export type SupplyMaterial = {
   qtyOnHand: number;
   lowStockAt: number;
   unit: SupplyUnit;
+  /** Ops notes: SKU, vendor, how to identify this supply. */
   notes: string;
+  /** Vendor / product page for reordering. */
+  reorderUrl?: string;
   /** Optional product/material photo as a data URL (synced localStorage). */
   photoDataUrl?: string;
   createdAt: string;
@@ -233,7 +236,14 @@ export function updateMaterial(
   patch: Partial<
     Pick<
       SupplyMaterial,
-      "name" | "category" | "lowStockAt" | "unit" | "notes" | "qtyOnHand" | "photoDataUrl"
+      | "name"
+      | "category"
+      | "lowStockAt"
+      | "unit"
+      | "notes"
+      | "qtyOnHand"
+      | "photoDataUrl"
+      | "reorderUrl"
     >
   >,
 ): BrandSupplies {
@@ -257,6 +267,11 @@ export function updateMaterial(
         const photo = (patch.photoDataUrl || "").trim();
         if (photo) next.photoDataUrl = photo;
         else delete next.photoDataUrl;
+      }
+      if ("reorderUrl" in patch) {
+        const url = (patch.reorderUrl || "").trim();
+        if (url) next.reorderUrl = url;
+        else delete next.reorderUrl;
       }
       return next;
     }),
