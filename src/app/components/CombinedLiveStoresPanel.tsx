@@ -11,15 +11,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Landmark, Loader2, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Calendar, Loader2 } from "lucide-react";
 import {
   SHOPIFY_BRAND_LABELS,
   SHOPIFY_LIVE_BRAND_SLUGS,
   fetchShopifyBrandKpis,
-  fetchShopifyPaymentsBalance,
   formatShopifyMoney,
   type ShopifyBrandKpis,
-  type ShopifyPaymentsBalance,
 } from "../lib/shopify-dashboard";
 import {
   fetchProductCostsForBrand,
@@ -30,7 +28,6 @@ import { Input } from "./ui/input";
 import { cn } from "./ui/utils";
 import {
   DashboardCtaCard,
-  DashboardMetricCard,
   DashboardSectionHeader,
 } from "./dashboard/DashboardPrimitives";
 
@@ -173,49 +170,6 @@ export function CombinedLiveStoresPanel() {
     periodStart: range.start,
     periodEnd: range.end,
   });
-  const [balances, setBalances] = useState<{
-    loading: boolean;
-    rows: Array<{
-      slug: string;
-      label: string;
-      data: ShopifyPaymentsBalance | null;
-      error?: string;
-    }>;
-  }>({ loading: true, rows: [] });
-
-  useEffect(() => {
-    let cancelled = false;
-    const slugs = [...SHOPIFY_LIVE_BRAND_SLUGS];
-
-    (async () => {
-      setBalances({ loading: true, rows: [] });
-      const rows = await Promise.all(
-        slugs.map(async (slug) => {
-          try {
-            const data = await fetchShopifyPaymentsBalance(slug);
-            return {
-              slug,
-              label: SHOPIFY_BRAND_LABELS[slug] ?? slug,
-              data,
-              error: data.error || undefined,
-            };
-          } catch (err) {
-            return {
-              slug,
-              label: SHOPIFY_BRAND_LABELS[slug] ?? slug,
-              data: null,
-              error: err instanceof Error ? err.message : "Could not load balance",
-            };
-          }
-        }),
-      );
-      if (!cancelled) setBalances({ loading: false, rows });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,16 +246,6 @@ export function CombinedLiveStoresPanel() {
   );
 
   const periodHint = formatPeriodLabel(state.periodStart, state.periodEnd);
-  const balanceTotal = useMemo(
-    () =>
-      balances.rows.reduce((acc, row) => {
-        if (!row.data?.configured) return acc;
-        if (typeof row.data.totalUsd === "number") return acc + row.data.totalUsd;
-        if (row.data.primaryCurrency === "USD") return acc + row.data.primaryAmount;
-        return acc;
-      }, 0),
-    [balances.rows],
-  );
 
   const profitTrend =
     totals.sales > 0
@@ -330,10 +274,44 @@ export function CombinedLiveStoresPanel() {
     setAppliedCustom({ start: customStart, end: customEnd });
   };
 
+  const SecondaryStat = ({
+    label,
+    value,
+    trend,
+  }: {
+    label: string;
+    value: string;
+    trend?: { up: boolean; label: string } | null;
+  }) => (
+    <div className="min-w-0">
+      <p className="text-sm text-gray-500">{label}</p>
+      <div className="mt-1 flex flex-wrap items-baseline gap-2">
+        <p className="text-xl font-semibold tracking-tight text-gray-950 tabular-nums sm:text-2xl">
+          {value}
+        </p>
+        {trend ? (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 text-sm font-semibold",
+              trend.up ? "text-emerald-600" : "text-rose-600",
+            )}
+          >
+            {trend.up ? (
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            ) : (
+              <ArrowDownRight className="h-3.5 w-3.5" />
+            )}
+            {trend.label}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+
   return (
     <section className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex flex-wrap rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="inline-flex flex-wrap rounded-lg border border-gray-100 bg-gray-50/80 p-0.5">
           {PRESETS.map((item) => (
             <button
               key={item.id}
@@ -347,9 +325,9 @@ export function CombinedLiveStoresPanel() {
                 }
               }}
               className={cn(
-                "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                "rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
                 preset === item.id
-                  ? "bg-white text-gray-950 shadow-xs"
+                  ? "bg-white text-gray-950 shadow-xs ring-1 ring-gray-100"
                   : "text-gray-500 hover:text-gray-800",
               )}
             >
@@ -357,7 +335,10 @@ export function CombinedLiveStoresPanel() {
             </button>
           ))}
         </div>
-        <p className="text-sm text-gray-500">{periodHint}</p>
+        <div className="inline-flex items-center gap-2 rounded-lg border border-gray-100 bg-white px-3 py-2 text-sm text-gray-600">
+          <Calendar className="h-4 w-4 text-gray-400" />
+          <span>{periodHint}</span>
+        </div>
       </div>
 
       {preset === "custom" ? (
@@ -400,84 +381,8 @@ export function CombinedLiveStoresPanel() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {balances.loading ? (
-          <div className="col-span-full flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-6 text-sm text-gray-500 shadow-xs">
-            <Loader2 className="h-4 w-4 animate-spin text-brand" />
-            Loading payout bank accounts…
-          </div>
-        ) : (
-          <>
-            {balances.rows.map((row) => (
-              <div
-                key={row.slug}
-                className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Payout bank</p>
-                    <p className="mt-1 text-sm font-semibold text-gray-900">{row.label}</p>
-                  </div>
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-600">
-                    <Landmark className="h-4 w-4" />
-                  </span>
-                </div>
-                {row.error || !row.data?.configured ? (
-                  <p className="mt-4 text-sm leading-snug text-amber-800">
-                    {row.error || row.data?.error || "Bank account unavailable"}
-                  </p>
-                ) : (
-                  <>
-                    <p className="mt-4 text-2xl font-semibold tracking-tight text-gray-950 tabular-nums">
-                      {money(
-                        row.data.primaryAmount,
-                        row.data.primaryCurrency || "USD",
-                      )}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      {(() => {
-                        const acct = row.data.accounts?.[0];
-                        const bank =
-                          row.data.latestPayout?.bankName ||
-                          acct?.bankName ||
-                          "Bank";
-                        const last4 =
-                          row.data.latestPayout?.accountNumberLastDigits ||
-                          acct?.accountNumberLastDigits;
-                        const status = row.data.latestPayout?.status;
-                        const parts = [
-                          last4 ? `${bank} ···${last4}` : bank,
-                          status ? String(status).toLowerCase().replace(/_/g, " ") : null,
-                          "latest deposit",
-                        ].filter(Boolean);
-                        return parts.join(" · ");
-                      })()}
-                    </p>
-                  </>
-                )}
-              </div>
-            ))}
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Combined deposits</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">All stores</p>
-                </div>
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-600">
-                  <Wallet className="h-4 w-4" />
-                </span>
-              </div>
-              <p className="mt-4 text-2xl font-semibold tracking-tight text-gray-950 tabular-nums">
-                {money(balanceTotal)}
-              </p>
-              <p className="mt-1 text-xs text-gray-500">Payout bank deposits · USD</p>
-            </div>
-          </>
-        )}
-      </div>
-
       {state.loading ? (
-        <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-8 text-sm text-gray-500 shadow-xs">
+        <div className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-5 py-10 text-sm text-gray-500">
           <Loader2 className="h-4 w-4 animate-spin text-brand" />
           Loading {periodHint}…
         </div>
@@ -491,39 +396,83 @@ export function CombinedLiveStoresPanel() {
 
       {!state.loading && !(state.error && state.brands.every((b) => b.error)) ? (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <DashboardMetricCard
-              label="Total Revenue"
-              value={money(totals.sales)}
-              hint={periodHint}
-              trend={
-                totals.orders > 0
-                  ? { up: true, label: `${totals.orders} orders` }
-                  : null
-              }
-            />
-            <DashboardMetricCard
-              label="Total Expenses"
-              value={money(totals.expenses)}
-              hint={periodHint}
-              trend={expenseShare}
-            />
-            <DashboardMetricCard
-              label="Net Profit"
-              value={money(totals.profit)}
-              hint={periodHint}
-              trend={profitTrend}
-            />
-            <DashboardMetricCard
-              label="Orders"
-              value={String(totals.orders)}
-              hint={periodHint}
-              trend={
-                totals.ads > 0
-                  ? { up: false, label: `${money(totals.ads)} ads` }
-                  : null
-              }
-            />
+          <div className="rounded-xl border border-gray-100 bg-white p-4 sm:p-5">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:items-center">
+              <div className="min-w-0 xl:col-span-3">
+                <p className="text-sm text-gray-500">Total Revenue</p>
+                <p className="mt-1 text-3xl font-semibold tracking-tight text-gray-950 tabular-nums sm:text-4xl">
+                  {money(totals.sales)}
+                </p>
+                {totals.orders > 0 ? (
+                  <p className="mt-2 inline-flex items-center gap-0.5 text-sm font-semibold text-emerald-600">
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                    {totals.orders} orders
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm text-gray-500">{periodHint}</p>
+                )}
+              </div>
+
+              <div className="h-40 w-full min-w-0 xl:col-span-5 sm:h-44">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={lineData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="heroRevFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2563EB" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="#F3F4F6" />
+                    <XAxis
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#9CA3AF", fontSize: 12 }}
+                    />
+                    <YAxis hide />
+                    <Tooltip
+                      formatter={(value: number) => [money(value), "Revenue"]}
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: "1px solid #F3F4F6",
+                        boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="Revenue"
+                      stroke="#2563EB"
+                      strokeWidth={2.5}
+                      fill="url(#heroRevFill)"
+                      dot={{ r: 4, fill: "#2563EB", strokeWidth: 0 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="flex flex-col gap-5 border-t border-gray-100 pt-4 xl:col-span-4 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
+                <SecondaryStat
+                  label="Total Expenses"
+                  value={money(totals.expenses)}
+                  trend={expenseShare}
+                />
+                <SecondaryStat
+                  label="Net Profit"
+                  value={money(totals.profit)}
+                  trend={profitTrend}
+                />
+                <SecondaryStat
+                  label="Orders"
+                  value={String(totals.orders)}
+                  trend={
+                    totals.ads > 0
+                      ? { up: false, label: `${money(totals.ads)} ads` }
+                      : null
+                  }
+                />
+              </div>
+            </div>
           </div>
 
           <div>
@@ -551,7 +500,7 @@ export function CombinedLiveStoresPanel() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5 xl:col-span-7">
+            <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-xs sm:p-5 xl:col-span-7">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h4 className="text-sm font-semibold text-gray-900">Profit and Loss</h4>
                 <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -594,9 +543,9 @@ export function CombinedLiveStoresPanel() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5 xl:col-span-5">
+            <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-xs sm:p-5 xl:col-span-5">
               <DashboardSectionHeader title="Store pulse" description="Sales by brand this period." />
-              <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200">
+              <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
                 {state.brands.map((b) => (
                   <li key={b.slug}>
                     <Link
@@ -636,7 +585,7 @@ export function CombinedLiveStoresPanel() {
               </ul>
             </div>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5 xl:col-span-12">
+            <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-xs sm:p-5 xl:col-span-12">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h4 className="text-sm font-semibold text-gray-900">Revenue and Expenses</h4>
                 <span className="rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">
