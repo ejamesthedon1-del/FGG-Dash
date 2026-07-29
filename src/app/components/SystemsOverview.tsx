@@ -28,6 +28,8 @@ import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import {
   ArrowRight,
+  Boxes,
+  CheckSquare,
   Loader2,
   Package,
   RefreshCw,
@@ -36,6 +38,12 @@ import {
   Truck,
 } from "lucide-react";
 import { CombinedLiveStoresPanel } from "./CombinedLiveStoresPanel";
+import {
+  DashboardCtaCard,
+  DashboardListRow,
+  DashboardMetricCard,
+  DashboardSectionHeader,
+} from "./dashboard/DashboardPrimitives";
 import { cn } from "./ui/utils";
 
 type FocusItem = {
@@ -238,14 +246,18 @@ export function SystemsOverview() {
     countFor(stages, "in_production") +
     countFor(stages, "ready_to_ship");
   const criticalCount = focusItems.filter((i) => i.tone === "critical").length;
+  const metricValue = (n: number) => (flowLoading ? "—" : String(n));
 
   if (showCeoFinance) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-6">
         <header>
-          <h2 className="text-[1.75rem] font-semibold tracking-tight text-gray-950">
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">
             Dashboard
-          </h2>
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Live Shopify finance across Livdon and Sinners Testimony.
+          </p>
         </header>
         <CombinedLiveStoresPanel />
       </div>
@@ -254,45 +266,90 @@ export function SystemsOverview() {
 
   return (
     <div className="space-y-8">
-      {/* Workspace header */}
-      <header className="flex flex-col gap-4 border-b border-gray-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-[1.75rem] font-semibold tracking-tight text-gray-950">
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">
             Dashboard
-          </h2>
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Floor brief from live Order Flow and today’s shift notes.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="tertiary"
+            variant="secondary"
             size="sm"
-            className="gap-2"
+            className="gap-1"
             onClick={() => void loadFlow()}
             disabled={flowLoading}
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", flowLoading && "animate-spin")} />
+            <RefreshCw className={cn("size-3.5", flowLoading && "animate-spin")} />
             Refresh
           </Button>
-          <Link to="/order-flow">
-            <Button size="sm" className="gap-2">
+          <Button size="sm" asChild className="gap-1">
+            <Link to="/order-flow">
               Order Flow
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </Link>
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </Button>
         </div>
       </header>
 
-      {/* Shift notes — first thing on the floor brief */}
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <DashboardMetricCard label="Open" value={metricValue(openOrders)} hint="All open stages" />
+        <DashboardMetricCard
+          label="Needs blanks"
+          value={metricValue(countFor(stages, "needs_blanks"))}
+        />
+        <DashboardMetricCard
+          label="In production"
+          value={metricValue(countFor(stages, "in_production"))}
+        />
+        <DashboardMetricCard
+          label="Ready to ship"
+          value={metricValue(countFor(stages, "ready_to_ship"))}
+        />
+      </section>
+
       <section>
-        <div className="mb-4">
-          <h3 className="text-base font-semibold text-gray-950">Shift notes</h3>
-          <p className="mt-0.5 text-xs text-gray-500">Priorities and issues set for the floor.</p>
+        <DashboardSectionHeader
+          title="Jump into work"
+          description="Shortcuts for the production floor."
+        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <DashboardCtaCard
+            title="Order Flow"
+            description="Move orders through blanks, production, and ship."
+            to="/order-flow"
+          />
+          <DashboardCtaCard
+            title="Shop supplies"
+            description="Track tags, DTF, bags, and apply materials."
+            to="/shop-supplies"
+          />
+          <DashboardCtaCard
+            title="My Tasks"
+            description="Personal priorities for this shift."
+            to="/my-tasks"
+          />
         </div>
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 md:grid-cols-2 xl:grid-cols-4">
-          <div className="bg-white p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-              Priorities
-            </p>
+      </section>
+
+      {flowError ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {flowError}
+        </div>
+      ) : null}
+
+      <section>
+        <DashboardSectionHeader
+          title="Shift notes"
+          description="Priorities and issues set for the floor."
+        />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
+            <p className="text-sm font-medium text-gray-500">Priorities</p>
             {homeContent.priorities.length > 0 ? (
               <ul className="mt-3 space-y-2.5">
                 {homeContent.priorities.map((item) => (
@@ -302,23 +359,17 @@ export function SystemsOverview() {
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-sm leading-snug text-gray-500">
-                No new priorities at the moment
-              </p>
+              <p className="mt-3 text-sm text-gray-500">No new priorities at the moment</p>
             )}
           </div>
-          <div className="bg-white p-4">
+
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
             <div className="flex items-baseline justify-between gap-2">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                Due today
-              </p>
+              <p className="text-sm font-medium text-gray-500">Due today</p>
               {homeContent.tasksDueToday.length > 0 ? (
-                <span className="text-[11px] font-medium text-gray-400">
-                  {
-                    homeContent.tasksDueToday.filter((item) => dueTodayDone[item])
-                      .length
-                  }
-                  /{homeContent.tasksDueToday.length}
+                <span className="text-xs font-medium text-gray-400">
+                  {homeContent.tasksDueToday.filter((item) => dueTodayDone[item]).length}/
+                  {homeContent.tasksDueToday.length}
                 </span>
               ) : null}
             </div>
@@ -346,13 +397,9 @@ export function SystemsOverview() {
                             ),
                           );
                         }}
-                        className="mt-0.5 rounded-full border-gray-300 bg-transparent shadow-none data-[state=checked]:border-brand data-[state=checked]:bg-transparent data-[state=checked]:text-brand dark:bg-transparent dark:data-[state=checked]:bg-transparent"
+                        className="mt-0.5 rounded-full border-gray-300 bg-transparent shadow-none data-[state=checked]:border-brand data-[state=checked]:bg-transparent data-[state=checked]:text-brand"
                       />
-                      <span
-                        className={cn(
-                          done && "text-gray-400 line-through decoration-gray-300",
-                        )}
-                      >
+                      <span className={cn(done && "text-gray-400 line-through decoration-gray-300")}>
                         {item}
                       </span>
                     </label>
@@ -361,15 +408,15 @@ export function SystemsOverview() {
               })}
             </ul>
           </div>
-          <div className="bg-white p-4">
+
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
             <div className="flex items-baseline justify-between gap-2">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                My Tasks
-              </p>
+              <p className="text-sm font-medium text-gray-500">My Tasks</p>
               <Link
                 to="/my-tasks"
-                className="text-[11px] font-medium text-gray-400 transition-colors hover:text-brand"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
               >
+                <CheckSquare className="size-3" />
                 View all
               </Link>
             </div>
@@ -382,7 +429,7 @@ export function SystemsOverview() {
                       className="block text-sm leading-snug text-gray-700 transition-colors hover:text-brand"
                     >
                       <span className="font-medium text-gray-900">{task.title}</span>
-                      <span className="mt-0.5 block text-[11px] text-gray-400">
+                      <span className="mt-0.5 block text-xs text-gray-400">
                         {TASK_STATUS_LABELS[task.status]}
                       </span>
                     </Link>
@@ -390,20 +437,17 @@ export function SystemsOverview() {
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-sm leading-relaxed text-gray-500">
-                No personal tasks yet. Create a{" "}
-                <Link
-                  to="/my-tasks"
-                  className="font-medium text-gray-900 underline decoration-gray-300 underline-offset-2 transition-colors hover:text-brand hover:decoration-brand"
-                >
-                  task
-                </Link>{" "}
-                to track your priorities for this shift.
+              <p className="mt-3 text-sm text-gray-500">
+                No personal tasks yet.{" "}
+                <Link to="/my-tasks" className="font-semibold text-brand hover:underline">
+                  Create one
+                </Link>
               </p>
             )}
           </div>
-          <div className="bg-white p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Open issues</p>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
+            <p className="text-sm font-medium text-gray-500">Open issues</p>
             <ul className="mt-3 space-y-2.5">
               {homeContent.openIssues.map((item) => (
                 <li key={item} className="text-sm leading-snug text-gray-700">
@@ -412,31 +456,17 @@ export function SystemsOverview() {
               ))}
               <li className="text-sm text-gray-500">
                 Docs needing update:{" "}
-                <span className="font-medium text-gray-800">
+                <span className="font-semibold text-gray-800">
                   {topSops.filter((sop) => sop.status !== "Active").length}
                 </span>
               </li>
             </ul>
             <div className="mt-4 space-y-1 border-t border-gray-100 pt-3">
-              <Link
-                to="/order-flow"
-                className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
-              >
-                Order Flow
-                <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
-              </Link>
-              <Link
-                to="/sops"
-                className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
-              >
-                Knowledge Base
-                <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
-              </Link>
               {homeContent.quickLinks.map((item) => (
                 <Link
                   key={`${item.label}-${item.to}`}
                   to={item.to}
-                  className="flex items-center justify-between text-base font-medium text-gray-900 hover:text-brand"
+                  className="flex items-center justify-between text-sm font-semibold text-gray-900 hover:text-brand"
                 >
                   <span className="truncate">{item.label}</span>
                   <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-300" />
@@ -447,154 +477,79 @@ export function SystemsOverview() {
         </div>
       </section>
 
-      {/* KPI strip — denser, less “card toy” */}
-      <section className="grid grid-cols-2 divide-x divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 bg-white sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
-        {[
-          { label: "Open", value: openOrders },
-          { label: "Needs blanks", value: countFor(stages, "needs_blanks") },
-          { label: "Blanks ordered", value: countFor(stages, "blanks_ordered") },
-          { label: "In production", value: countFor(stages, "in_production") },
-          { label: "Ready to ship", value: countFor(stages, "ready_to_ship") },
-        ].map((cell) => (
-          <div key={cell.label} className="px-4 py-4 sm:px-5">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-              {cell.label}
-            </p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-gray-950">
-              {flowLoading ? "—" : cell.value}
-            </p>
-          </div>
-        ))}
-      </section>
-
-      {flowError ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-          {flowError}
-        </div>
-      ) : null}
-
-      {/* Main workspace: queue + pipeline */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <section className="lg:col-span-7">
-          <div className="mb-3 flex items-baseline justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold text-gray-950">Work queue</h3>
-              <p className="mt-0.5 text-xs text-gray-500">
-                From live Order Flow
-                {criticalCount > 0 ? (
-                  <span className="ml-1.5 font-medium text-red-700">
-                    · {criticalCount} critical
-                  </span>
-                ) : null}
-              </p>
-            </div>
-          </div>
-
+          <DashboardSectionHeader
+            title="Work queue"
+            description={
+              criticalCount > 0
+                ? `From live Order Flow · ${criticalCount} critical`
+                : "From live Order Flow"
+            }
+          />
           {flowLoading ? (
-            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-10 text-sm text-gray-500">
+            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-10 text-sm text-gray-500 shadow-xs">
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading queue…
             </div>
           ) : (
-            <ul className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+            <ul className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs">
               {focusItems.map((item, index) => (
                 <li key={item.id} className={cn(index > 0 && "border-t border-gray-100")}>
-                  <Link
+                  <DashboardListRow
+                    title={item.title}
+                    meta={item.detail}
                     to={item.to}
-                    className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-gray-50/80"
-                  >
-                    <span
-                      className={cn(
-                        "mt-0.5 h-8 w-0.5 shrink-0 rounded-full",
-                        item.tone === "critical"
-                          ? "bg-red-500"
-                          : item.tone === "action"
-                            ? "bg-brand"
-                            : "bg-gray-300",
-                      )}
-                      aria-hidden
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-base font-medium text-gray-950">{item.title}</p>
-                        <span
-                          className={cn(
-                            "text-[10px] font-medium uppercase tracking-wide",
-                            item.tone === "critical"
-                              ? "text-red-600"
-                              : item.tone === "action"
-                                ? "text-brand"
-                                : "text-gray-400",
-                          )}
-                        >
-                          {item.tone === "critical"
-                            ? "Critical"
-                            : item.tone === "action"
-                              ? "Next"
-                              : "Clear"}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-xs leading-relaxed text-gray-500">{item.detail}</p>
-                    </div>
-                    {typeof item.count === "number" ? (
-                      <span className="shrink-0 text-lg font-semibold tabular-nums text-gray-950">
-                        {item.count}
-                      </span>
-                    ) : null}
-                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-300 transition-colors group-hover:text-gray-500" />
-                  </Link>
+                    tone={item.tone}
+                    trailing={typeof item.count === "number" ? item.count : undefined}
+                  />
                 </li>
               ))}
             </ul>
           )}
-
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link to="/order-flow?stage=needs_blanks">
-              <Button size="sm" variant="tertiary" className="gap-2">
-                <Shirt className="h-3.5 w-3.5" />
+            <Button size="sm" variant="secondary" asChild className="gap-1">
+              <Link to="/order-flow?stage=needs_blanks">
+                <Shirt className="size-3.5" />
                 Blanks list
-              </Button>
-            </Link>
-            <Link to="/order-flow?stage=ready_to_ship">
-              <Button size="sm" variant="tertiary" className="gap-2">
-                <Truck className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+            <Button size="sm" variant="secondary" asChild className="gap-1">
+              <Link to="/order-flow?stage=ready_to_ship">
+                <Truck className="size-3.5" />
                 Shipping queue
-              </Button>
-            </Link>
+              </Link>
+            </Button>
+            <Button size="sm" variant="secondary" asChild className="gap-1">
+              <Link to="/shop-supplies">
+                <Boxes className="size-3.5" />
+                Shop supplies
+              </Link>
+            </Button>
           </div>
         </section>
 
         <section className="lg:col-span-5">
-          <div className="mb-3">
-            <h3 className="text-base font-semibold text-gray-950">Pipeline</h3>
-            <p className="mt-0.5 text-xs text-gray-500">Open stages only — click to jump in.</p>
-          </div>
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <DashboardSectionHeader
+            title="Pipeline"
+            description="Open stages — click to jump in."
+          />
+          <ul className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs">
             {PIPELINE.map(({ id, icon: Icon }, index) => {
               const n = countFor(stages, id);
               return (
-                <Link
-                  key={id}
-                  to={`/order-flow?stage=${id}`}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-4 transition-colors hover:bg-gray-50/80",
-                    index > 0 && "border-t border-gray-100",
-                  )}
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-[#F3F4F6] text-brand">
-                    <Icon className="h-4 w-4" strokeWidth={1.75} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-base font-medium text-gray-950">{STAGE_LABELS[id]}</p>
-                    <p className="text-[11px] text-gray-400">Open Order Flow</p>
-                  </div>
-                  <p className="text-xl font-semibold tabular-nums text-gray-950">
-                    {flowLoading ? "—" : n}
-                  </p>
-                </Link>
+                <li key={id} className={cn(index > 0 && "border-t border-gray-100")}>
+                  <DashboardListRow
+                    title={STAGE_LABELS[id]}
+                    meta="Open Order Flow"
+                    to={`/order-flow?stage=${id}`}
+                    icon={<Icon className="h-4 w-4" strokeWidth={1.75} />}
+                    trailing={flowLoading ? "—" : n}
+                  />
+                </li>
               );
             })}
-          </div>
+          </ul>
         </section>
       </div>
     </div>
