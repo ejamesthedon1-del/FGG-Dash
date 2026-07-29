@@ -562,18 +562,18 @@ export function ShopSuppliesPage() {
                     <MaterialPhotoThumb photoDataUrl={m.photoDataUrl} name={m.name} />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={cn(
+                            "h-2 w-2 shrink-0 rounded-full",
+                            isLowStock(m) ? "bg-red-500" : "bg-emerald-500",
+                          )}
+                          title={isLowStock(m) ? "Low stock" : "In stock"}
+                          aria-label={isLowStock(m) ? "Low stock" : "In stock"}
+                        />
                         <p className="font-semibold text-gray-950">{m.name}</p>
                         <Badge variant="outline" className="text-xs">
                           {SUPPLY_CATEGORY_LABELS[m.category]}
                         </Badge>
-                        {isLowStock(m) ? (
-                          <Badge
-                            variant="outline"
-                            className="border-amber-300 bg-amber-50 text-xs text-amber-950"
-                          >
-                            Low stock
-                          </Badge>
-                        ) : null}
                       </div>
                       <p className="mt-1 text-sm text-gray-600">
                         <span className="font-semibold tabular-nums text-gray-950">
