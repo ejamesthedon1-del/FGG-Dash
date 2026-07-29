@@ -585,68 +585,73 @@ export function ShopSuppliesPage() {
               {materials.map((m) => (
                 <li
                   key={m.id}
-                  className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                  className="rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50/60"
                 >
-                  <div className="flex items-start gap-3">
-                    <MaterialPhotoThumb photoDataUrl={m.photoDataUrl} name={m.name} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={cn(
-                            "h-2 w-2 shrink-0 rounded-full",
-                            isLowStock(m) ? "bg-red-500" : "bg-emerald-500",
-                          )}
-                          title={isLowStock(m) ? "Low stock" : "In stock"}
-                          aria-label={isLowStock(m) ? "Low stock" : "In stock"}
-                        />
-                        <p className="font-semibold text-gray-950">{m.name}</p>
-                        <Badge variant="outline" className="text-xs">
-                          {SUPPLY_CATEGORY_LABELS[m.category]}
-                        </Badge>
+                  <div className="flex items-start gap-3 p-4">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/35"
+                      onClick={() => openMaterialDetail(m, "settings")}
+                    >
+                      <MaterialPhotoThumb photoDataUrl={m.photoDataUrl} name={m.name} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "h-2 w-2 shrink-0 rounded-full",
+                              isLowStock(m) ? "bg-red-500" : "bg-emerald-500",
+                            )}
+                            title={isLowStock(m) ? "Low stock" : "In stock"}
+                            aria-label={isLowStock(m) ? "Low stock" : "In stock"}
+                          />
+                          <p className="font-semibold text-gray-950">{m.name}</p>
+                          <Badge variant="outline" className="text-xs">
+                            {SUPPLY_CATEGORY_LABELS[m.category]}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-sm text-gray-600">
+                          <span className="font-semibold tabular-nums text-gray-950">
+                            {m.qtyOnHand}
+                          </span>{" "}
+                          {m.unit} on hand · low at {m.lowStockAt}
+                        </p>
                       </div>
-                      <p className="mt-1 text-sm text-gray-600">
-                        <span className="font-semibold tabular-nums text-gray-950">
-                          {m.qtyOnHand}
-                        </span>{" "}
-                        {m.unit} on hand · low at {m.lowStockAt}
-                      </p>
-                      <button
-                        type="button"
-                        className="mt-1.5 text-xs font-medium text-brand underline-offset-2 hover:underline"
-                        onClick={() => openMaterialDetail(m)}
-                      >
-                        Manage stock
-                      </button>
+                    </button>
+                    <div
+                      className="shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="tertiary"
+                            className="h-8 w-8"
+                            aria-label={`More options for ${m.name}`}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openMaterialDetail(m, "settings")}>
+                            Manage stock
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openMaterialDetail(m, "info")}>
+                            Item info
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-red-600 focus:text-red-600"
+                            onClick={() => onDeleteMaterial(m)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="tertiary"
-                          className="h-8 w-8 shrink-0"
-                          aria-label={`More options for ${m.name}`}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openMaterialDetail(m, "settings")}>
-                          Settings
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openMaterialDetail(m, "info")}>
-                          Item info
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-red-600 focus:text-red-600"
-                          onClick={() => onDeleteMaterial(m)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </div>
                 </li>
               ))}
