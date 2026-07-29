@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { fetchOrderFlow } from "../lib/order-flow";
+import {
+  FileTooLargeError,
+  readFileAsPersistedDataUrl,
+} from "../lib/file-data-url";
 import {
   addMaterial,
   adjustMaterialQty,
@@ -35,12 +39,54 @@ import {
 } from "./ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "./ui/utils";
-import { Minus, Package, Plus, Trash2 } from "lucide-react";
+import { ImagePlus, Minus, Package, Plus, Trash2 } from "lucide-react";
 
 type CategoryFilter = "all" | SupplyCategory;
 
+const PHOTO_MAX_BYTES = 1.5 * 1024 * 1024;
+
 function materialById(data: BrandSupplies, id: string): SupplyMaterial | undefined {
   return data.materials.find((m) => m.id === id);
+}
+
+function MaterialPhotoThumb({
+  photoDataUrl,
+  name,
+  size = "md",
+}: {
+  photoDataUrl?: string;
+  name: string;
+  size?: "sm" | "md";
+}) {
+  const dim = size === "sm" ? "h-9 w-9" : "h-12 w-12";
+  if (photoDataUrl) {
+    return (
+      <img
+        src={photoDataUrl}
+        alt=""
+        className={cn(dim, "shrink-0 rounded-lg border border-gray-200 object-cover")}
+      />
+    );
+  }
+  return (
+    <div
+      className={cn(
+        dim,
+        "flex shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-gray-400",
+      )}
+      aria-hidden
+      title={name}
+    >
+      <Package className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
+    </div>
+  );
+}
+
+async function readSupplyPhoto(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Choose an image file (JPG, PNG, WebP)");
+  }
+  return readFileAsPersistedDataUrl(file, PHOTO_MAX_BYTES);
 }
 
 export function ShopSuppliesPage() {
@@ -54,6 +100,10 @@ export function ShopSuppliesPage() {
   const [matQty, setMatQty] = useState("0");
   const [matLow, setMatLow] = useState("10");
   const [matUnit, setMatUnit] = useState<SupplyUnit>("ea");
+  const [matPhoto, setMatPhoto] = useState<string | null>(null);
+  const addPhotoInputRef = useRef<HTMLInputElement>(null);
+  const rowPhotoInputRef = useRef<HTMLInputElement>(null);
+  const [photoTargetId, setPhotoTargetId] = useState<string | null>(null);
 
   // Recipe form
   const [recipeProductId, setRecipeProductId] = useState("");
@@ -126,11 +176,45 @@ export function ShopSuppliesPage() {
         qtyOnHand: Number(matQty) || 0,
         lowStockAt: Number(matLow) || 0,
         unit: matUnit,
+        photoDataUrl: matPhoto || undefined,
       }),
     );
     setMatName("");
     setMatQty("0");
+    setMatPhoto(null);
     toast.success("Material added — set on-hand qty and we track from here");
+  };
+
+  const onPickAddPhoto = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const dataUrl = await readSupplyPhoto(file);
+      setMatPhoto(dataUrl);
+    } catch (err) {
+      if (err instanceof FileTooLargeError) {
+        toast.error("Photo must be 1.5 MB or smaller");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Could not read photo");
+      }
+    }
+  };
+
+  const onPickRowPhoto = async (file: File | null) => {
+    if (!file || !photoTargetId) return;
+    try {
+      const dataUrl = await readSupplyPhoto(file);
+      setData(updateMaterial(brand, photoTargetId, { photoDataUrl: dataUrl }));
+      toast.success("Photo updated");
+    } catch (err) {
+      if (err instanceof FileTooLargeError) {
+        toast.error("Photo must be 1.5 MB or smaller");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Could not read photo");
+      }
+    } finally {
+      setPhotoTargetId(null);
+      if (rowPhotoInputRef.current) rowPhotoInputRef.current.value = "";
+    }
   };
 
   const onSaveRecipe = () => {
@@ -220,6 +304,41 @@ export function ShopSuppliesPage() {
         <TabsContent value="inventory" className="space-y-4 outline-none">
           <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-gray-900">Add material</h3>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className="group relative shrink-0"
+                onClick={() => addPhotoInputRef.current?.click()}
+                title="Add photo"
+              >
+                <MaterialPhotoThumb
+                  photoDataUrl={matPhoto || undefined}
+                  name={matName || "New material"}
+                />
+                <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                  <ImagePlus className="h-4 w-4 text-white" />
+                </span>
+              </button>
+              <input
+                ref={addPhotoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => void onPickAddPhoto(e.target.files?.[0] ?? null)}
+              />
+              {matPhoto ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="tertiary"
+                  onClick={() => setMatPhoto(null)}
+                >
+                  Remove photo
+                </Button>
+              ) : (
+                <p className="text-xs text-gray-500">Optional photo (left of name in the list)</p>
+              )}
+            </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
               <Input
                 className="lg:col-span-2"
@@ -274,6 +393,14 @@ export function ShopSuppliesPage() {
             </div>
           </section>
 
+          <input
+            ref={rowPhotoInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => void onPickRowPhoto(e.target.files?.[0] ?? null)}
+          />
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -312,29 +439,58 @@ export function ShopSuppliesPage() {
                   className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-gray-950">{m.name}</p>
-                        <Badge variant="outline" className="text-xs">
-                          {SUPPLY_CATEGORY_LABELS[m.category]}
-                        </Badge>
-                        {isLowStock(m) ? (
-                          <Badge
-                            variant="outline"
-                            className="border-amber-300 bg-amber-50 text-xs text-amber-950"
-                          >
-                            Low stock
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <MaterialPhotoThumb photoDataUrl={m.photoDataUrl} name={m.name} />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-gray-950">{m.name}</p>
+                          <Badge variant="outline" className="text-xs">
+                            {SUPPLY_CATEGORY_LABELS[m.category]}
                           </Badge>
-                        ) : null}
+                          {isLowStock(m) ? (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-300 bg-amber-50 text-xs text-amber-950"
+                            >
+                              Low stock
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-sm text-gray-600">
+                          <span className="font-semibold tabular-nums text-gray-950">
+                            {m.qtyOnHand}
+                          </span>{" "}
+                          {m.unit} on hand · low at {m.lowStockAt}
+                        </p>
                       </div>
-                      <p className="mt-1 text-sm text-gray-600">
-                        <span className="font-semibold tabular-nums text-gray-950">
-                          {m.qtyOnHand}
-                        </span>{" "}
-                        {m.unit} on hand · low at {m.lowStockAt}
-                      </p>
                     </div>
                     <div className="flex flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="tertiary"
+                        className="gap-1"
+                        onClick={() => {
+                          setPhotoTargetId(m.id);
+                          rowPhotoInputRef.current?.click();
+                        }}
+                      >
+                        <ImagePlus className="h-3.5 w-3.5" />
+                        {m.photoDataUrl ? "Change photo" : "Add photo"}
+                      </Button>
+                      {m.photoDataUrl ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="tertiary"
+                          onClick={() => {
+                            setData(updateMaterial(brand, m.id, { photoDataUrl: "" }));
+                            toast.message("Photo removed");
+                          }}
+                        >
+                          Remove photo
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         size="sm"

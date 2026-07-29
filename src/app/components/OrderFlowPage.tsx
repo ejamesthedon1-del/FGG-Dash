@@ -1131,11 +1131,27 @@ export function OrderFlowPage() {
                             key={need.materialId}
                             className="flex items-start justify-between gap-3 text-sm"
                           >
-                            <div className="min-w-0">
-                              <p className="font-medium text-gray-900">{need.materialName}</p>
-                              <p className="text-gray-500">
-                                Need {need.qtyNeeded} {need.unit} · on hand {need.qtyOnHand}
-                              </p>
+                            <div className="flex min-w-0 items-start gap-2.5">
+                              {need.photoDataUrl ? (
+                                <img
+                                  src={need.photoDataUrl}
+                                  alt=""
+                                  className="h-9 w-9 shrink-0 rounded-md border border-gray-200 object-cover"
+                                />
+                              ) : (
+                                <div
+                                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-gray-200 bg-white text-gray-400"
+                                  aria-hidden
+                                >
+                                  <Package className="h-3.5 w-3.5" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-900">{need.materialName}</p>
+                                <p className="text-gray-500">
+                                  Need {need.qtyNeeded} {need.unit} · on hand {need.qtyOnHand}
+                                </p>
+                              </div>
                             </div>
                             <div className="flex shrink-0 flex-col items-end gap-1">
                               {need.insufficient ? (

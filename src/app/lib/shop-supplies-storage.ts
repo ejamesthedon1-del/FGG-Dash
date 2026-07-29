@@ -43,6 +43,8 @@ export type SupplyMaterial = {
   lowStockAt: number;
   unit: SupplyUnit;
   notes: string;
+  /** Optional product/material photo as a data URL (synced localStorage). */
+  photoDataUrl?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -95,6 +97,7 @@ export type MaterialNeedLine = {
   unit: SupplyUnit;
   lowStock: boolean;
   insufficient: boolean;
+  photoDataUrl?: string;
 };
 
 function nowIso(): string {
@@ -198,12 +201,14 @@ export function addMaterial(
     lowStockAt?: number;
     unit?: SupplyUnit;
     notes?: string;
+    photoDataUrl?: string;
   },
 ): BrandSupplies {
   const name = input.name.trim();
   if (!name) return loadBrandSupplies(brand);
   const category = isCategory(input.category) ? input.category : "other";
   const now = nowIso();
+  const photo = (input.photoDataUrl || "").trim();
   const material: SupplyMaterial = {
     id: newId("mat"),
     name,
@@ -212,6 +217,7 @@ export function addMaterial(
     lowStockAt: Math.max(0, Number(input.lowStockAt) || 0),
     unit: input.unit ?? "ea",
     notes: (input.notes || "").trim(),
+    ...(photo ? { photoDataUrl: photo } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -225,14 +231,17 @@ export function updateMaterial(
   brand: SupplyBrand,
   materialId: string,
   patch: Partial<
-    Pick<SupplyMaterial, "name" | "category" | "lowStockAt" | "unit" | "notes" | "qtyOnHand">
+    Pick<
+      SupplyMaterial,
+      "name" | "category" | "lowStockAt" | "unit" | "notes" | "qtyOnHand" | "photoDataUrl"
+    >
   >,
 ): BrandSupplies {
   return updateBrand(brand, (current) => ({
     ...current,
     materials: current.materials.map((m) => {
       if (m.id !== materialId) return m;
-      return {
+      const next: SupplyMaterial = {
         ...m,
         name: patch.name?.trim() || m.name,
         category: patch.category && isCategory(patch.category) ? patch.category : m.category,
@@ -244,6 +253,12 @@ export function updateMaterial(
           patch.qtyOnHand != null ? Math.max(0, Number(patch.qtyOnHand) || 0) : m.qtyOnHand,
         updatedAt: nowIso(),
       };
+      if ("photoDataUrl" in patch) {
+        const photo = (patch.photoDataUrl || "").trim();
+        if (photo) next.photoDataUrl = photo;
+        else delete next.photoDataUrl;
+      }
+      return next;
     }),
   }));
 }
@@ -407,6 +422,7 @@ export function computeMaterialNeeds(
       unit: material.unit,
       lowStock: isLowStock(material),
       insufficient: material.qtyOnHand < qtyNeeded,
+      photoDataUrl: material.photoDataUrl,
     });
   }
   return needs.sort((a, b) => a.materialName.localeCompare(b.materialName));
