@@ -53,7 +53,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { cn } from "./ui/utils";
-import { ImagePlus, MoreHorizontal, Package, Trash2 } from "lucide-react";
+import { ImagePlus, MoreHorizontal, Package, Plus, Trash2 } from "lucide-react";
 
 type CategoryFilter = "all" | SupplyCategory;
 
