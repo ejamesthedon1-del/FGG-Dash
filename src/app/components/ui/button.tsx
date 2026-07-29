@@ -5,42 +5,40 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./utils";
 
 /**
- * FGG button kit (Untitled UI–inspired surfaces):
- * Primary | Secondary (white + ring) | Soft (brand wash) | Outline (blue) | Tertiary | Text
- * Shapes: rounded (default) | pill
+ * FGG Button — shadcn base-nova structure with FGG brand tokens.
+ * Preserves: asChild, tertiary, soft, shape (pill).
  */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1 whitespace-nowrap text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 [&_svg]:stroke-[2.25] shrink-0 outline-none focus-visible:ring-[3px] focus-visible:ring-brand/35 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  "group/button inline-flex shrink-0 items-center justify-center border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='stroke-'])]:stroke-[2]",
   {
     variants: {
       variant: {
-        // Primary — solid brand
-        default:
-          "rounded-lg bg-brand text-brand-foreground shadow-xs ring-1 ring-transparent ring-inset hover:bg-brand-hover dark:bg-brand dark:text-brand-foreground dark:hover:bg-brand-hover",
-        // Secondary — Untitled-style white / gray ring (default action chrome)
-        secondary:
-          "rounded-lg bg-white text-[#414651] shadow-xs ring-1 ring-inset ring-[#D5D7DA] hover:bg-[#FAFAFA] hover:text-[#181D27] dark:bg-transparent dark:text-[#E5E7EB] dark:ring-[#4B5568] dark:hover:bg-white/5",
-        // Soft — brand wash (former secondary)
-        soft:
-          "rounded-lg border border-transparent bg-brand-soft text-brand hover:bg-brand-soft-hover dark:bg-brand-soft dark:text-[#5B8FFF] dark:hover:bg-brand-soft-hover",
-        // Outline — blue outline
+        default: "bg-brand text-brand-foreground hover:bg-brand-hover",
         outline:
-          "rounded-lg border border-brand bg-background text-brand hover:bg-brand-soft dark:bg-transparent dark:border-brand dark:text-[#5B8FFF] dark:hover:bg-brand-soft",
-        // Tertiary — quiet text / light hover
+          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        secondary:
+          "border-border bg-background text-foreground shadow-xs hover:bg-muted hover:text-foreground aria-expanded:bg-muted",
+        soft: "bg-brand-soft text-brand hover:bg-brand-soft-hover",
         tertiary:
-          "rounded-lg bg-transparent text-[#414651] hover:bg-[#FAFAFA] hover:text-[#181D27] dark:text-[#E5E7EB] dark:hover:bg-white/5",
-        // Text — no chrome, brand-colored label
+          "bg-transparent text-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted",
         ghost:
-          "rounded-lg bg-transparent text-brand hover:bg-brand-soft dark:text-[#5B8FFF] dark:hover:bg-brand-soft",
-        link: "text-brand underline-offset-4 hover:underline dark:text-[#5B8FFF]",
+          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
-          "rounded-lg bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/25 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+        link: "text-brand underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-10 px-3.5 py-2.5 has-[>svg]:px-3",
-        sm: "h-9 gap-1 px-3 py-2 has-[>svg]:px-2.5",
-        lg: "h-11 px-4 py-2.5 has-[>svg]:px-3.5",
-        icon: "size-9",
+        default:
+          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        icon: "size-8",
+        "icon-xs":
+          "size-6 rounded-[min(var(--radius-md),10px)] [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm":
+          "size-7 rounded-[min(var(--radius-md),12px)] [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-lg": "size-9",
       },
       shape: {
         default: "rounded-lg",
@@ -57,9 +55,9 @@ const buttonVariants = cva(
 
 function Button({
   className,
-  variant,
-  size,
-  shape,
+  variant = "default",
+  size = "default",
+  shape = "default",
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> &
@@ -71,7 +69,7 @@ function Button({
   return (
     <Comp
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, shape, className }))}
+      className={cn(buttonVariants({ variant, size, shape }), className)}
       {...props}
     />
   );
