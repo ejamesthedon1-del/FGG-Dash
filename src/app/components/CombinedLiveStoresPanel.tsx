@@ -476,10 +476,7 @@ export function CombinedLiveStoresPanel() {
           </div>
 
           <div>
-            <DashboardSectionHeader
-              title="Jump into work"
-              description="Open the tools you use most from the CEO desk."
-            />
+            <DashboardSectionHeader title="Jump into work" />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <DashboardCtaCard
                 title="Brand Hub"
@@ -544,7 +541,7 @@ export function CombinedLiveStoresPanel() {
             </div>
 
             <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-xs sm:p-5 xl:col-span-5">
-              <DashboardSectionHeader title="Store pulse" description="Sales by brand this period." />
+              <DashboardSectionHeader title="Store pulse" />
               <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
                 {state.brands.map((b) => (
                   <li key={b.slug}>

@@ -255,9 +255,6 @@ export function SystemsOverview() {
           <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">
             Dashboard
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Live Shopify finance across Livdon and Sinners Testimony.
-          </p>
         </header>
         <CombinedLiveStoresPanel />
       </div>
@@ -271,9 +268,6 @@ export function SystemsOverview() {
           <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">
             Dashboard
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Floor brief from live Order Flow and today’s shift notes.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -313,10 +307,7 @@ export function SystemsOverview() {
       </section>
 
       <section>
-        <DashboardSectionHeader
-          title="Jump into work"
-          description="Shortcuts for the production floor."
-        />
+        <DashboardSectionHeader title="Jump into work" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <DashboardCtaCard
             title="Order Flow"
@@ -343,10 +334,7 @@ export function SystemsOverview() {
       ) : null}
 
       <section>
-        <DashboardSectionHeader
-          title="Shift notes"
-          description="Priorities and issues set for the floor."
-        />
+        <DashboardSectionHeader title="Shift notes" />
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
             <p className="text-sm font-medium text-gray-500">Priorities</p>
@@ -482,9 +470,7 @@ export function SystemsOverview() {
           <DashboardSectionHeader
             title="Work queue"
             description={
-              criticalCount > 0
-                ? `From live Order Flow · ${criticalCount} critical`
-                : "From live Order Flow"
+              criticalCount > 0 ? `${criticalCount} critical` : undefined
             }
           />
           {flowLoading ? (
@@ -530,10 +516,7 @@ export function SystemsOverview() {
         </section>
 
         <section className="lg:col-span-5">
-          <DashboardSectionHeader
-            title="Pipeline"
-            description="Open stages — click to jump in."
-          />
+          <DashboardSectionHeader title="Pipeline" />
           <ul className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs">
             {PIPELINE.map(({ id, icon: Icon }, index) => {
               const n = countFor(stages, id);
