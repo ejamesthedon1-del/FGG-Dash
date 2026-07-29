@@ -401,6 +401,7 @@ def merge_order(
         "riskStatus": risk_status,
         "riskReview": risk_review,
         "riskPendingHold": pending_hold,
+        "suppliesApplied": order_flow_store.get_supplies_applied(record),
     }
 
 

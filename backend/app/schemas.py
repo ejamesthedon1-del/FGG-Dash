@@ -57,3 +57,10 @@ class OrderFlowRiskDecisionRequest(BaseModel):
     note: str = ""
     actor: str = "ops"
     snapshot: Optional[Dict[str, Any]] = None
+
+
+class OrderFlowSuppliesAppliedRequest(BaseModel):
+    brand: str = Field(..., min_length=1)
+    shopifyOrderId: str = Field(..., min_length=1)
+    orderName: Optional[str] = None
+    actor: str = "ops"

@@ -167,15 +167,17 @@ def _row_to_record(row: Dict[str, Any]) -> Dict[str, Any]:
     risk = _extract_risk_review(record)
     if risk:
         record["riskReview"] = risk
+    supplies = get_supplies_applied(record)
+    if supplies:
+        record["suppliesApplied"] = supplies
     return record
 
 
 def _record_to_row(record: Dict[str, Any], record_id: str) -> Dict[str, Any]:
-    # blanksReceipt + riskReview live inside history so no schema migration is required.
+    # blanksReceipt + riskReview + suppliesApplied live inside history (no schema migration).
     history = list(record.get("history") or [])
     risk = _extract_risk_review(record)
     if risk:
-        # Ensure latest risk decision is present in history for durable storage.
         last = history[-1] if history else None
         if not (
             isinstance(last, dict)
@@ -190,6 +192,29 @@ def _record_to_row(record: Dict[str, Any], record_id: str) -> Dict[str, Any]:
                     "by": risk.get("decidedBy") or "ops",
                     "from": record.get("stage"),
                     "riskReview": risk,
+                }
+            )
+    supplies = get_supplies_applied(record)
+    if supplies:
+        has_stamp = any(
+            isinstance(e, dict)
+            and (
+                e.get("suppliesApplied") is True
+                or (
+                    isinstance(e.get("suppliesApplied"), dict)
+                    and e["suppliesApplied"].get("at") == supplies.get("at")
+                )
+            )
+            for e in history
+        )
+        if not has_stamp:
+            history.append(
+                {
+                    "stage": record.get("stage") or "needs_blanks",
+                    "at": supplies.get("at") or _now(),
+                    "by": supplies.get("by") or "ops",
+                    "from": record.get("stage"),
+                    "suppliesApplied": supplies,
                 }
             )
     return {
@@ -485,33 +510,74 @@ def upsert_risk_review(
         review["snapshot"] = snapshot
     if shopify_cancel_ok is not None:
         review["shopifyCancelOk"] = bool(shopify_cancel_ok)
-    if shopify_error:
-        review["shopifyError"] = str(shopify_error)[:800]
+    data = _load_all_file()
+    data.setdefault("orders", {})[key] = record
+    _write_all_file(data)
+    return record
 
+
+def get_supplies_applied(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if isinstance(record.get("suppliesApplied"), dict):
+        return record["suppliesApplied"]
+    history = record.get("history") or []
+    if not isinstance(history, list):
+        return None
+    for entry in reversed(history):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("suppliesApplied") is True:
+            return {"at": entry.get("at"), "by": entry.get("by")}
+        nested = entry.get("suppliesApplied")
+        if isinstance(nested, dict):
+            return nested
+    return None
+
+
+def mark_supplies_applied(
+    brand: str,
+    shopify_order_id: str,
+    *,
+    actor: str = "ops",
+    order_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Stamp that shop supplies were applied for this order (idempotent)."""
+    key = _record_key(brand, shopify_order_id)
+    now = _now()
+    existing = get_record(brand, shopify_order_id) or {}
+    already = get_supplies_applied(existing)
+    if already:
+        return existing
+
+    history: List[Dict[str, Any]] = list(existing.get("history") or [])
+    stage = normalize_stage(existing.get("stage") or "needs_blanks")
+    stamp = {"at": now, "by": actor}
     history.append(
         {
-            "stage": next_stage,
+            "stage": stage,
             "at": now,
             "by": actor,
             "from": existing.get("stage"),
-            "riskReview": review,
+            "suppliesApplied": stamp,
         }
     )
 
     receipt = _extract_blanks_receipt(existing)
+    risk = _extract_risk_review(existing)
     record = {
         "brand": brand,
         "shopifyOrderId": shopify_order_id,
         "orderName": order_name or existing.get("orderName") or "",
-        "stage": next_stage,
+        "stage": stage,
         "notes": existing.get("notes") or "",
         "history": history[-100:],
         "updatedAt": now,
         "createdAt": existing.get("createdAt") or now,
-        "riskReview": review,
+        "suppliesApplied": stamp,
     }
     if receipt:
         record["blanksReceipt"] = receipt
+    if risk:
+        record["riskReview"] = risk
 
     cfg = _supabase_config()
     if cfg:

@@ -12,6 +12,7 @@ from .schemas import (
     OrderFlowNotesUpdateRequest,
     OrderFlowRiskDecisionRequest,
     OrderFlowStatusUpdateRequest,
+    OrderFlowSuppliesAppliedRequest,
     ProductCostsPutRequest,
     ProductCreateRequest,
     ProductRenameRequest,
@@ -266,6 +267,22 @@ async def get_order_flow_storage() -> dict:
 async def post_order_flow_notes(body: OrderFlowNotesUpdateRequest) -> dict:
     brand_key = resolve_brand(body.brand)
     record = order_flow_store.update_notes(brand_key, body.shopifyOrderId, body.notes)
+    return {"ok": True, "record": record}
+
+
+@app.post("/api/order-flow/supplies-applied")
+async def post_order_flow_supplies_applied(body: OrderFlowSuppliesAppliedRequest) -> dict:
+    """Stamp that shop supplies were applied for an order (idempotent)."""
+    brand_key = resolve_brand(body.brand)
+    try:
+        record = order_flow_store.mark_supplies_applied(
+            brand_key,
+            body.shopifyOrderId,
+            actor=(body.actor or "ops").strip() or "ops",
+            order_name=body.orderName,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not save supplies stamp: {exc}") from exc
     return {"ok": True, "record": record}
 
 

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import {
   fetchOrderFlow,
+  markOrderSuppliesApplied,
   nextStage,
   normalizeOrderFlowStage,
   ORDER_FLOW_STAGES,
+  orderHasSuppliesApplied,
   STAGE_LABELS,
   updateOrderFlowNotes,
   updateOrderFlowStatus,
@@ -14,6 +16,13 @@ import {
   type OrderFlowStage,
   type OrderFlowStageCount,
 } from "../lib/order-flow";
+import {
+  adjustMaterialQty,
+  applySuppliesForOrder,
+  computeMaterialNeeds,
+  resolveSupplyBrand,
+  type MaterialNeedLine,
+} from "../lib/shop-supplies-storage";
 import {
   rememberOrdersFromServer,
   rememberStages,
@@ -55,6 +64,7 @@ import { cn } from "./ui/utils";
 import { OrderFlowRiskReviewSection } from "./OrderFlowRiskReviewSection";
 import { buildBlanksPrintHtml, printBlanksSlip } from "../lib/blanks-print-slip";
 import {
+  Boxes,
   Calendar,
   CheckCircle2,
   Clock,
@@ -216,6 +226,7 @@ export function OrderFlowPage() {
   const [blanksOrderedAck, setBlanksOrderedAck] = useState(false);
   const [blanksReceiptFile, setBlanksReceiptFile] = useState<File | null>(null);
   const [blanksReceiptBusy, setBlanksReceiptBusy] = useState(false);
+  const [suppliesBusy, setSuppliesBusy] = useState(false);
 
   const load = useCallback(async (opts?: { preserveSelection?: boolean }) => {
     setLoading(true);
@@ -461,6 +472,93 @@ export function OrderFlowPage() {
 
   const allVisibleSelected =
     visibleOrders.length > 0 && visibleOrders.every((o) => selected[`${o.brand}::${o.id}`]);
+
+  const detailSupplyBrand = detail ? resolveSupplyBrand(detail.brand) : null;
+  const detailSuppliesApplied = detail ? orderHasSuppliesApplied(detail) : false;
+  const detailMaterialNeeds: MaterialNeedLine[] = useMemo(() => {
+    if (!detail || !detailSupplyBrand) return [];
+    const items =
+      detail.lineItems?.length > 0
+        ? detail.lineItems
+        : [
+            {
+              productId: undefined,
+              product: detail.product,
+              quantity: detail.quantity,
+            },
+          ];
+    return computeMaterialNeeds(detailSupplyBrand, items);
+  }, [detail, detailSupplyBrand]);
+
+  const applySupplies = async (order: OrderFlowOrder) => {
+    const brandKey = resolveSupplyBrand(order.brand);
+    if (!brandKey) {
+      toast.error("Unknown brand for supplies");
+      return;
+    }
+    if (orderHasSuppliesApplied(order)) {
+      toast.message("Supplies already applied for this order");
+      return;
+    }
+    setSuppliesBusy(true);
+    let deducted: MaterialNeedLine[] | null = null;
+    try {
+      const items =
+        order.lineItems?.length > 0
+          ? order.lineItems
+          : [{ productId: undefined, product: order.product, quantity: order.quantity }];
+      const result = applySuppliesForOrder(brandKey, {
+        orderKey: `${order.brand}::${order.id}`,
+        orderNumber: order.orderNumber,
+        lineItems: items,
+        by: "ops",
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      deducted = result.needs;
+      await markOrderSuppliesApplied({
+        brand: order.brand,
+        shopifyOrderId: order.id,
+        orderName: order.orderNumber,
+        actor: "ops",
+      });
+      toast.success(`Supplies applied for ${order.orderNumber}`);
+      await load({ preserveSelection: true });
+      const at = new Date().toISOString();
+      setDetail((prev) =>
+        prev && prev.id === order.id && prev.brand === order.brand
+          ? {
+              ...prev,
+              suppliesApplied: { at, by: "ops" },
+              history: [
+                ...(prev.history || []),
+                {
+                  stage: prev.stage,
+                  at,
+                  by: "ops",
+                  suppliesApplied: true,
+                },
+              ],
+            }
+          : prev,
+      );
+    } catch (err) {
+      if (deducted) {
+        for (const need of deducted) {
+          adjustMaterialQty(brandKey, need.materialId, need.qtyNeeded, {
+            type: "adjust",
+            note: "Rollback — supplies stamp failed",
+            by: "ops",
+          });
+        }
+      }
+      toast.error(err instanceof Error ? err.message : "Could not apply supplies");
+    } finally {
+      setSuppliesBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -1004,11 +1102,85 @@ export function OrderFlowPage() {
                           <p className="text-gray-500">
                             {item.color} · {item.size} · qty {item.quantity}
                           </p>
+                          {"productId" in item && item.productId ? (
+                            <p className="mt-0.5 truncate font-mono text-[11px] text-gray-400">
+                              {item.productId}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
+
+                {detailSupplyBrand ? (
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-gray-900">Materials needed</p>
+                      <Badge
+                        variant={detailSuppliesApplied ? "default" : "secondary"}
+                        className="shrink-0"
+                      >
+                        {detailSuppliesApplied ? "Applied" : "Not applied"}
+                      </Badge>
+                    </div>
+                    <div className="space-y-2 rounded-xl bg-gray-50 px-3 py-3">
+                      {detailMaterialNeeds.length ? (
+                        detailMaterialNeeds.map((need) => (
+                          <div
+                            key={need.materialId}
+                            className="flex items-start justify-between gap-3 text-sm"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-900">{need.materialName}</p>
+                              <p className="text-gray-500">
+                                Need {need.qtyNeeded} {need.unit} · on hand {need.qtyOnHand}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              {need.insufficient ? (
+                                <Badge variant="destructive">Short</Badge>
+                              ) : need.lowStock ? (
+                                <Badge variant="secondary">Low</Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">
+                          No recipe matched these products. Add recipes under Shop supplies using
+                          each product ID above.
+                        </p>
+                      )}
+                      <div className="pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          shape="pill"
+                          disabled={
+                            suppliesBusy ||
+                            detailSuppliesApplied ||
+                            !detailMaterialNeeds.length ||
+                            detailMaterialNeeds.some((n) => n.insufficient)
+                          }
+                          onClick={() => void applySupplies(detail)}
+                        >
+                          {suppliesBusy ? (
+                            <>
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />
+                              Applying…
+                            </>
+                          ) : (
+                            <>
+                              <Boxes className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                              Apply supplies
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
                 {detail.shopifyNote ? (
                   <div>
@@ -1077,15 +1249,28 @@ export function OrderFlowPage() {
                           {[...detail.history].reverse().map((h, i) => (
                             <li key={`${h.at}-${i}`} className="flex gap-3">
                               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
-                                <Clock className="h-3.5 w-3.5" aria-hidden />
+                                {h.suppliesApplied ? (
+                                  <Boxes className="h-3.5 w-3.5" aria-hidden />
+                                ) : (
+                                  <Clock className="h-3.5 w-3.5" aria-hidden />
+                                )}
                               </div>
                               <div className="min-w-0">
                                 <p className="text-sm text-gray-900">
-                                  <span className="font-medium">{h.by || "ops"}</span>
-                                  {" moved to "}
-                                  <span className="font-medium">
-                                    {STAGE_LABELS[normalizeOrderFlowStage(h.stage)] || h.stage}
-                                  </span>
+                                  {h.suppliesApplied ? (
+                                    <>
+                                      <span className="font-medium">{h.by || "ops"}</span>
+                                      {" applied shop supplies"}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="font-medium">{h.by || "ops"}</span>
+                                      {" moved to "}
+                                      <span className="font-medium">
+                                        {STAGE_LABELS[normalizeOrderFlowStage(h.stage)] || h.stage}
+                                      </span>
+                                    </>
+                                  )}
                                 </p>
                                 <p className="mt-0.5 text-xs text-gray-500">
                                   {new Date(h.at).toLocaleString()}

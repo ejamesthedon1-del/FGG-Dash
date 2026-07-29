@@ -28,6 +28,7 @@ export type DeadlineState = "overdue" | "due_today" | "upcoming" | "ok" | "none"
 export type OrderFlowLineItem = {
   id?: string;
   product: string;
+  productId?: string;
   variant: string;
   color: string;
   size: string;
@@ -41,6 +42,12 @@ export type OrderFlowHistoryEntry = {
   by?: string;
   from?: string | null;
   receipt?: BlanksReceipt;
+  suppliesApplied?: boolean | { at?: string; by?: string };
+};
+
+export type SuppliesAppliedStamp = {
+  at?: string;
+  by?: string;
 };
 
 export type BlanksReceipt = {
@@ -107,6 +114,7 @@ export type OrderFlowOrder = {
   riskStatus?: RiskStatus | null;
   riskReview?: RiskReviewDecision | null;
   riskPendingHold?: boolean;
+  suppliesApplied?: boolean | SuppliesAppliedStamp | null;
 };
 
 export type OrderFlowStageCount = {
@@ -328,4 +336,41 @@ export async function updateOrderFlowNotes(input: {
     const text = await res.text();
     throw new Error(text || `Notes update failed (${res.status})`);
   }
+}
+
+export async function markOrderSuppliesApplied(input: {
+  brand: string;
+  shopifyOrderId: string;
+  orderName?: string;
+  actor?: string;
+}): Promise<void> {
+  const res = await fetch(apiUrl("/api/order-flow/supplies-applied"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    let detail = `Could not stamp supplies applied (${res.status})`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+}
+
+export function orderHasSuppliesApplied(order: OrderFlowOrder): boolean {
+  const stamp = order.suppliesApplied;
+  if (stamp === true) return true;
+  if (stamp && typeof stamp === "object" && (stamp.at || stamp.by)) return true;
+  const history = order.history || [];
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const entry = history[i];
+    if (!entry?.suppliesApplied) continue;
+    if (entry.suppliesApplied === true) return true;
+    if (typeof entry.suppliesApplied === "object") return true;
+  }
+  return false;
 }
