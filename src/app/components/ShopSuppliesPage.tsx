@@ -459,8 +459,8 @@ export function ShopSuppliesPage() {
                 </button>
               ))}
             </div>
-            <Button type="button" className="gap-1.5" onClick={openAddMaterial}>
-              <Plus className="h-4 w-4" />
+            <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={openAddMaterial}>
+              <Plus className="size-4 stroke-[2.25]" />
               Add material
             </Button>
           </div>
@@ -516,7 +516,7 @@ export function ShopSuppliesPage() {
                     <Button
                       type="button"
                       size="sm"
-                      variant="tertiary"
+                      variant="secondary"
                       onClick={() => setMatPhoto(null)}
                     >
                       Remove photo
@@ -627,11 +627,11 @@ export function ShopSuppliesPage() {
                           <Button
                             type="button"
                             size="icon"
-                            variant="tertiary"
-                            className="h-8 w-8"
+                            variant="secondary"
+                            className="size-8"
                             aria-label={`More options for ${m.name}`}
                           >
-                            <MoreHorizontal className="h-4 w-4" />
+                            <MoreHorizontal className="size-4 stroke-[2.25]" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -797,7 +797,7 @@ export function ShopSuppliesPage() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <Button type="button" variant="tertiary" onClick={onSaveMaterialEdits}>
+                        <Button type="button" variant="secondary" size="sm" onClick={onSaveMaterialEdits}>
                           Save settings
                         </Button>
                       </div>
@@ -852,11 +852,11 @@ export function ShopSuppliesPage() {
                           className="bg-white"
                         />
                         <div className="flex flex-wrap gap-2">
-                          <Button type="button" variant="tertiary" onClick={onSaveItemInfo}>
+                          <Button type="button" variant="secondary" size="sm" onClick={onSaveItemInfo}>
                             Save item info
                           </Button>
                           {normalizeReorderUrl(editReorderUrl || detailMaterial.reorderUrl || "") ? (
-                            <Button type="button" asChild className="gap-1.5">
+                            <Button type="button" asChild size="sm" className="gap-1">
                               <a
                                 href={
                                   normalizeReorderUrl(
@@ -866,7 +866,7 @@ export function ShopSuppliesPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >
-                                <ExternalLink className="h-3.5 w-3.5" />
+                                <ExternalLink className="size-4 stroke-[2.25]" />
                                 Open reorder site
                               </a>
                             </Button>
