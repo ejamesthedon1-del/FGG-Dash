@@ -57,7 +57,6 @@ import { cn } from "./ui/utils";
 import { ExternalLink, ImagePlus, MoreHorizontal, Package, Plus, Trash2 } from "lucide-react";
 
 type CategoryFilter = "all" | SupplyCategory;
-type DetailFocus = "settings" | "info";
 
 const PHOTO_MAX_BYTES = 1.5 * 1024 * 1024;
 
@@ -127,6 +126,7 @@ export function ShopSuppliesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const addPhotoInputRef = useRef<HTMLInputElement>(null);
   const detailPhotoInputRef = useRef<HTMLInputElement>(null);
+  const detailSheetRef = useRef<HTMLDivElement>(null);
   const [detailMaterialId, setDetailMaterialId] = useState<string | null>(null);
   const [receiveQty, setReceiveQty] = useState("10");
   const [editName, setEditName] = useState("");
@@ -136,8 +136,6 @@ export function ShopSuppliesPage() {
   const [editOnHand, setEditOnHand] = useState("0");
   const [editNotes, setEditNotes] = useState("");
   const [editReorderUrl, setEditReorderUrl] = useState("");
-  const itemInfoRef = useRef<HTMLElement | null>(null);
-  const settingsRef = useRef<HTMLElement | null>(null);
 
   // Recipe form
   const [recipeProductId, setRecipeProductId] = useState("");
@@ -245,10 +243,7 @@ export function ShopSuppliesPage() {
     }
   };
 
-  const openMaterialDetail = (
-    material: SupplyMaterial,
-    focus: DetailFocus = "settings",
-  ) => {
+  const openMaterialDetail = (material: SupplyMaterial) => {
     setDetailMaterialId(material.id);
     setReceiveQty("10");
     setEditName(material.name);
@@ -258,11 +253,20 @@ export function ShopSuppliesPage() {
     setEditOnHand(String(material.qtyOnHand));
     setEditNotes(material.notes || "");
     setEditReorderUrl(material.reorderUrl || "");
-    window.setTimeout(() => {
-      const el = focus === "info" ? itemInfoRef.current : settingsRef.current;
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
   };
+
+  useEffect(() => {
+    if (!detailMaterialId) return;
+    const reset = () => {
+      if (detailSheetRef.current) detailSheetRef.current.scrollTop = 0;
+    };
+    const frame = window.requestAnimationFrame(reset);
+    const timer = window.setTimeout(reset, 50);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [detailMaterialId]);
 
   const detailMaterial = detailMaterialId
     ? materialById(data, detailMaterialId) ?? null
@@ -584,7 +588,7 @@ export function ShopSuppliesPage() {
                     <button
                       type="button"
                       className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/35"
-                      onClick={() => openMaterialDetail(m, "settings")}
+                      onClick={() => openMaterialDetail(m)}
                     >
                       <MaterialPhotoThumb photoDataUrl={m.photoDataUrl} name={m.name} />
                       <div className="min-w-0 flex-1">
@@ -628,10 +632,10 @@ export function ShopSuppliesPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openMaterialDetail(m, "settings")}>
+                          <DropdownMenuItem onClick={() => openMaterialDetail(m)}>
                             Manage stock
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openMaterialDetail(m, "info")}>
+                          <DropdownMenuItem onClick={() => openMaterialDetail(m)}>
                             Item info
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -661,7 +665,11 @@ export function ShopSuppliesPage() {
               if (!open) setDetailMaterialId(null);
             }}
           >
-            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto border-l border-gray-200 bg-white p-0 sm:max-w-lg">
+            <SheetContent className="flex w-full flex-col gap-0 overflow-hidden border-l border-gray-200 bg-white p-0 sm:max-w-lg">
+              <div
+                ref={detailSheetRef}
+                className="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto"
+              >
               {detailMaterial ? (
                 <>
                   <SheetHeader className="border-b border-gray-100 px-5 py-4 text-left">
@@ -738,7 +746,7 @@ export function ShopSuppliesPage() {
                       </div>
                     </section>
 
-                    <section ref={settingsRef} className="space-y-3 scroll-mt-4">
+                    <section className="space-y-3">
                       <h3 className="text-sm font-semibold text-gray-900">Settings</h3>
                       <div className="grid gap-2">
                         <Input
@@ -796,10 +804,7 @@ export function ShopSuppliesPage() {
                       </div>
                     </section>
 
-                    <section
-                      ref={itemInfoRef}
-                      className="space-y-4 scroll-mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4"
-                    >
+                    <section className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
                       <div>
                         <h3 className="text-base font-semibold text-gray-950">Item info</h3>
                         <p className="mt-1 text-xs text-gray-500">
@@ -870,6 +875,7 @@ export function ShopSuppliesPage() {
                   </div>
                 </>
               ) : null}
+              </div>
             </SheetContent>
           </Sheet>
         </TabsContent>
