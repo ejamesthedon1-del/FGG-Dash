@@ -63,6 +63,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "./ui/utils";
 import { OrderFlowRiskReviewSection } from "./OrderFlowRiskReviewSection";
+import { OrderFlowDataTable } from "./OrderFlowDataTable";
 import { buildBlanksPrintHtml, printBlanksSlip } from "../lib/blanks-print-slip";
 import {
   Boxes,
@@ -94,11 +95,6 @@ const BRAND_OPTIONS: ComboboxOption[] = [
   { value: "live-don", label: "Livdon" },
   { value: "sinners-testimony", label: "Sinners Testimony" },
 ];
-
-const STAGE_OPTIONS: ComboboxOption[] = ORDER_FLOW_STAGES.map((s) => ({
-  value: s,
-  label: STAGE_LABELS[s],
-}));
 
 function optionByValue(
   options: ComboboxOption[],
@@ -323,19 +319,6 @@ export function OrderFlowPage() {
     return actions;
   }, [selectedOrders]);
 
-  const toggleSelect = (order: OrderFlowOrder, checked: boolean) => {
-    const key = `${order.brand}::${order.id}`;
-    setSelected((prev) => ({ ...prev, [key]: checked }));
-  };
-
-  const toggleSelectAllVisible = (checked: boolean) => {
-    const next = { ...selected };
-    for (const o of visibleOrders) {
-      next[`${o.brand}::${o.id}`] = checked;
-    }
-    setSelected(next);
-  };
-
   const applyStage = async (
     target: OrderFlowStage,
     list: OrderFlowOrder[],
@@ -482,9 +465,6 @@ export function OrderFlowPage() {
     }
   };
 
-  const allVisibleSelected =
-    visibleOrders.length > 0 && visibleOrders.every((o) => selected[`${o.brand}::${o.id}`]);
-
   const detailSupplyBrand = detail ? resolveSupplyBrand(detail.brand) : null;
   const detailSuppliesApplied = detail ? orderHasSuppliesApplied(detail) : false;
   const detailMaterialNeeds: MaterialNeedLine[] = useMemo(() => {
@@ -587,7 +567,7 @@ export function OrderFlowPage() {
             }}
             isItemEqualToValue={(a, b) => a.value === b.value}
           >
-            <ComboboxInput placeholder="Select a brand" className="w-[200px]" />
+            <ComboboxInput placeholder="Select a brand" className="w-[148px]" />
             <ComboboxContent>
               <ComboboxEmpty>No brands found.</ComboboxEmpty>
               <ComboboxList>
@@ -730,153 +710,16 @@ export function OrderFlowPage() {
             </p>
           </div>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          {loading ? (
-            <div className="flex items-center gap-2 py-10 text-sm text-gray-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading Shopify orders…
-            </div>
-          ) : visibleOrders.length === 0 ? (
-            <p className="py-8 text-sm text-gray-500">No orders in this stage.</p>
-          ) : (
-            <table className="w-full min-w-[960px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wide text-gray-500">
-                  <th className="px-2 py-2 font-medium">
-                    <Checkbox
-                      checked={allVisibleSelected}
-                      onCheckedChange={(v) => toggleSelectAllVisible(Boolean(v))}
-                      aria-label="Select all"
-                    />
-                  </th>
-                  <th className="px-2 py-2 font-medium">Brand</th>
-                  <th className="px-2 py-2 font-medium">Order</th>
-                  <th className="px-2 py-2 font-medium">Customer</th>
-                  <th className="px-2 py-2 font-medium">Product</th>
-                  <th className="px-2 py-2 font-medium">Color</th>
-                  <th className="px-2 py-2 font-medium">Size</th>
-                  <th className="px-2 py-2 font-medium">Qty</th>
-                  <th className="px-2 py-2 font-medium">Ordered</th>
-                  <th className="px-2 py-2 font-medium">Ship by</th>
-                  <th className="px-2 py-2 font-medium">Stage</th>
-                  <th className="px-2 py-2 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleOrders.map((order) => {
-                  const key = `${order.brand}::${order.id}`;
-                  const nxt = nextStage(order.stage);
-                  return (
-                    <tr
-                      key={key}
-                      className="border-b border-gray-100 hover:bg-gray-50/80"
-                    >
-                      <td className="px-2 py-2.5">
-                        <Checkbox
-                          checked={Boolean(selected[key])}
-                          onCheckedChange={(v) => toggleSelect(order, Boolean(v))}
-                          aria-label={`Select ${order.orderNumber}`}
-                        />
-                      </td>
-                      <td className="px-2 py-2.5 text-gray-800">{order.brandLabel}</td>
-                      <td className="px-2 py-2.5">
-                        <button
-                          type="button"
-                          className="font-medium text-blue-700 hover:underline"
-                          onClick={() => openDetail(order)}
-                        >
-                          {order.orderNumber}
-                        </button>
-                      </td>
-                      <td className="px-2 py-2.5 text-gray-800">{order.customer}</td>
-                      <td className="max-w-[180px] truncate px-2 py-2.5 text-gray-800" title={order.product}>
-                        {order.product}
-                      </td>
-                      <td className="px-2 py-2.5 text-gray-700">{order.color}</td>
-                      <td className="px-2 py-2.5 text-gray-700">{order.size}</td>
-                      <td className="px-2 py-2.5 tabular-nums text-gray-800">{order.quantity}</td>
-                      <td
-                        className={cn(
-                          "px-2 py-2.5 tabular-nums",
-                          order.highPriority
-                            ? "font-semibold text-rose-800"
-                            : order.earlyWarning
-                              ? "font-semibold text-amber-900"
-                              : "text-gray-700",
-                        )}
-                      >
-                        <div className="flex flex-col gap-1">
-                          <span>{order.orderDate}</span>
-                          {agePriorityBadge(order)}
-                        </div>
-                      </td>
-                      <td className={cn("px-2 py-2.5 tabular-nums", deadlineClass(order.deadlineState))}>
-                        <div className="flex flex-col gap-1">
-                          <span>{order.expectedShipDate || "—"}</span>
-                          {!order.highPriority && !order.earlyWarning ? deadlineBadge(order) : null}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <Combobox
-                          items={STAGE_OPTIONS}
-                          value={optionByValue(STAGE_OPTIONS, order.stage)}
-                          disabled={saving}
-                          onValueChange={(item) => {
-                            if (!item || item.value === order.stage) return;
-                            void requestStageChange(
-                              item.value as OrderFlowStage,
-                              [order],
-                            );
-                          }}
-                          isItemEqualToValue={(a, b) => a.value === b.value}
-                        >
-                          <ComboboxInput
-                            placeholder="Select a stage"
-                            className="h-8 w-[160px]"
-                            disabled={saving}
-                          />
-                          <ComboboxContent>
-                            <ComboboxEmpty>No stages found.</ComboboxEmpty>
-                            <ComboboxList>
-                              {(item) => (
-                                <ComboboxItem key={item.value} value={item}>
-                                  {item.label}
-                                </ComboboxItem>
-                              )}
-                            </ComboboxList>
-                          </ComboboxContent>
-                        </Combobox>
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <div className="flex flex-wrap gap-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-8"
-                            onClick={() => openDetail(order)}
-                          >
-                            Details
-                          </Button>
-                          {nxt ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-8"
-                              disabled={saving}
-                              onClick={() => void requestStageChange(nxt, [order])}
-                            >
-                              → {STAGE_LABELS[nxt]}
-                            </Button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+        <CardContent>
+          <OrderFlowDataTable
+            data={visibleOrders}
+            loading={loading}
+            saving={saving}
+            selected={selected}
+            onSelectedChange={setSelected}
+            onOpenDetail={openDetail}
+            onRequestStageChange={requestStageChange}
+          />
         </CardContent>
       </Card>
         </TabsContent>
