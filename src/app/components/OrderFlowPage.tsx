@@ -1158,7 +1158,7 @@ export function OrderFlowPage() {
                         ))
                       ) : (
                         <p className="text-sm text-gray-500">
-                          No recipe matched these products. Add recipes under Shop supplies using
+                          No recipe matched these products. Add recipes under Inventory using
                           each product ID above.
                         </p>
                       )}

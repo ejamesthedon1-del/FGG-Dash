@@ -174,7 +174,7 @@ export function DashboardLayout() {
             }
           >
             <Boxes className="h-4 w-4 shrink-0 opacity-80" />
-            Shop supplies
+            Inventory
           </NavLink>
           <NavLink
             to="/mockups"
@@ -252,7 +252,7 @@ export function DashboardLayout() {
             }
           >
             <Boxes className="h-4 w-4 shrink-0 opacity-80" />
-            Shop supplies
+            Inventory
           </NavLink>
           <NavLink
             to="/my-tasks"

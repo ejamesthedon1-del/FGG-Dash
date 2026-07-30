@@ -315,7 +315,7 @@ export function SystemsOverview() {
             to="/order-flow"
           />
           <DashboardCtaCard
-            title="Shop supplies"
+            title="Inventory"
             description="Track tags, DTF, bags, and apply materials."
             to="/shop-supplies"
           />
@@ -509,7 +509,7 @@ export function SystemsOverview() {
             <Button size="sm" variant="secondary" asChild className="gap-1">
               <Link to="/shop-supplies">
                 <Boxes className="size-3.5" />
-                Shop supplies
+                Inventory
               </Link>
             </Button>
           </div>
