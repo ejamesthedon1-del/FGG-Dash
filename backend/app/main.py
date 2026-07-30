@@ -216,7 +216,7 @@ async def post_order_flow_status(body: OrderFlowStatusUpdateRequest) -> dict:
         if not name or not data_url.startswith("data:"):
             raise HTTPException(
                 status_code=400,
-                detail="Blanks order receipt is required to move to Blanks Ordered",
+                detail="Blanks order receipt is required to move to Ordered",
             )
     items = []
     for o in body.orders:

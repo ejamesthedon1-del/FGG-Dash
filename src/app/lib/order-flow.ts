@@ -141,7 +141,7 @@ export type OrderFlowResponse = {
 
 export const STAGE_LABELS: Record<OrderFlowStage, string> = {
   needs_blanks: "Needs Blanks",
-  blanks_ordered: "Blanks Ordered",
+  blanks_ordered: "Ordered",
   in_production: "In Production",
   ready_to_ship: "Ready to Ship",
   shipped: "Shipped",

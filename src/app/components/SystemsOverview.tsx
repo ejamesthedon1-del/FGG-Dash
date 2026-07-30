@@ -128,7 +128,7 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
   if (blanksOrdered > 0) {
     items.push({
       id: "blanks-ordered",
-      title: "Blanks ordered",
+      title: "Ordered",
       detail: "Purchase placed — waiting to arrive before production.",
       tone: "action",
       to: "/order-flow?stage=blanks_ordered",

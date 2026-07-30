@@ -372,7 +372,7 @@ export function OrderFlowPage() {
     }
   };
 
-  /** Gate moves into Blanks Ordered behind an ops confirmation checkbox. */
+  /** Gate moves into Ordered behind an ops confirmation checkbox. */
   const requestStageChange = (target: OrderFlowStage, list: OrderFlowOrder[]) => {
     if (list.length === 0) return;
     if (target === "blanks_ordered") {
@@ -901,7 +901,7 @@ export function OrderFlowPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Move to Blanks Ordered?</DialogTitle>
+            <DialogTitle>Move to Ordered?</DialogTitle>
             <DialogDescription>
               {blanksOrderedConfirm
                 ? blanksOrderedConfirm.orders.length === 1
@@ -985,7 +985,7 @@ export function OrderFlowPage() {
                   Preparing…
                 </>
               ) : (
-                "Move to Blanks Ordered"
+                "Move to Ordered"
               )}
             </Button>
           </DialogFooter>
