@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { BookOpen, Download, ImagePlus, Loader2, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -19,9 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "./ui/utils";
 import { MockupsAdCopySection } from "./MockupsAdCopySection";
+import { MockupsSectionNav } from "./MockupsSectionNav";
 import {
   generateClothingMockup,
   type MockupAspectRatio,
@@ -71,6 +72,8 @@ function toPreviewFiles(list: FileList | File[]): PreviewFile[] {
 }
 
 export function MockupsPage() {
+  const [searchParams] = useSearchParams();
+  const section = searchParams.get("section") === "ad-copy" ? "ad-copy" : "generate";
   const inputId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = useState("");
@@ -178,20 +181,15 @@ export function MockupsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <header>
+      <header className="space-y-3">
         <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Mockups</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Generate product images, then store Facebook ad headlines and captions for campaign setup.
-        </p>
+        <MockupsSectionNav active={section} />
       </header>
 
-      <Tabs defaultValue="generate" className="gap-4">
-        <TabsList>
-          <TabsTrigger value="generate">Generate</TabsTrigger>
-          <TabsTrigger value="ad-copy">Ad copy</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="generate" className="space-y-4 outline-none">
+      {section === "ad-copy" ? (
+        <MockupsAdCopySection />
+      ) : (
+        <div className="space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <p className="text-sm text-gray-600">
               Freeform image edit — write your prompt, add reference images in order, run.
@@ -538,12 +536,8 @@ export function MockupsPage() {
           ) : null}
         </section>
       </div>
-        </TabsContent>
-
-        <TabsContent value="ad-copy" className="outline-none">
-          <MockupsAdCopySection />
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
 
       {saveOpen ? (
         <Dialog open={saveOpen} onOpenChange={setSaveOpen}>

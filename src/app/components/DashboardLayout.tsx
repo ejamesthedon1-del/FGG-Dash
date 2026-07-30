@@ -6,7 +6,6 @@ import {
   Boxes,
   CheckSquare,
   ClipboardList,
-  FolderOpen,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -178,6 +177,21 @@ export function DashboardLayout() {
             Shop supplies
           </NavLink>
           <NavLink
+            to="/mockups"
+            onClick={closeMobile}
+            className={({ isActive }) =>
+              sidebarNavClass({
+                isActive:
+                  isActive ||
+                  pathname.startsWith("/mockups") ||
+                  pathname.startsWith("/creative-assets"),
+              })
+            }
+          >
+            <Shirt className="h-4 w-4 shrink-0 opacity-80" />
+            Mockups
+          </NavLink>
+          <NavLink
             to="/sops"
             onClick={closeMobile}
             className={({ isActive }) =>
@@ -188,30 +202,6 @@ export function DashboardLayout() {
           >
             <ClipboardList className="h-4 w-4 shrink-0 opacity-80" />
             Knowledge Base
-          </NavLink>
-          <NavLink
-            to="/mockups"
-            onClick={closeMobile}
-            className={({ isActive }) =>
-              sidebarNavClass({
-                isActive: isActive || pathname.startsWith("/mockups"),
-              })
-            }
-          >
-            <Shirt className="h-4 w-4 shrink-0 opacity-80" />
-            Mockups
-          </NavLink>
-          <NavLink
-            to="/creative-assets"
-            onClick={closeMobile}
-            className={({ isActive }) =>
-              sidebarNavClass({
-                isActive: isActive || pathname.startsWith("/creative-assets/"),
-              })
-            }
-          >
-            <FolderOpen className="h-4 w-4 shrink-0 opacity-80" />
-            Creative Assets
           </NavLink>
           <NavLink
             to="/training-center"

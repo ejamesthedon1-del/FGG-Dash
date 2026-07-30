@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { FolderIcon } from "./icons/FolderIcon";
+import { MockupsSectionNav } from "./MockupsSectionNav";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import {
@@ -434,11 +435,9 @@ export function CreativeAssetsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Creative Assets</h2>
-        <p className="mt-1 max-w-2xl text-gray-600">
-          Open folders into a gallery, upload images, and manage files — changes save automatically.
-        </p>
+      <div className="space-y-3">
+        <h2 className="text-2xl font-semibold text-gray-900">Mockups</h2>
+        <MockupsSectionNav active="creative-assets" />
       </div>
 
       {atHome ? (
