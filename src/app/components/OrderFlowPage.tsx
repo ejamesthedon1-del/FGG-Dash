@@ -38,12 +38,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Checkbox } from "./ui/checkbox";
 import { Textarea } from "./ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "./ui/combobox";
 import {
   Sheet,
   SheetContent,
@@ -85,6 +86,26 @@ import { toast } from "sonner";
 
 type BrandFilter = "all" | "live-don" | "sinners-testimony";
 type StageFilter = OrderFlowStage;
+
+type ComboboxOption = { value: string; label: string };
+
+const BRAND_OPTIONS: ComboboxOption[] = [
+  { value: "all", label: "All Brands" },
+  { value: "live-don", label: "Livdon" },
+  { value: "sinners-testimony", label: "Sinners Testimony" },
+];
+
+const STAGE_OPTIONS: ComboboxOption[] = ORDER_FLOW_STAGES.map((s) => ({
+  value: s,
+  label: STAGE_LABELS[s],
+}));
+
+function optionByValue(
+  options: ComboboxOption[],
+  value: string,
+): ComboboxOption | null {
+  return options.find((o) => o.value === value) ?? null;
+}
 
 const EMPTY_RISK_QUEUE: OrderFlowRiskQueue = {
   pending: [],
@@ -187,15 +208,6 @@ function DetailMetaRow({
       <div className="min-w-0 text-gray-900">{children}</div>
     </div>
   );
-}
-
-function stageSelectOptions(current: OrderFlowStage) {
-  return ORDER_FLOW_STAGES.map((s) => ({
-    id: s,
-    label: STAGE_LABELS[s],
-    disabled: false,
-    current: s === current,
-  }));
 }
 
 export function OrderFlowPage() {
@@ -567,16 +579,46 @@ export function OrderFlowPage() {
           <h2 className="text-2xl font-semibold text-gray-900">Order Flow</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={brand} onValueChange={(v) => setBrand(v as BrandFilter)}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Brand" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Brands</SelectItem>
-              <SelectItem value="live-don">Livdon</SelectItem>
-              <SelectItem value="sinners-testimony">Sinners Testimony</SelectItem>
-            </SelectContent>
-          </Select>
+          <Combobox
+            items={BRAND_OPTIONS}
+            value={optionByValue(BRAND_OPTIONS, brand)}
+            onValueChange={(item) => {
+              if (item) setBrand(item.value as BrandFilter);
+            }}
+            isItemEqualToValue={(a, b) => a.value === b.value}
+          >
+            <ComboboxInput placeholder="Select a brand" className="w-[200px]" />
+            <ComboboxContent>
+              <ComboboxEmpty>No brands found.</ComboboxEmpty>
+              <ComboboxList>
+                {(item) => (
+                  <ComboboxItem key={item.value} value={item}>
+                    {item.label}
+                  </ComboboxItem>
+                )}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
+          <Combobox
+            items={STAGE_OPTIONS}
+            value={optionByValue(STAGE_OPTIONS, stage)}
+            onValueChange={(item) => {
+              if (item) setStageAndUrl(item.value as StageFilter);
+            }}
+            isItemEqualToValue={(a, b) => a.value === b.value}
+          >
+            <ComboboxInput placeholder="Select a stage" className="w-[200px]" />
+            <ComboboxContent>
+              <ComboboxEmpty>No stages found.</ComboboxEmpty>
+              <ComboboxList>
+                {(item) => (
+                  <ComboboxItem key={item.value} value={item}>
+                    {item.label}
+                  </ComboboxItem>
+                )}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
             Refresh
@@ -795,24 +837,35 @@ export function OrderFlowPage() {
                         </div>
                       </td>
                       <td className="px-2 py-2.5">
-                        <Select
-                          value={order.stage}
+                        <Combobox
+                          items={STAGE_OPTIONS}
+                          value={optionByValue(STAGE_OPTIONS, order.stage)}
                           disabled={saving}
-                          onValueChange={(v) =>
-                            void requestStageChange(v as OrderFlowStage, [order])
-                          }
+                          onValueChange={(item) => {
+                            if (!item || item.value === order.stage) return;
+                            void requestStageChange(
+                              item.value as OrderFlowStage,
+                              [order],
+                            );
+                          }}
+                          isItemEqualToValue={(a, b) => a.value === b.value}
                         >
-                          <SelectTrigger className="h-8 w-[160px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {stageSelectOptions(order.stage).map((opt) => (
-                              <SelectItem key={opt.id} value={opt.id}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          <ComboboxInput
+                            placeholder="Select a stage"
+                            className="h-8 w-[160px]"
+                            disabled={saving}
+                          />
+                          <ComboboxContent>
+                            <ComboboxEmpty>No stages found.</ComboboxEmpty>
+                            <ComboboxList>
+                              {(item) => (
+                                <ComboboxItem key={item.value} value={item}>
+                                  {item.label}
+                                </ComboboxItem>
+                              )}
+                            </ComboboxList>
+                          </ComboboxContent>
+                        </Combobox>
                       </td>
                       <td className="px-2 py-2.5">
                         <div className="flex flex-wrap gap-1">
