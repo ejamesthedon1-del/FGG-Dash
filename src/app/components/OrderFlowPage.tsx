@@ -599,26 +599,6 @@ export function OrderFlowPage() {
               </ComboboxList>
             </ComboboxContent>
           </Combobox>
-          <Combobox
-            items={STAGE_OPTIONS}
-            value={optionByValue(STAGE_OPTIONS, stage)}
-            onValueChange={(item) => {
-              if (item) setStageAndUrl(item.value as StageFilter);
-            }}
-            isItemEqualToValue={(a, b) => a.value === b.value}
-          >
-            <ComboboxInput placeholder="Select a stage" className="w-[200px]" />
-            <ComboboxContent>
-              <ComboboxEmpty>No stages found.</ComboboxEmpty>
-              <ComboboxList>
-                {(item) => (
-                  <ComboboxItem key={item.value} value={item}>
-                    {item.label}
-                  </ComboboxItem>
-                )}
-              </ComboboxList>
-            </ComboboxContent>
-          </Combobox>
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
             Refresh

@@ -63,7 +63,7 @@ function ComboboxInput({
     <div
       data-slot="combobox-input-group"
       className={cn(
-        "border-input bg-input-background relative flex h-9 w-full min-w-0 items-center rounded-md border transition-[color,box-shadow] outline-none has-[:focus-visible]:border-ring has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50 has-[[data-disabled]]:opacity-50",
+        "border-input bg-background relative flex h-9 w-full min-w-0 items-center rounded-lg border shadow-xs transition-[color,box-shadow] outline-none has-[:focus-visible]:border-ring has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50 has-[[data-disabled]]:opacity-50",
         className,
       )}
     >
@@ -74,14 +74,9 @@ function ComboboxInput({
         )}
         {...props}
       />
-      <div className="flex shrink-0 items-center gap-0.5 pr-1">
+      <div className="flex shrink-0 items-center gap-0.5 pr-1.5">
         {showClear ? <ComboboxClear disabled={disabled} /> : null}
-        {showTrigger ? (
-          <ComboboxTrigger
-            disabled={disabled}
-            className="group-has-data-[slot=combobox-clear]/input-group:hidden"
-          />
-        ) : null}
+        {showTrigger ? <ComboboxTrigger disabled={disabled} /> : null}
       </div>
       {children}
     </div>
@@ -91,7 +86,7 @@ function ComboboxInput({
 function ComboboxContent({
   className,
   side = "bottom",
-  sideOffset = 6,
+  sideOffset = 4,
   align = "start",
   alignOffset = 0,
   anchor,
@@ -114,7 +109,7 @@ function ComboboxContent({
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"
           className={cn(
-            "bg-popover text-popover-foreground data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 relative max-h-[min(24rem,var(--available-height))] w-[var(--anchor-width)] min-w-[12rem] origin-[var(--transform-origin)] overflow-hidden rounded-md border border-gray-200 shadow-md",
+            "bg-popover text-popover-foreground data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 relative max-h-[min(24rem,var(--available-height))] w-[var(--anchor-width)] origin-[var(--transform-origin)] overflow-hidden rounded-lg border border-gray-200 p-1 shadow-md",
             className,
           )}
           {...props}
@@ -129,7 +124,7 @@ function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
     <ComboboxPrimitive.List
       data-slot="combobox-list"
       className={cn(
-        "max-h-[min(20rem,var(--available-height))] overflow-y-auto overscroll-contain p-1",
+        "max-h-[min(20rem,var(--available-height))] scroll-py-1 overflow-y-auto overscroll-contain outline-none",
         className,
       )}
       {...props}
@@ -146,7 +141,7 @@ function ComboboxItem({
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
       className={cn(
-        "relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "relative flex w-full cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[selected]:bg-accent/70 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className,
       )}
       {...props}
@@ -192,7 +187,11 @@ function ComboboxEmpty({ className, ...props }: ComboboxPrimitive.Empty.Props) {
   return (
     <ComboboxPrimitive.Empty
       data-slot="combobox-empty"
-      className={cn("px-2 py-6 text-center text-sm text-muted-foreground", className)}
+      className={cn(
+        // Keep mounted for a11y, but no padding when children are cleared (avoids blank gap).
+        "text-center text-sm text-muted-foreground [&:not(:empty)]:px-2 [&:not(:empty)]:py-2",
+        className,
+      )}
       {...props}
     />
   );
