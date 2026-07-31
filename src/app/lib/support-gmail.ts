@@ -82,3 +82,13 @@ export async function fetchSupportThread(
   }
   return (await res.json()) as SupportThreadDetail;
 }
+
+export async function disconnectSupportGmail(): Promise<void> {
+  const res = await fetch(apiUrl("/api/support/gmail/disconnect"), {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Disconnect failed (${res.status})`);
+  }
+}
