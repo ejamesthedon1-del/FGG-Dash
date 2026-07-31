@@ -6,6 +6,8 @@ export type SupportGmailStatus = {
   email?: string | null;
   clientId?: string | null;
   redirectUri?: string | null;
+  canSend?: boolean;
+  autoReplyEnabled?: boolean;
 };
 
 export type SupportThread = {
@@ -54,6 +56,8 @@ export type SupportThreadMessage = {
   id?: string;
   from: string;
   to: string;
+  replyTo?: string;
+  messageIdHeader?: string;
   subject: string;
   date: string;
   snippet: string;
@@ -81,6 +85,35 @@ export async function fetchSupportThread(
     throw new Error(text || `Thread failed (${res.status})`);
   }
   return (await res.json()) as SupportThreadDetail;
+}
+
+export type SupportAutoReplyRunResult = {
+  ok: boolean;
+  reason?: string;
+  processed: number;
+  sent: number;
+  results?: Array<{
+    threadId: string;
+    sent: boolean;
+    reason?: string;
+    orderName?: string;
+    stage?: string;
+    customerEmail?: string;
+  }>;
+};
+
+export async function runSupportAutoReplies(
+  max = 20,
+): Promise<SupportAutoReplyRunResult> {
+  const res = await fetch(
+    apiUrl(`/api/support/gmail/auto-reply/run?max=${max}`),
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Auto-reply failed (${res.status})`);
+  }
+  return (await res.json()) as SupportAutoReplyRunResult;
 }
 
 export async function disconnectSupportGmail(): Promise<void> {

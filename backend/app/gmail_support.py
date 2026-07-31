@@ -1,9 +1,11 @@
-"""Gmail OAuth + read-only inbox helpers for Support."""
+"""Gmail OAuth + inbox helpers for Support (read + send)."""
 
 from __future__ import annotations
 
+import base64
 import secrets
 from datetime import datetime, timedelta, timezone
+from email.mime.text import MIMEText
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
@@ -16,8 +18,10 @@ from .config import get_settings
 
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/userinfo.email",
 ]
+SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
@@ -285,6 +289,8 @@ async def get_thread(thread_id: str) -> Dict[str, Any]:
                 "id": msg.get("id"),
                 "from": headers.get("from") or "",
                 "to": headers.get("to") or "",
+                "replyTo": headers.get("reply-to") or "",
+                "messageIdHeader": headers.get("message-id") or "",
                 "subject": headers.get("subject") or subject,
                 "date": _parse_date(headers.get("date") or "") or "",
                 "snippet": msg.get("snippet") or "",
@@ -374,6 +380,78 @@ async def list_inbox_threads(max_results: int = 30) -> Dict[str, Any]:
     }
 
 
+def token_has_send_scope(tokens: Optional[Dict[str, Any]] = None) -> bool:
+    data = tokens if tokens is not None else gmail_store.get_tokens()
+    if not data:
+        return False
+    scope = str(data.get("scope") or "")
+    parts = set(scope.split())
+    # Full mail scope also covers send
+    return SEND_SCOPE in parts or "https://mail.google.com/" in parts
+
+
+async def send_thread_reply(
+    *,
+    thread_id: str,
+    to_email: str,
+    subject: str,
+    body_text: str,
+    in_reply_to: str = "",
+    references: str = "",
+) -> Dict[str, Any]:
+    """Send a plain-text reply into an existing Gmail thread."""
+    to_email = (to_email or "").strip()
+    tid = (thread_id or "").strip()
+    if not to_email or "@" not in to_email:
+        raise HTTPException(status_code=400, detail="Valid to email required")
+    if not tid:
+        raise HTTPException(status_code=400, detail="thread id required")
+
+    access, tokens = await get_valid_access_token()
+    if not token_has_send_scope(tokens):
+        raise HTTPException(
+            status_code=403,
+            detail="Gmail send scope missing — disconnect and reconnect Support Gmail.",
+        )
+
+    msg = MIMEText(body_text, _charset="utf-8")
+    msg["To"] = to_email
+    from_addr = (tokens.get("email") or "").strip()
+    if from_addr:
+        msg["From"] = from_addr
+    subj = (subject or "").strip() or "Your order update"
+    if not subj.lower().startswith("re:"):
+        subj = f"Re: {subj}"
+    msg["Subject"] = subj
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+        msg["References"] = references or in_reply_to
+
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("ascii").rstrip("=")
+    payload = {"raw": raw, "threadId": tid}
+
+    async with httpx.AsyncClient(timeout=40.0) as client:
+        res = await client.post(
+            f"{GMAIL_API}/users/me/messages/send",
+            headers={"Authorization": f"Bearer {access}"},
+            json=payload,
+        )
+        if res.status_code == 401:
+            tokens = await refresh_access_token(tokens)
+            access = tokens["access_token"]
+            res = await client.post(
+                f"{GMAIL_API}/users/me/messages/send",
+                headers={"Authorization": f"Bearer {access}"},
+                json=payload,
+            )
+        if res.status_code >= 400:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Gmail send failed ({res.status_code}): {res.text}",
+            )
+        return res.json()
+
+
 async def get_connection_status() -> Dict[str, Any]:
     tokens = gmail_store.get_tokens()
     s = get_settings()
@@ -381,6 +459,8 @@ async def get_connection_status() -> Dict[str, Any]:
         "configured": gmail_configured(),
         "clientId": (s.gmail_client_id or "").strip() or None,
         "redirectUri": redirect_uri(),
+        "canSend": False,
+        "autoReplyEnabled": True,
     }
     if not tokens:
         return {
@@ -397,10 +477,12 @@ async def get_connection_status() -> Dict[str, Any]:
             **base,
             "connected": True,
             "email": email,
+            "canSend": token_has_send_scope(tokens),
         }
     except HTTPException:
         return {
             **base,
             "connected": False,
             "email": tokens.get("email"),
+            "canSend": False,
         }

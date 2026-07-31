@@ -19,6 +19,7 @@ import {
   fetchSupportGmailStatus,
   fetchSupportThread,
   fetchSupportThreads,
+  runSupportAutoReplies,
   supportGmailConnectUrl,
   type SupportThread,
   type SupportThreadDetail,
@@ -109,11 +110,129 @@ function parseFrom(from: string): { name: string; email: string } {
   return { name: from || "Unknown", email: "" };
 }
 
+/** Shopify contact-form notification emails — not customizable in Shopify admin. */
+type ShopifyContactSubmission = {
+  name: string;
+  email: string;
+  phone: string;
+  message: string;
+  extras: { label: string; value: string }[];
+};
+
+const SHOPIFY_CONTACT_LABELS = new Set([
+  "name",
+  "email",
+  "phone",
+  "body",
+  "message",
+  "subject",
+  "country code",
+  "id",
+  "order number",
+  "order #",
+]);
+
+function normalizeContactLabel(line: string): string {
+  return line.replace(/:$/, "").trim().toLowerCase();
+}
+
+function parseShopifyContactForm(text: string): ShopifyContactSubmission | null {
+  const raw = text.replace(/\r\n/g, "\n").trim();
+  if (!raw) return null;
+
+  const looksLikeShopify =
+    /online store'?s? contact form/i.test(raw) ||
+    (/^name:?$/im.test(raw) && /^email:?$/im.test(raw) && /^(body|message):?$/im.test(raw));
+  if (!looksLikeShopify) return null;
+
+  const lines = raw.split("\n");
+  const fields = new Map<string, string>();
+  let i = 0;
+  while (i < lines.length) {
+    const label = normalizeContactLabel(lines[i] || "");
+    if (!SHOPIFY_CONTACT_LABELS.has(label)) {
+      i += 1;
+      continue;
+    }
+    i += 1;
+    const valueLines: string[] = [];
+    while (i < lines.length) {
+      const next = (lines[i] || "").trim();
+      if (SHOPIFY_CONTACT_LABELS.has(normalizeContactLabel(next)) && next !== "") break;
+      if (next || valueLines.length) valueLines.push(lines[i] ?? "");
+      i += 1;
+    }
+    const value = valueLines.join("\n").trim();
+    if (value) fields.set(label, value);
+  }
+
+  const name = fields.get("name") || "";
+  const email = fields.get("email") || "";
+  const phone = fields.get("phone") || "";
+  const message = fields.get("body") || fields.get("message") || "";
+  if (!name && !email && !message) return null;
+
+  const skip = new Set(["name", "email", "phone", "body", "message"]);
+  const extras: { label: string; value: string }[] = [];
+  for (const [label, value] of fields) {
+    if (skip.has(label) || label === "id") continue;
+    extras.push({
+      label: label.replace(/\b\w/g, (c) => c.toUpperCase()),
+      value,
+    });
+  }
+
+  return { name, email, phone, message, extras };
+}
+
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+}
+
+function ShopifyContactBody({ data }: { data: ShopifyContactSubmission }) {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Store contact form
+      </p>
+      {data.message ? (
+        <p className="whitespace-pre-wrap text-pretty text-[15px] leading-relaxed text-foreground">
+          {data.message}
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">(No message)</p>
+      )}
+      <dl className="grid gap-2 border-t border-border pt-3 text-sm sm:grid-cols-2">
+        {data.name ? (
+          <div>
+            <dt className="text-[11px] text-muted-foreground">Name</dt>
+            <dd className="font-medium text-foreground">{data.name}</dd>
+          </div>
+        ) : null}
+        {data.email ? (
+          <div>
+            <dt className="text-[11px] text-muted-foreground">Email</dt>
+            <dd className="break-all font-medium text-foreground">{data.email}</dd>
+          </div>
+        ) : null}
+        {data.phone ? (
+          <div>
+            <dt className="text-[11px] text-muted-foreground">Phone</dt>
+            <dd className="font-medium text-foreground">{data.phone}</dd>
+          </div>
+        ) : null}
+        {data.extras.map((row) => (
+          <div key={row.label}>
+            <dt className="text-[11px] text-muted-foreground">{row.label}</dt>
+            <dd className="font-medium text-foreground">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
 }
 
 export function SupportPage() {
@@ -122,6 +241,7 @@ export function SupportPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [configured, setConfigured] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [canSend, setCanSend] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
   const [redirectUri, setRedirectUri] = useState<string | null>(null);
@@ -141,10 +261,25 @@ export function SupportPage() {
       const status = await fetchSupportGmailStatus();
       setConfigured(status.configured);
       setConnected(status.connected);
+      setCanSend(Boolean(status.canSend));
       setEmail(status.email ?? null);
       setClientId(status.clientId ?? null);
       setRedirectUri(status.redirectUri ?? null);
       if (status.connected) {
+        if (status.canSend) {
+          try {
+            const auto = await runSupportAutoReplies(20);
+            if (auto.sent > 0) {
+              toast.success(
+                `Auto-replied to ${auto.sent} order status ${
+                  auto.sent === 1 ? "message" : "messages"
+                }`,
+              );
+            }
+          } catch {
+            // Non-fatal — inbox still loads
+          }
+        }
         const data = await fetchSupportThreads(30);
         setThreads(data.threads || []);
         setEmail(data.email ?? status.email ?? null);
@@ -220,6 +355,7 @@ export function SupportPage() {
     try {
       await disconnectSupportGmail();
       setConnected(false);
+      setCanSend(false);
       setEmail(null);
       setThreads([]);
       setSelectedId(null);
@@ -232,9 +368,25 @@ export function SupportPage() {
 
   const selectedListItem = threads.find((t) => t.id === selectedId) ?? null;
   const latestMessage = detail?.messages?.[detail.messages.length - 1];
-  const contact = parseFrom(
+  const latestBody = latestMessage
+    ? messageBody(
+        latestMessage.bodyText,
+        latestMessage.bodyHtml,
+        latestMessage.snippet,
+      )
+    : "";
+  const shopifyContact = latestBody
+    ? parseShopifyContactForm(latestBody)
+    : null;
+  const mailer = parseFrom(
     latestMessage?.from || selectedListItem?.from || "",
   );
+  const contact = shopifyContact
+    ? {
+        name: shopifyContact.name || mailer.name,
+        email: shopifyContact.email || mailer.email,
+      }
+    : mailer;
 
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3">
@@ -284,6 +436,45 @@ export function SupportPage() {
           <Loader2 className="size-4 animate-spin" />
           Loading…
         </div>
+      ) : null}
+
+      {!loading && connected && !canSend ? (
+        <Card className="border-amber-200 bg-amber-50/60">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div className="text-sm">
+              <p className="font-medium text-foreground">
+                Reconnect Gmail to enable auto-replies
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                Disconnect, then connect again and approve{" "}
+                <span className="font-medium text-foreground">Send email</span>{" "}
+                for order status updates.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void onDisconnect()}
+              >
+                Disconnect
+              </Button>
+              <Button type="button" size="sm" asChild>
+                <a href={supportGmailConnectUrl({ switchAccount: true })}>
+                  Reconnect
+                </a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!loading && connected && canSend ? (
+        <p className="text-xs text-muted-foreground">
+          Auto-replies on for order status asks (matched to Order Flow). Refunds
+          and other requests stay in the inbox for ops.
+        </p>
       ) : null}
 
       {!loading && !configured ? (
@@ -392,6 +583,12 @@ export function SupportPage() {
                 <ul>
                   {filteredThreads.map((t) => {
                     const who = parseFrom(t.from);
+                    const shopifyPreview = parseShopifyContactForm(t.snippet);
+                    const listName = shopifyPreview?.name || who.name;
+                    const listSnippet =
+                      shopifyPreview?.message ||
+                      shopifyPreview?.email ||
+                      t.snippet;
                     const active = t.id === selectedId;
                     return (
                       <li key={t.id} className="border-b border-border">
@@ -408,7 +605,7 @@ export function SupportPage() {
                             className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground"
                             aria-hidden
                           >
-                            {initials(who.name)}
+                            {initials(listName)}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
@@ -420,7 +617,7 @@ export function SupportPage() {
                                     : "font-medium text-foreground",
                                 )}
                               >
-                                {who.name}
+                                {listName}
                               </p>
                               <span className="shrink-0 text-[10px] text-muted-foreground">
                                 {formatThreadDate(t.date)}
@@ -430,7 +627,7 @@ export function SupportPage() {
                               {t.subject}
                             </p>
                             <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
-                              {t.snippet}
+                              {listSnippet}
                             </p>
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
                               {t.unread ? (
@@ -496,6 +693,9 @@ export function SupportPage() {
                     ? detail.messages.map((m) => {
                         const who = parseFrom(m.from);
                         const body = messageBody(m.bodyText, m.bodyHtml, m.snippet);
+                        const shopify = parseShopifyContactForm(body);
+                        const displayName = shopify?.name || who.name;
+                        const displayEmail = shopify?.email || who.email || m.from;
                         return (
                           <article
                             key={m.id || `${m.from}-${m.date}`}
@@ -506,25 +706,31 @@ export function SupportPage() {
                                 className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground"
                                 aria-hidden
                               >
-                                {initials(who.name)}
+                                {initials(displayName)}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                                   <p className="text-sm font-medium text-foreground">
-                                    {who.name}
+                                    {displayName}
                                   </p>
                                   <p className="text-[11px] text-muted-foreground">
                                     {formatThreadDate(m.date)}
                                   </p>
                                 </div>
                                 <p className="truncate text-[11px] text-muted-foreground">
-                                  {who.email || m.from}
-                                  {m.to ? ` · to ${m.to}` : ""}
+                                  {displayEmail}
+                                  {shopify
+                                    ? " · via Shopify contact form"
+                                    : m.to
+                                      ? ` · to ${m.to}`
+                                      : ""}
                                 </p>
                               </div>
                             </div>
                             <div className="text-[15px] leading-relaxed text-foreground">
-                              {body ? (
+                              {shopify ? (
+                                <ShopifyContactBody data={shopify} />
+                              ) : body ? (
                                 <p className="whitespace-pre-wrap text-pretty">{body}</p>
                               ) : (
                                 <p className="text-muted-foreground">(No message body)</p>
@@ -562,6 +768,11 @@ export function SupportPage() {
                       {contact.email}
                     </p>
                   ) : null}
+                  {shopifyContact?.phone ? (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {shopifyContact.phone}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2 rounded-md border border-border p-3">
@@ -580,7 +791,7 @@ export function SupportPage() {
                     <span className="text-muted-foreground">Source</span>
                     <span className="inline-flex items-center gap-1 font-medium">
                       <Mail className="size-3.5" />
-                      Gmail
+                      {shopifyContact ? "Shopify form" : "Gmail"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2 text-sm">
@@ -621,8 +832,10 @@ export function SupportPage() {
                 ) : null}
 
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Inbox: {email || "connected"}. Replies from Dash come in a
-                  later phase.
+                  Inbox: {email || "connected"}.
+                  {canSend
+                    ? " Status asks auto-reply from Order Flow when a single matching order is found."
+                    : " Reconnect with Send email permission to enable auto-replies."}
                 </p>
               </div>
             )}

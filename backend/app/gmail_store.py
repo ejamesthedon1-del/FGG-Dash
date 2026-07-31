@@ -86,3 +86,36 @@ def consume_oauth_state(state: str) -> bool:
         data.pop("oauthStateAt", None)
         _write(data)
     return bool(expected) and expected == state
+
+
+def get_auto_reply(thread_id: str) -> Optional[Dict[str, Any]]:
+    tid = (thread_id or "").strip()
+    if not tid:
+        return None
+    with _lock:
+        data = _read()
+    replies = data.get("autoReplies") or {}
+    row = replies.get(tid)
+    return row if isinstance(row, dict) else None
+
+
+def save_auto_reply(thread_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    tid = (thread_id or "").strip()
+    if not tid:
+        raise ValueError("thread_id required")
+    with _lock:
+        data = _read()
+        replies = dict(data.get("autoReplies") or {})
+        row = {**payload, "at": _now()}
+        replies[tid] = row
+        # Keep file bounded
+        if len(replies) > 500:
+            ordered = sorted(
+                replies.items(),
+                key=lambda kv: str((kv[1] or {}).get("at") or ""),
+            )
+            replies = dict(ordered[-400:])
+        data["autoReplies"] = replies
+        data["updatedAt"] = _now()
+        _write(data)
+        return row

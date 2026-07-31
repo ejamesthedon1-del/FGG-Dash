@@ -22,7 +22,7 @@ from .schemas import (
 from .shopify import ShopifyGraphQLError, cancel_order_for_fraud, get_shopify_client
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
-from . import gmail_store, gmail_support, mockups, order_flow_store, product_costs_store
+from . import gmail_store, gmail_support, mockups, order_flow_store, product_costs_store, support_auto_reply
 from .order_flow import build_order_flow
 from .shopify_color import PRODUCT_COLOR_GRAPHQL, product_label_with_color, resolve_product_color
 
@@ -142,6 +142,18 @@ async def support_gmail_threads(max: int = 30) -> dict:
 @app.get("/api/support/gmail/threads/{thread_id}")
 async def support_gmail_thread(thread_id: str) -> dict:
     return await gmail_support.get_thread(thread_id)
+
+
+@app.post("/api/support/gmail/auto-reply/run")
+async def support_gmail_auto_reply_run(max: int = 20) -> dict:
+    """Process unread Support threads and send Order Flow status auto-replies."""
+    return await support_auto_reply.process_auto_replies(max_threads=max)
+
+
+@app.post("/api/support/gmail/auto-reply/threads/{thread_id}")
+async def support_gmail_auto_reply_thread(thread_id: str) -> dict:
+    """Try a status auto-reply for one thread (idempotent)."""
+    return await support_auto_reply.try_auto_reply_thread(thread_id)
 
 
 @app.post("/api/mockups/generate")
