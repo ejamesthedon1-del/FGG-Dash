@@ -461,6 +461,7 @@ async def get_connection_status() -> Dict[str, Any]:
         "redirectUri": redirect_uri(),
         "canSend": False,
         "autoReplyEnabled": True,
+        "autoReplyLive": bool(get_settings().support_auto_reply_live),
     }
     if not tokens:
         return {

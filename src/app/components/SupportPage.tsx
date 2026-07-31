@@ -19,8 +19,10 @@ import {
   fetchSupportGmailStatus,
   fetchSupportThread,
   fetchSupportThreads,
-  runSupportAutoReplies,
+  previewSupportAutoReply,
+  sendSupportAutoReplyTestToSelf,
   supportGmailConnectUrl,
+  type SupportAutoReplyResult,
   type SupportThread,
   type SupportThreadDetail,
 } from "../lib/support-gmail";
@@ -242,6 +244,7 @@ export function SupportPage() {
   const [configured, setConfigured] = useState(false);
   const [connected, setConnected] = useState(false);
   const [canSend, setCanSend] = useState(false);
+  const [autoReplyLive, setAutoReplyLive] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
   const [redirectUri, setRedirectUri] = useState<string | null>(null);
@@ -252,6 +255,8 @@ export function SupportPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
+  const [preview, setPreview] = useState<SupportAutoReplyResult | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const load = useCallback(async (opts?: { soft?: boolean }) => {
     if (opts?.soft) setRefreshing(true);
@@ -262,24 +267,11 @@ export function SupportPage() {
       setConfigured(status.configured);
       setConnected(status.connected);
       setCanSend(Boolean(status.canSend));
+      setAutoReplyLive(Boolean(status.autoReplyLive));
       setEmail(status.email ?? null);
       setClientId(status.clientId ?? null);
       setRedirectUri(status.redirectUri ?? null);
       if (status.connected) {
-        if (status.canSend) {
-          try {
-            const auto = await runSupportAutoReplies(20);
-            if (auto.sent > 0) {
-              toast.success(
-                `Auto-replied to ${auto.sent} order status ${
-                  auto.sent === 1 ? "message" : "messages"
-                }`,
-              );
-            }
-          } catch {
-            // Non-fatal — inbox still loads
-          }
-        }
         const data = await fetchSupportThreads(30);
         setThreads(data.threads || []);
         setEmail(data.email ?? status.email ?? null);
@@ -287,6 +279,7 @@ export function SupportPage() {
         setThreads([]);
         setSelectedId(null);
         setDetail(null);
+        setPreview(null);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load Support";
@@ -336,6 +329,7 @@ export function SupportPage() {
   const openThread = async (threadId: string) => {
     setSelectedId(threadId);
     setDetail(null);
+    setPreview(null);
     setDetailLoading(true);
     try {
       const data = await fetchSupportThread(threadId);
@@ -343,11 +337,59 @@ export function SupportPage() {
       setThreads((prev) =>
         prev.map((t) => (t.id === threadId ? { ...t, unread: false } : t)),
       );
+      try {
+        const draft = await previewSupportAutoReply(threadId);
+        setPreview(draft);
+      } catch {
+        setPreview(null);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not open thread");
       setSelectedId(null);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const onPreview = async () => {
+    if (!selectedId) return;
+    setPreviewLoading(true);
+    try {
+      const draft = await previewSupportAutoReply(selectedId);
+      setPreview(draft);
+      if (draft.reason === "dry_run") {
+        toast.success("Draft ready — nothing sent to the customer");
+      } else if (draft.reason === "not_status_inquiry") {
+        toast.message("Not treated as an order-status ask");
+      } else {
+        toast.message(draft.reason || "Preview done");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const onSendTestToSelf = async () => {
+    if (!selectedId) return;
+    if (!canSend) {
+      toast.error("Reconnect Gmail with Send permission first");
+      return;
+    }
+    setPreviewLoading(true);
+    try {
+      const result = await sendSupportAutoReplyTestToSelf(selectedId);
+      if (result.sent) {
+        toast.success(`Test email sent to ${email || "your Support inbox"}`);
+        setPreview(result);
+      } else {
+        toast.error(result.detail || result.reason || "Test send failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Test send failed");
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -470,10 +512,11 @@ export function SupportPage() {
         </Card>
       ) : null}
 
-      {!loading && connected && canSend ? (
+      {!loading && connected ? (
         <p className="text-xs text-muted-foreground">
-          Auto-replies on for order status asks (matched to Order Flow). Refunds
-          and other requests stay in the inbox for ops.
+          {autoReplyLive
+            ? "Live auto-replies are ON — status asks can email customers."
+            : "Test mode: nothing is emailed to customers. Open a thread to preview the draft, or send a test to your Support inbox."}
         </p>
       ) : null}
 
@@ -831,11 +874,80 @@ export function SupportPage() {
                   </Button>
                 ) : null}
 
+                <div className="space-y-2 rounded-md border border-border p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Auto-reply preview
+                  </p>
+                  {!autoReplyLive ? (
+                    <Badge variant="secondary" className="text-[10px]">
+                      Test mode — no customer emails
+                    </Badge>
+                  ) : (
+                    <Badge variant="default" className="text-[10px]">
+                      Live
+                    </Badge>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={previewLoading || !selectedId}
+                      onClick={() => void onPreview()}
+                    >
+                      {previewLoading ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : null}
+                      Preview draft
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={
+                        previewLoading ||
+                        !selectedId ||
+                        !canSend ||
+                        preview?.reason !== "dry_run"
+                      }
+                      onClick={() => void onSendTestToSelf()}
+                    >
+                      Email test to me
+                    </Button>
+                  </div>
+                  {preview ? (
+                    <div className="space-y-2 text-xs">
+                      <p className="text-muted-foreground">
+                        {preview.reason === "dry_run"
+                          ? `Would send to ${preview.wouldSendTo || preview.customerEmail}`
+                          : preview.reason === "sent_to_self"
+                            ? `Test sent to ${preview.wouldSendTo}`
+                            : `Status: ${preview.reason}`}
+                      </p>
+                      {preview.orderName ? (
+                        <p>
+                          Order{" "}
+                          <span className="font-medium">{preview.orderName}</span>
+                          {preview.stage ? ` · ${preview.stage}` : ""}
+                        </p>
+                      ) : null}
+                      {preview.draftBody ? (
+                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-[11px] leading-relaxed text-foreground">
+                          {preview.draftBody}
+                        </pre>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Open a thread to see what would auto-reply.
+                    </p>
+                  )}
+                </div>
+
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   Inbox: {email || "connected"}.
-                  {canSend
-                    ? " Status asks auto-reply from Order Flow when a single matching order is found."
-                    : " Reconnect with Send email permission to enable auto-replies."}
+                  {autoReplyLive
+                    ? " Live auto-replies are enabled on the server."
+                    : " Keep SUPPORT_AUTO_REPLY_LIVE unset/false until you’re ready."}
                 </p>
               </div>
             )}

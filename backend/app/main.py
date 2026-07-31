@@ -145,15 +145,42 @@ async def support_gmail_thread(thread_id: str) -> dict:
 
 
 @app.post("/api/support/gmail/auto-reply/run")
-async def support_gmail_auto_reply_run(max: int = 20) -> dict:
-    """Process unread Support threads and send Order Flow status auto-replies."""
-    return await support_auto_reply.process_auto_replies(max_threads=max)
+async def support_gmail_auto_reply_run(max: int = 20, dryRun: int = 1) -> dict:
+    """Process Support threads for order-status auto-replies.
+
+    dryRun=1 (default): preview only — never emails customers.
+    dryRun=0: live send — only works when SUPPORT_AUTO_REPLY_LIVE=true.
+    """
+    live = support_auto_reply.auto_reply_is_live()
+    # Force dry-run unless live is enabled AND caller asks for live
+    force_dry = True if not live or dryRun else False
+    return await support_auto_reply.process_auto_replies(
+        max_threads=max,
+        dry_run=force_dry,
+    )
 
 
 @app.post("/api/support/gmail/auto-reply/threads/{thread_id}")
-async def support_gmail_auto_reply_thread(thread_id: str) -> dict:
-    """Try a status auto-reply for one thread (idempotent)."""
-    return await support_auto_reply.try_auto_reply_thread(thread_id)
+async def support_gmail_auto_reply_thread(
+    thread_id: str,
+    dryRun: int = 1,
+    toSelf: int = 0,
+) -> dict:
+    """Preview or send a status auto-reply for one thread.
+
+    toSelf=1 emails the draft to the connected Support mailbox (never the customer).
+    """
+    live = support_auto_reply.auto_reply_is_live()
+    if toSelf:
+        return await support_auto_reply.try_auto_reply_thread(
+            thread_id,
+            send_to_self=True,
+        )
+    force_dry = True if not live or dryRun else False
+    return await support_auto_reply.try_auto_reply_thread(
+        thread_id,
+        dry_run=force_dry,
+    )
 
 
 @app.post("/api/mockups/generate")

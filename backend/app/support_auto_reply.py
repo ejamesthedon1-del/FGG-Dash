@@ -8,8 +8,14 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException
 
 from . import gmail_store, gmail_support, order_flow_store
+from .config import get_settings
 from .order_flow import BRANDS, STAGE_LABELS
 from .shopify import get_shopify_client
+
+
+def auto_reply_is_live() -> bool:
+    return bool(get_settings().support_auto_reply_live)
+
 
 ORDERS_BY_EMAIL_QUERY = """
 query SupportOrdersByEmail($queryString: String!) {
@@ -375,28 +381,50 @@ BRAND_LABELS = {
 }
 
 
-async def try_auto_reply_thread(thread_id: str) -> Dict[str, Any]:
+async def try_auto_reply_thread(
+    thread_id: str,
+    *,
+    dry_run: Optional[bool] = None,
+    send_to_self: bool = False,
+) -> Dict[str, Any]:
     tid = (thread_id or "").strip()
     if not tid:
         return {"threadId": tid, "sent": False, "reason": "missing_id"}
 
+    live = auto_reply_is_live()
+    preview_only = True if dry_run is True else (False if dry_run is False else not live)
+    # send_to_self is always a real send, but never to the customer
+    if send_to_self:
+        preview_only = False
+
     existing = gmail_store.get_auto_reply(tid)
-    if existing:
+    if existing and not preview_only and not send_to_self:
         return {
             "threadId": tid,
             "sent": False,
             "reason": "already_replied",
             "previous": existing,
+            "dryRun": False,
         }
 
-    if not gmail_support.token_has_send_scope():
-        return {"threadId": tid, "sent": False, "reason": "needs_send_scope"}
+    if not gmail_support.token_has_send_scope() and not preview_only:
+        return {
+            "threadId": tid,
+            "sent": False,
+            "reason": "needs_send_scope",
+            "dryRun": preview_only,
+        }
 
     thread = await gmail_support.get_thread(tid)
     mailbox = (thread.get("email") or "").strip()
     ctx = extract_customer_context(thread, mailbox)
     if not ctx:
-        return {"threadId": tid, "sent": False, "reason": "no_customer"}
+        return {
+            "threadId": tid,
+            "sent": False,
+            "reason": "no_customer",
+            "dryRun": preview_only,
+        }
 
     if not is_status_inquiry(ctx["message"]):
         return {
@@ -404,6 +432,8 @@ async def try_auto_reply_thread(thread_id: str) -> Dict[str, Any]:
             "sent": False,
             "reason": "not_status_inquiry",
             "customerEmail": ctx["email"],
+            "customerMessage": ctx["message"][:280],
+            "dryRun": preview_only,
         }
 
     orders = await find_orders_for_email(ctx["email"])
@@ -415,6 +445,7 @@ async def try_auto_reply_thread(thread_id: str) -> Dict[str, Any]:
             "reason": pick_reason,
             "customerEmail": ctx["email"],
             "orderCount": len(orders),
+            "dryRun": preview_only,
         }
 
     body = build_status_reply(
@@ -424,52 +455,108 @@ async def try_auto_reply_thread(thread_id: str) -> Dict[str, Any]:
         brand_label=BRAND_LABELS.get(str(order.get("brand") or ""), ""),
     )
 
+    draft = {
+        "threadId": tid,
+        "sent": False,
+        "reason": "dry_run" if preview_only else "ready",
+        "dryRun": preview_only,
+        "liveEnabled": live,
+        "customerEmail": ctx["email"],
+        "customerName": ctx.get("name") or "",
+        "customerMessage": ctx["message"][:280],
+        "orderName": order.get("name"),
+        "stage": order.get("stage"),
+        "brand": order.get("brand"),
+        "pickReason": pick_reason,
+        "draftSubject": (
+            str(ctx.get("subject") or "")
+            if str(ctx.get("subject") or "").lower().startswith("re:")
+            else f"Re: {ctx.get('subject') or 'Your order update'}"
+        ),
+        "draftBody": body,
+        "wouldSendTo": ctx["email"],
+    }
+
+    if preview_only:
+        draft["reason"] = "dry_run"
+        return draft
+
+    to_email = mailbox if send_to_self else ctx["email"]
+    if send_to_self and not mailbox:
+        return {
+            **draft,
+            "sent": False,
+            "reason": "no_mailbox",
+            "detail": "Connected Gmail address unknown",
+        }
+    if send_to_self:
+        body = (
+            "[TEST — this was sent to you, not the customer]\n"
+            f"Would have gone to: {ctx['email']}\n\n"
+            f"{body}"
+        )
+
     try:
         sent = await gmail_support.send_thread_reply(
-            thread_id=tid,
-            to_email=ctx["email"],
-            subject=str(ctx.get("subject") or ""),
+            thread_id=tid if not send_to_self else tid,
+            to_email=to_email,
+            subject=(
+                f"[TEST] {draft['draftSubject']}"
+                if send_to_self
+                else str(ctx.get("subject") or "")
+            ),
             body_text=body,
-            in_reply_to=str(ctx.get("messageIdHeader") or ""),
-            references=str(ctx.get("messageIdHeader") or ""),
+            in_reply_to="" if send_to_self else str(ctx.get("messageIdHeader") or ""),
+            references="" if send_to_self else str(ctx.get("messageIdHeader") or ""),
         )
     except HTTPException as exc:
         return {
-            "threadId": tid,
+            **draft,
             "sent": False,
             "reason": "send_failed",
             "detail": str(exc.detail),
-            "customerEmail": ctx["email"],
         }
 
-    record = gmail_store.save_auto_reply(
-        tid,
-        {
-            "customerEmail": ctx["email"],
-            "orderName": order.get("name"),
-            "shopifyOrderId": order.get("shopifyOrderId"),
-            "brand": order.get("brand"),
-            "stage": order.get("stage"),
-            "gmailMessageId": sent.get("id"),
-            "pickReason": pick_reason,
-        },
-    )
+    if not send_to_self:
+        record = gmail_store.save_auto_reply(
+            tid,
+            {
+                "customerEmail": ctx["email"],
+                "orderName": order.get("name"),
+                "shopifyOrderId": order.get("shopifyOrderId"),
+                "brand": order.get("brand"),
+                "stage": order.get("stage"),
+                "gmailMessageId": sent.get("id"),
+                "pickReason": pick_reason,
+            },
+        )
+    else:
+        record = {"testToSelf": True, "gmailMessageId": sent.get("id")}
+
     return {
-        "threadId": tid,
+        **draft,
         "sent": True,
-        "reason": "sent",
-        "customerEmail": ctx["email"],
-        "orderName": order.get("name"),
-        "stage": order.get("stage"),
+        "reason": "sent_to_self" if send_to_self else "sent",
+        "dryRun": False,
+        "wouldSendTo": to_email,
         "record": record,
     }
 
 
-async def process_auto_replies(max_threads: int = 20) -> Dict[str, Any]:
-    if not gmail_support.token_has_send_scope():
+async def process_auto_replies(
+    max_threads: int = 20,
+    *,
+    dry_run: Optional[bool] = None,
+) -> Dict[str, Any]:
+    live = auto_reply_is_live()
+    preview_only = True if dry_run is True else (False if dry_run is False else not live)
+
+    if not preview_only and not gmail_support.token_has_send_scope():
         return {
             "ok": False,
             "reason": "needs_send_scope",
+            "dryRun": False,
+            "liveEnabled": live,
             "processed": 0,
             "sent": 0,
             "results": [],
@@ -478,22 +565,31 @@ async def process_auto_replies(max_threads: int = 20) -> Dict[str, Any]:
     listed = await gmail_support.list_inbox_threads(max_results=max_threads)
     results: List[Dict[str, Any]] = []
     sent_count = 0
+    preview_count = 0
     for t in listed.get("threads") or []:
         tid = t.get("id")
         if not tid:
             continue
-        # Only auto-reply unread threads (avoid blasting old mail)
-        if not t.get("unread"):
+        # Preview can include recent read threads; live only unread
+        if not preview_only and not t.get("unread"):
             continue
-        result = await try_auto_reply_thread(str(tid))
+        result = await try_auto_reply_thread(
+            str(tid),
+            dry_run=preview_only,
+        )
         results.append(result)
         if result.get("sent"):
             sent_count += 1
+        if result.get("reason") == "dry_run":
+            preview_count += 1
 
     return {
         "ok": True,
+        "dryRun": preview_only,
+        "liveEnabled": live,
         "processed": len(results),
         "sent": sent_count,
+        "previews": preview_count,
         "results": results,
         "email": listed.get("email"),
     }
