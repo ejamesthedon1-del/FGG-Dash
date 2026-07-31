@@ -25,7 +25,7 @@ const OPTIONS: {
   },
 ];
 
-/** Shown once per CEO browser session before entering the app. */
+/** Shown when a CEO has not chosen CEO vs Ops yet (remembered after first pick). */
 export function ViewModePicker() {
   const { setViewMode, viewMode, user } = useAuth();
 
@@ -43,8 +43,8 @@ export function ViewModePicker() {
           <h1 className="text-xl font-semibold text-gray-900">Choose your view</h1>
           <p className="text-sm text-gray-500">
             {user?.email
-              ? `Signed in as ${user.email}. Pick how you want to work this session.`
-              : "Pick how you want to work this session."}
+              ? `Signed in as ${user.email}. Choose CEO or Ops — we’ll remember this next time.`
+              : "Choose CEO or Ops — we’ll remember this next time."}
           </p>
         </div>
 

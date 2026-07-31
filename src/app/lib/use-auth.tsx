@@ -124,8 +124,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Remember last choice across refreshes / time away — only ask once if never set
       const pref = readViewModePreference(next.user.email);
-      setViewModeState(pref ?? "ceo");
+      if (pref) {
+        setViewModeState(pref);
+        writeSessionViewMode(next.user.email, pref);
+        setNeedsViewPick(false);
+        return;
+      }
+
+      setViewModeState("ceo");
       setNeedsViewPick(true);
     };
 

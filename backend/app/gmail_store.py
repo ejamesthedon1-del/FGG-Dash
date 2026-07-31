@@ -1,4 +1,8 @@
-"""Persist Gmail OAuth tokens for the Support inbox (single shared mailbox)."""
+"""Persist Gmail OAuth tokens for the Support inbox (single shared mailbox).
+
+Primary: Supabase `app_storage` (survives Railway restarts/redeploys).
+Fallback: local JSON file under GMAIL_TOKEN_PATH or /data.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import httpx
+
+from .config import get_settings
+
 _lock = threading.Lock()
+
+STORAGE_KEY = "support_gmail_oauth"
 
 
 def _now() -> str:
@@ -26,7 +36,18 @@ def _store_path() -> Path:
     return Path(__file__).resolve().parent.parent / "data" / "gmail_oauth.json"
 
 
-def _read() -> Dict[str, Any]:
+def _supabase_config() -> Optional[tuple[str, str]]:
+    s = get_settings()
+    url = (s.supabase_url or os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
+    key = (
+        s.supabase_service_role_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or ""
+    ).strip()
+    if url and key:
+        return url, key
+    return None
+
+
+def _read_file() -> Dict[str, Any]:
     path = _store_path()
     if not path.exists():
         return {}
@@ -36,12 +57,110 @@ def _read() -> Dict[str, Any]:
         return {}
 
 
-def _write(data: Dict[str, Any]) -> None:
+def _write_file(data: Dict[str, Any]) -> None:
     path = _store_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
     tmp.replace(path)
+
+
+def _read_supabase() -> Optional[Dict[str, Any]]:
+    cfg = _supabase_config()
+    if not cfg:
+        return None
+    url, key = cfg
+    endpoint = (
+        f"{url}/rest/v1/app_storage"
+        f"?key=eq.{STORAGE_KEY}&select=value"
+    )
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            res = client.get(endpoint, headers=headers)
+        if res.status_code >= 400:
+            print(f"[gmail_store] supabase read failed ({res.status_code}): {res.text[:300]}")
+            return None
+        rows = res.json()
+        if isinstance(rows, list) and rows:
+            value = rows[0].get("value")
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    return parsed if isinstance(parsed, dict) else None
+                except Exception:
+                    return None
+    except Exception as exc:
+        print(f"[gmail_store] supabase read error: {exc}")
+    return None
+
+
+def _write_supabase(data: Dict[str, Any]) -> bool:
+    cfg = _supabase_config()
+    if not cfg:
+        return False
+    url, key = cfg
+    endpoint = f"{url}/rest/v1/app_storage?on_conflict=key"
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+    }
+    row = {
+        "key": STORAGE_KEY,
+        "value": data,
+        "updated_at": _now(),
+    }
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            res = client.post(endpoint, headers=headers, json=row)
+        if res.status_code >= 400:
+            print(f"[gmail_store] supabase write failed ({res.status_code}): {res.text[:300]}")
+            return False
+        return True
+    except Exception as exc:
+        print(f"[gmail_store] supabase write error: {exc}")
+        return False
+
+
+def _delete_supabase() -> None:
+    cfg = _supabase_config()
+    if not cfg:
+        return
+    url, key = cfg
+    endpoint = f"{url}/rest/v1/app_storage?key=eq.{STORAGE_KEY}"
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+    }
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            client.delete(endpoint, headers=headers)
+    except Exception as exc:
+        print(f"[gmail_store] supabase delete error: {exc}")
+
+
+def _read() -> Dict[str, Any]:
+    remote = _read_supabase()
+    if remote is not None:
+        return remote
+    return _read_file()
+
+
+def _write(data: Dict[str, Any]) -> None:
+    # Always keep a local copy for speed / offline fallback
+    try:
+        _write_file(data)
+    except Exception as exc:
+        print(f"[gmail_store] file write error: {exc}")
+    _write_supabase(data)
 
 
 def get_tokens() -> Optional[Dict[str, Any]]:
@@ -67,7 +186,11 @@ def clear_tokens() -> None:
     with _lock:
         path = _store_path()
         if path.exists():
-            path.unlink()
+            try:
+                path.unlink()
+            except Exception:
+                pass
+        _delete_supabase()
 
 
 def save_oauth_state(state: str) -> None:
