@@ -309,11 +309,30 @@ async def get_thread(thread_id: str) -> Dict[str, Any]:
     }
 
 
+# Shopify storefront contact-form notifications (Support inbox only)
+CONTACT_FORM_QUERY = (
+    'in:inbox newer_than:90d '
+    '(from:mailer@shopify.com OR subject:"New customer message")'
+)
+
+
+def _is_shopify_contact_thread(subject: str, from_header: str) -> bool:
+    subj = (subject or "").strip().lower()
+    frm = (from_header or "").strip().lower()
+    if "new customer message" in subj:
+        return True
+    if "mailer@shopify.com" in frm:
+        return True
+    if "shopify.com" in frm and "contact" in subj:
+        return True
+    return False
+
+
 async def list_inbox_threads(max_results: int = 30) -> Dict[str, Any]:
     access, tokens = await get_valid_access_token()
     params = {
         "maxResults": max(1, min(max_results, 50)),
-        "q": "in:inbox newer_than:60d",
+        "q": CONTACT_FORM_QUERY,
     }
     async with httpx.AsyncClient(timeout=40.0) as client:
         listed = await client.get(
@@ -359,13 +378,17 @@ async def list_inbox_threads(max_results: int = 30) -> Dict[str, Any]:
                 continue
             latest = messages[-1]
             headers = _header_map(latest)
+            subject = headers.get("subject") or "(no subject)"
+            from_header = headers.get("from") or ""
+            if not _is_shopify_contact_thread(subject, from_header):
+                continue
             label_ids = latest.get("labelIds") or []
             threads.append(
                 {
                     "id": tid,
                     "snippet": body.get("snippet") or latest.get("snippet") or "",
-                    "subject": headers.get("subject") or "(no subject)",
-                    "from": headers.get("from") or "",
+                    "subject": subject,
+                    "from": from_header,
                     "date": _parse_date(headers.get("date") or "") or "",
                     "unread": "UNREAD" in label_ids,
                     "messageCount": len(messages),
@@ -377,6 +400,7 @@ async def list_inbox_threads(max_results: int = 30) -> Dict[str, Any]:
         "connected": True,
         "email": tokens.get("email") or await fetch_profile_email(access),
         "threads": threads,
+        "filter": "shopify_contact_form",
     }
 
 

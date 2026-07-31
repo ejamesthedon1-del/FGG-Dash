@@ -439,7 +439,8 @@ export function SupportPage() {
             Support
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Customer emails from your connected Gmail inbox.
+            Store contact form messages only (Shopify “New customer message”
+            emails).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -620,7 +621,7 @@ export function SupportPage() {
               ) : null}
               {filteredThreads.length === 0 ? (
                 <p className="p-6 text-center text-sm text-muted-foreground">
-                  No threads match.
+                  No contact form messages found.
                 </p>
               ) : (
                 <ul>
