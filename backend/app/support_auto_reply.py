@@ -483,6 +483,54 @@ BRAND_LABELS = {
     "sinners-testimony": "Sinners Testimony",
 }
 
+# Auto-reply couldn't finish — ops needs to handle
+ESCALATE_REASONS = {
+    "no_order",
+    "multiple_open",
+    "not_status_inquiry",
+    "no_customer",
+    "send_failed",
+}
+
+ESCALATE_REASON_LABELS = {
+    "no_order": "No matching order",
+    "multiple_open": "Multiple open orders",
+    "not_status_inquiry": "Needs human reply",
+    "no_customer": "Couldn't identify customer",
+    "send_failed": "Auto-reply failed to send",
+}
+
+
+def escalation_label(reason: str) -> str:
+    return ESCALATE_REASON_LABELS.get(reason, reason.replace("_", " ").title())
+
+
+def _record_escalation_from_result(result: Dict[str, Any]) -> None:
+    tid = str(result.get("threadId") or "").strip()
+    reason = str(result.get("reason") or "")
+    if not tid:
+        return
+    if result.get("sent"):
+        gmail_store.clear_escalation(tid)
+        return
+    if reason == "already_replied":
+        gmail_store.clear_escalation(tid)
+        return
+    if reason not in ESCALATE_REASONS:
+        return
+    gmail_store.save_escalation(
+        tid,
+        {
+            "reason": reason,
+            "reasonLabel": escalation_label(reason),
+            "customerEmail": result.get("customerEmail") or "",
+            "customerName": result.get("customerName") or "",
+            "customerMessage": result.get("customerMessage") or "",
+            "orderCount": result.get("orderCount"),
+            "detail": result.get("detail") or "",
+        },
+    )
+
 
 async def try_auto_reply_thread(
     thread_id: str,
@@ -663,6 +711,7 @@ async def process_auto_replies(
             "liveEnabled": live,
             "processed": 0,
             "sent": 0,
+            "escalated": 0,
             "results": [],
         }
 
@@ -670,22 +719,43 @@ async def process_auto_replies(
     results: List[Dict[str, Any]] = []
     sent_count = 0
     preview_count = 0
+    escalated_count = 0
     for t in listed.get("threads") or []:
         tid = t.get("id")
         if not tid:
             continue
-        # Preview can include recent read threads; live only unread
-        if not preview_only and not t.get("unread"):
+        tid_s = str(tid)
+        # Already auto-replied — not an escalation
+        if gmail_store.get_auto_reply(tid_s):
+            gmail_store.clear_escalation(tid_s)
             continue
+
+        # Live: send only on unread; always classify for escalation
+        should_send = (not preview_only) and bool(t.get("unread"))
         result = await try_auto_reply_thread(
-            str(tid),
-            dry_run=preview_only,
+            tid_s,
+            dry_run=not should_send,
         )
         results.append(result)
+
         if result.get("sent"):
             sent_count += 1
+            gmail_store.clear_escalation(tid_s)
+            continue
+
+        # Would auto-reply (status match) — not an ops escalation
         if result.get("reason") == "dry_run":
+            gmail_store.clear_escalation(tid_s)
             preview_count += 1
+            continue
+
+        before = gmail_store.get_escalation(tid_s)
+        _record_escalation_from_result(result)
+        after = gmail_store.get_escalation(tid_s)
+        if after and not before:
+            escalated_count += 1
+        elif after and before and before.get("reason") != after.get("reason"):
+            escalated_count += 1
 
     return {
         "ok": True,
@@ -694,6 +764,8 @@ async def process_auto_replies(
         "processed": len(results),
         "sent": sent_count,
         "previews": preview_count,
+        "escalated": escalated_count,
         "results": results,
         "email": listed.get("email"),
+        "escalations": gmail_store.list_escalations(80),
     }

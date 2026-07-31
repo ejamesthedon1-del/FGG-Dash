@@ -11,6 +11,18 @@ export type SupportGmailStatus = {
   autoReplyLive?: boolean;
 };
 
+export type SupportEscalation = {
+  threadId?: string;
+  reason?: string;
+  reasonLabel?: string;
+  customerEmail?: string;
+  customerName?: string;
+  customerMessage?: string;
+  at?: string;
+  detail?: string;
+  resolved?: boolean;
+};
+
 export type SupportThread = {
   id: string;
   snippet: string;
@@ -20,12 +32,15 @@ export type SupportThread = {
   unread: boolean;
   messageCount: number;
   gmailUrl: string;
+  autoReplied?: boolean;
+  escalation?: SupportEscalation | null;
 };
 
 export type SupportThreadsResponse = {
   connected: boolean;
   email?: string | null;
   threads: SupportThread[];
+  escalations?: SupportEscalation[];
 };
 
 export function supportGmailConnectUrl(opts?: { switchAccount?: boolean }): string {
@@ -234,6 +249,21 @@ export async function sendSupportAutoReplyTestToSelf(
     throw new Error(text || `Test send failed (${res.status})`);
   }
   return (await res.json()) as SupportAutoReplyResult;
+}
+
+export async function resolveSupportEscalation(
+  threadId: string,
+): Promise<void> {
+  const res = await fetch(
+    apiUrl(
+      `/api/support/gmail/escalations/${encodeURIComponent(threadId)}/resolve`,
+    ),
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Resolve failed (${res.status})`);
+  }
 }
 
 export async function disconnectSupportGmail(): Promise<void> {

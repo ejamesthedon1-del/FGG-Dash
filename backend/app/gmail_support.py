@@ -392,6 +392,8 @@ async def list_inbox_threads(max_results: int = 30) -> Dict[str, Any]:
                     "unread": "UNREAD" in label_ids,
                     "messageCount": len(messages),
                     "gmailUrl": f"https://mail.google.com/mail/u/0/#inbox/{tid}",
+                    "autoReplied": bool(gmail_store.get_auto_reply(str(tid))),
+                    "escalation": gmail_store.get_escalation(str(tid)),
                 }
             )
 
@@ -400,6 +402,7 @@ async def list_inbox_threads(max_results: int = 30) -> Dict[str, Any]:
         "email": tokens.get("email") or await fetch_profile_email(access),
         "threads": threads,
         "filter": "shopify_contact_form",
+        "escalations": gmail_store.list_escalations(80),
     }
 
 

@@ -22,6 +22,7 @@ import {
   fetchSupportGmailStatus,
   fetchSupportThread,
   fetchSupportThreads,
+  resolveSupportEscalation,
   runSupportAutoReplies,
   supportGmailConnectUrl,
   type SupportActivityEvent,
@@ -30,7 +31,7 @@ import {
 } from "../lib/support-gmail";
 import { cn } from "./ui/utils";
 
-type InboxFilter = "all" | "unread";
+type InboxFilter = "needs" | "all";
 
 function formatThreadDate(iso: string): string {
   if (!iso) return "";
@@ -343,7 +344,7 @@ export function SupportPage() {
   const [detail, setDetail] = useState<SupportThreadDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<InboxFilter>("all");
+  const [filter, setFilter] = useState<InboxFilter>("needs");
   const [activity, setActivity] = useState<SupportActivityEvent[]>([]);
 
   const loadActivity = useCallback(async () => {
@@ -369,9 +370,11 @@ export function SupportPage() {
       setClientId(status.clientId ?? null);
       setRedirectUri(status.redirectUri ?? null);
       if (status.connected) {
-        if (status.canSend && status.autoReplyLive) {
+        if (status.canSend || status.autoReplyLive) {
           try {
-            const auto = await runSupportAutoReplies(20, { dryRun: false });
+            const auto = await runSupportAutoReplies(20, {
+              dryRun: !status.autoReplyLive,
+            });
             if (auto.sent > 0) {
               toast.success(
                 `Auto-replied to ${auto.sent} ${
@@ -379,6 +382,13 @@ export function SupportPage() {
                 }`,
               );
             }
+          } catch {
+            /* non-fatal */
+          }
+        } else {
+          // Still classify escalations without sending
+          try {
+            await runSupportAutoReplies(20, { dryRun: true });
           } catch {
             /* non-fatal */
           }
@@ -435,16 +445,32 @@ export function SupportPage() {
 
   const filteredThreads = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return threads.filter((t) => {
-      if (filter === "unread" && !t.unread) return false;
+    const list = threads.filter((t) => {
+      if (filter === "needs" && !t.escalation) return false;
       if (!q) return true;
+      const esc = t.escalation;
       return (
         t.subject.toLowerCase().includes(q) ||
         t.from.toLowerCase().includes(q) ||
-        t.snippet.toLowerCase().includes(q)
+        t.snippet.toLowerCase().includes(q) ||
+        (esc?.customerEmail || "").toLowerCase().includes(q) ||
+        (esc?.customerName || "").toLowerCase().includes(q) ||
+        (esc?.reasonLabel || "").toLowerCase().includes(q)
       );
     });
+    // Escalations first, then newest
+    return [...list].sort((a, b) => {
+      const ae = a.escalation ? 1 : 0;
+      const be = b.escalation ? 1 : 0;
+      if (ae !== be) return be - ae;
+      return (b.date || "").localeCompare(a.date || "");
+    });
   }, [threads, query, filter]);
+
+  const needsCount = useMemo(
+    () => threads.filter((t) => t.escalation).length,
+    [threads],
+  );
 
   const openThread = async (threadId: string) => {
     setSelectedId(threadId);
@@ -461,6 +487,21 @@ export function SupportPage() {
       setSelectedId(null);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const onResolveEscalation = async () => {
+    if (!selectedId) return;
+    try {
+      await resolveSupportEscalation(selectedId);
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.id === selectedId ? { ...t, escalation: null } : t,
+        ),
+      );
+      toast.success("Marked as handled");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not resolve");
     }
   };
 
@@ -587,8 +628,8 @@ export function SupportPage() {
       {!loading && connected ? (
         <p className="text-xs text-muted-foreground">
           {autoReplyLive
-            ? "Live auto-replies are ON for matched order-status asks."
-            : "Auto-replies are in test mode. Templates and send log are in Settings (CEO)."}
+            ? "Status asks auto-reply. Escalated threads need an ops manager."
+            : "Auto-replies are in test mode. Templates are in Settings (CEO)."}
         </p>
       ) : null}
 
@@ -674,11 +715,16 @@ export function SupportPage() {
                 onValueChange={(v) => setFilter(v as InboxFilter)}
               >
                 <TabsList className="w-full">
+                  <TabsTrigger value="needs" className="flex-1 gap-1">
+                    Needs attention
+                    {needsCount > 0 ? (
+                      <span className="rounded bg-foreground/10 px-1 text-[10px] tabular-nums">
+                        {needsCount}
+                      </span>
+                    ) : null}
+                  </TabsTrigger>
                   <TabsTrigger value="all" className="flex-1">
                     All
-                  </TabsTrigger>
-                  <TabsTrigger value="unread" className="flex-1">
-                    Unread
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -692,15 +738,21 @@ export function SupportPage() {
               ) : null}
               {filteredThreads.length === 0 ? (
                 <p className="p-6 text-center text-sm text-muted-foreground">
-                  No contact form messages found.
+                  {filter === "needs"
+                    ? "Nothing needs ops attention right now."
+                    : "No contact form messages found."}
                 </p>
               ) : (
                 <ul>
                   {filteredThreads.map((t) => {
                     const who = parseFrom(t.from);
                     const shopifyPreview = parseShopifyContactForm(t.snippet);
-                    const listName = shopifyPreview?.name || who.name;
+                    const listName =
+                      t.escalation?.customerName ||
+                      shopifyPreview?.name ||
+                      who.name;
                     const listSnippet =
+                      t.escalation?.customerMessage ||
                       shopifyPreview?.message ||
                       shopifyPreview?.email ||
                       t.snippet;
@@ -713,7 +765,7 @@ export function SupportPage() {
                           className={cn(
                             "flex w-full gap-2.5 px-3 py-3 text-left transition-colors hover:bg-muted/50",
                             active && "bg-muted",
-                            t.unread && !active && "bg-brand-soft/30",
+                            t.escalation && !active && "bg-amber-50/80",
                           )}
                         >
                           <div
@@ -727,7 +779,7 @@ export function SupportPage() {
                               <p
                                 className={cn(
                                   "truncate text-sm",
-                                  t.unread
+                                  t.escalation
                                     ? "font-semibold text-foreground"
                                     : "font-medium text-foreground",
                                 )}
@@ -745,18 +797,27 @@ export function SupportPage() {
                               {listSnippet}
                             </p>
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                              {t.unread ? (
+                              {t.escalation ? (
                                 <Badge variant="default" className="text-[10px]">
-                                  New
+                                  Needs attention
+                                </Badge>
+                              ) : t.autoReplied ? (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Auto-replied
                                 </Badge>
                               ) : (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  Read
+                                <Badge variant="outline" className="text-[10px]">
+                                  Open
                                 </Badge>
                               )}
+                              {t.escalation?.reasonLabel ? (
+                                <Badge variant="outline" className="text-[10px]">
+                                  {t.escalation.reasonLabel}
+                                </Badge>
+                              ) : null}
                               <Badge variant="outline" className="gap-1 text-[10px]">
                                 <Mail className="size-2.5" />
-                                Gmail
+                                Form
                               </Badge>
                             </div>
                           </div>
@@ -783,15 +844,24 @@ export function SupportPage() {
                     {detail?.subject || selectedListItem?.subject || "Thread"}
                   </h3>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {selectedListItem?.unread || detail?.messages.some((m) => m.unread) ? (
+                    {selectedListItem?.escalation ? (
                       <Badge variant="default" className="text-[10px]">
-                        New
+                        Needs attention
+                      </Badge>
+                    ) : selectedListItem?.autoReplied ? (
+                      <Badge variant="secondary" className="text-[10px]">
+                        Auto-replied
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Read
+                      <Badge variant="outline" className="text-[10px]">
+                        Open
                       </Badge>
                     )}
+                    {selectedListItem?.escalation?.reasonLabel ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        {selectedListItem.escalation.reasonLabel}
+                      </Badge>
+                    ) : null}
                     <Badge variant="outline" className="text-[10px]">
                       #support
                     </Badge>
@@ -903,12 +973,22 @@ export function SupportPage() {
                   </p>
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-muted-foreground">Status</span>
-                    {selectedListItem?.unread ? (
-                      <Badge variant="default">New</Badge>
+                    {selectedListItem?.escalation ? (
+                      <Badge variant="default">Needs attention</Badge>
+                    ) : selectedListItem?.autoReplied ? (
+                      <Badge variant="secondary">Auto-replied</Badge>
                     ) : (
-                      <Badge variant="secondary">Read</Badge>
+                      <Badge variant="outline">Open</Badge>
                     )}
                   </div>
+                  {selectedListItem?.escalation?.reasonLabel ? (
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-muted-foreground">Why</span>
+                      <span className="text-right text-xs font-medium">
+                        {selectedListItem.escalation.reasonLabel}
+                      </span>
+                    </div>
+                  ) : null}
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-muted-foreground">Source</span>
                     <span className="inline-flex items-center gap-1 font-medium">
@@ -933,6 +1013,17 @@ export function SupportPage() {
                     </span>
                   </div>
                 </div>
+
+                {selectedListItem?.escalation ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => void onResolveEscalation()}
+                  >
+                    Mark handled
+                  </Button>
+                ) : null}
 
                 {detail?.gmailUrl ? (
                   <Button

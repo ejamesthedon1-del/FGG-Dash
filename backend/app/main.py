@@ -199,6 +199,15 @@ async def support_gmail_activity(max: int = 40) -> dict:
     }
 
 
+@app.post("/api/support/gmail/escalations/{thread_id}/resolve")
+async def support_gmail_resolve_escalation(thread_id: str) -> dict:
+    """Ops marks an escalated thread as handled."""
+    row = gmail_store.resolve_escalation(thread_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Escalation not found")
+    return {"ok": True, "threadId": thread_id, "escalation": row}
+
+
 @app.get("/api/support/gmail/auto-reply/config")
 async def support_gmail_auto_reply_config() -> dict:
     """CEO Settings: templates + recent auto-reply log (test mode aware)."""

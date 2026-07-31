@@ -254,6 +254,97 @@ def save_auto_reply(thread_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             )
             replies = dict(ordered[-400:])
         data["autoReplies"] = replies
+        # Successful reply clears escalation
+        escalations = dict(data.get("escalations") or {})
+        escalations.pop(tid, None)
+        data["escalations"] = escalations
+        data["updatedAt"] = _now()
+        _write(data)
+        return row
+
+
+def list_escalations(limit: int = 80) -> List[Dict[str, Any]]:
+    with _lock:
+        data = _read()
+    rows_raw = data.get("escalations") or {}
+    if not isinstance(rows_raw, dict):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for tid, row in rows_raw.items():
+        if not isinstance(row, dict):
+            continue
+        if row.get("resolved"):
+            continue
+        rows.append({"threadId": tid, **row})
+    rows.sort(key=lambda r: str(r.get("at") or ""), reverse=True)
+    return rows[: max(1, min(limit, 200))]
+
+
+def get_escalation(thread_id: str) -> Optional[Dict[str, Any]]:
+    tid = (thread_id or "").strip()
+    if not tid:
+        return None
+    with _lock:
+        data = _read()
+    row = (data.get("escalations") or {}).get(tid)
+    if not isinstance(row, dict) or row.get("resolved"):
+        return None
+    return row
+
+
+def save_escalation(thread_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    tid = (thread_id or "").strip()
+    if not tid:
+        raise ValueError("thread_id required")
+    with _lock:
+        data = _read()
+        escalations = dict(data.get("escalations") or {})
+        row = {
+            **(escalations.get(tid) if isinstance(escalations.get(tid), dict) else {}),
+            **payload,
+            "resolved": False,
+            "at": _now(),
+        }
+        escalations[tid] = row
+        if len(escalations) > 400:
+            ordered = sorted(
+                escalations.items(),
+                key=lambda kv: str((kv[1] or {}).get("at") or ""),
+            )
+            escalations = dict(ordered[-300:])
+        data["escalations"] = escalations
+        data["updatedAt"] = _now()
+        _write(data)
+        return row
+
+
+def clear_escalation(thread_id: str) -> None:
+    tid = (thread_id or "").strip()
+    if not tid:
+        return
+    with _lock:
+        data = _read()
+        escalations = dict(data.get("escalations") or {})
+        if tid in escalations:
+            escalations.pop(tid, None)
+            data["escalations"] = escalations
+            data["updatedAt"] = _now()
+            _write(data)
+
+
+def resolve_escalation(thread_id: str) -> Optional[Dict[str, Any]]:
+    tid = (thread_id or "").strip()
+    if not tid:
+        return None
+    with _lock:
+        data = _read()
+        escalations = dict(data.get("escalations") or {})
+        row = escalations.get(tid)
+        if not isinstance(row, dict):
+            return None
+        row = {**row, "resolved": True, "resolvedAt": _now()}
+        escalations[tid] = row
+        data["escalations"] = escalations
         data["updatedAt"] = _now()
         _write(data)
         return row
