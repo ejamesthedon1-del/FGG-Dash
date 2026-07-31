@@ -13,7 +13,7 @@ export function MockupsSectionNav({ active }: { active: MockupsSection }) {
   return (
     <nav
       className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-xl p-[3px]"
-      aria-label="Mockups sections"
+      aria-label="Studio sections"
     >
       {items.map((item) => {
         const isActive = item.id === active;

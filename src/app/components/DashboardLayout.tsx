@@ -5,6 +5,7 @@ import {
   BookOpen,
   Boxes,
   CheckSquare,
+  ChevronDown,
   ClipboardList,
   LayoutDashboard,
   LogOut,
@@ -21,6 +22,11 @@ import { userFirstName, type AppRole } from "../lib/auth-roles";
 import { SignInPage } from "./SignInPage";
 import { ViewModePicker } from "./ViewModePicker";
 import { Button } from "./ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./ui/collapsible";
 import {
   Sidebar,
   SidebarContent,
@@ -84,6 +90,15 @@ const CEO_PRIMARY: NavItem[] = [
       pathname === "/brand-hub" || pathname.startsWith("/brand-hub/"),
   },
   {
+    to: "/mockups",
+    label: "Studio",
+    icon: Shirt,
+    match: (pathname) =>
+      pathname === "/mockups" ||
+      pathname.startsWith("/mockups") ||
+      pathname.startsWith("/creative-assets"),
+  },
+  {
     to: "/my-tasks",
     label: "My Tasks",
     icon: CheckSquare,
@@ -106,15 +121,6 @@ const CEO_OPS: NavItem[] = [
     icon: Boxes,
     match: (pathname) =>
       pathname === "/shop-supplies" || pathname.startsWith("/shop-supplies"),
-  },
-  {
-    to: "/mockups",
-    label: "Mockups",
-    icon: Shirt,
-    match: (pathname) =>
-      pathname === "/mockups" ||
-      pathname.startsWith("/mockups") ||
-      pathname.startsWith("/creative-assets"),
   },
   {
     to: "/sops",
@@ -260,14 +266,40 @@ function AppSidebar({
 
         <SidebarSeparator />
 
-        <SidebarGroup>
-          <SidebarGroupLabel>{isCeo ? "Operations" : "Menu"}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <NavMenuItems items={isCeo ? CEO_OPS : OPS_NAV} />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {isCeo ? (
+          <Collapsible
+            defaultOpen
+            className="group/collapsible"
+          >
+            <SidebarGroup>
+              <SidebarGroupLabel
+                asChild
+                className="cursor-pointer hover:text-sidebar-foreground"
+              >
+                <CollapsibleTrigger>
+                  Operations
+                  <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                </CollapsibleTrigger>
+              </SidebarGroupLabel>
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <NavMenuItems items={CEO_OPS} />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </SidebarGroup>
+          </Collapsible>
+        ) : (
+          <SidebarGroup>
+            <SidebarGroupLabel>Menu</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <NavMenuItems items={OPS_NAV} />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter>

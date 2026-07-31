@@ -182,7 +182,7 @@ export function MockupsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <header className="space-y-3">
-        <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Mockups</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Studio</h2>
         <MockupsSectionNav active={section} />
       </header>
 

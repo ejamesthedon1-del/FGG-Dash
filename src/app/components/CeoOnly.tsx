@@ -1,7 +1,7 @@
 import { Navigate } from "react-router";
 import { useAuth } from "../lib/use-auth";
 
-/** CEO-only pages (Brand Hub, Mockups, Training Center, Mission). */
+/** CEO-only pages (Brand Hub, Studio, Training Center, Mission). */
 export function CeoOnly({ children }: { children: React.ReactNode }) {
   const { loading, isCeo } = useAuth();
 

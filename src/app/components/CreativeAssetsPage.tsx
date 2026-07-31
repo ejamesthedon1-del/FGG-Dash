@@ -436,7 +436,7 @@ export function CreativeAssetsPage() {
   return (
     <div className="space-y-8">
       <div className="space-y-3">
-        <h2 className="text-2xl font-semibold text-gray-900">Mockups</h2>
+        <h2 className="text-2xl font-semibold text-gray-900">Studio</h2>
         <MockupsSectionNav active="creative-assets" />
       </div>
 

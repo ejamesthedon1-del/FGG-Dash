@@ -489,8 +489,8 @@ export function CombinedLiveStoresPanel() {
                 to="/order-flow"
               />
               <DashboardCtaCard
-                title="Mockups"
-                description="Generate photoreal garment mockups for ads."
+                title="Studio"
+                description="Generate photoreal garment images for ads."
                 to="/mockups"
               />
             </div>
