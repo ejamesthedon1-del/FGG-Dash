@@ -47,8 +47,8 @@ class Settings(BaseSettings):
     # Where to send the browser after OAuth (Vite dev or production app URL)
     frontend_origin: Optional[str] = None
 
-    # Support auto-replies: keep false until you're ready to email real customers
-    support_auto_reply_live: bool = False
+    # Support auto-replies: true = send status replies to customers
+    support_auto_reply_live: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
