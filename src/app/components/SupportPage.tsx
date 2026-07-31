@@ -958,11 +958,6 @@ export function SupportPage() {
                   selectedId={selectedId}
                   onOpen={(id) => void openThread(id)}
                 />
-
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Inbox: {email || "connected"}. Auto-reply templates live in
-                  Settings → Auto-replies (CEO).
-                </p>
               </div>
             )}
           </aside>
