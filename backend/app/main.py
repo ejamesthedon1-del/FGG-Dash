@@ -144,6 +144,31 @@ async def support_gmail_thread(thread_id: str) -> dict:
     return await gmail_support.get_thread(thread_id)
 
 
+@app.get("/api/support/gmail/auto-reply/config")
+async def support_gmail_auto_reply_config() -> dict:
+    """CEO Settings: templates + recent auto-reply log (test mode aware)."""
+    from .order_flow import STAGE_LABELS
+
+    templates = [
+        {
+            "stage": stage,
+            "label": STAGE_LABELS.get(stage, stage),
+            "body": body,
+        }
+        for stage, body in support_auto_reply.STAGE_BODIES.items()
+    ]
+    live = support_auto_reply.auto_reply_is_live()
+    status = await gmail_support.get_connection_status()
+    return {
+        "liveEnabled": live,
+        "canSend": bool(status.get("canSend")),
+        "connected": bool(status.get("connected")),
+        "email": status.get("email"),
+        "templates": templates,
+        "replies": gmail_store.list_auto_replies(80),
+    }
+
+
 @app.post("/api/support/gmail/auto-reply/run")
 async def support_gmail_auto_reply_run(max: int = 20, dryRun: int = 1) -> dict:
     """Process Support threads for order-status auto-replies.

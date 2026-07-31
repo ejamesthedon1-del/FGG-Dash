@@ -88,6 +88,43 @@ export async function fetchSupportThread(
   return (await res.json()) as SupportThreadDetail;
 }
 
+export type SupportAutoReplyTemplate = {
+  stage: string;
+  label: string;
+  body: string;
+};
+
+export type SupportAutoReplyLogItem = {
+  threadId: string;
+  at?: string;
+  customerEmail?: string;
+  orderName?: string;
+  shopifyOrderId?: string;
+  brand?: string;
+  stage?: string;
+  gmailMessageId?: string;
+  pickReason?: string;
+  testToSelf?: boolean;
+};
+
+export type SupportAutoReplyConfig = {
+  liveEnabled: boolean;
+  canSend: boolean;
+  connected: boolean;
+  email?: string | null;
+  templates: SupportAutoReplyTemplate[];
+  replies: SupportAutoReplyLogItem[];
+};
+
+export async function fetchSupportAutoReplyConfig(): Promise<SupportAutoReplyConfig> {
+  const res = await fetch(apiUrl("/api/support/gmail/auto-reply/config"));
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Auto-reply config failed (${res.status})`);
+  }
+  return (await res.json()) as SupportAutoReplyConfig;
+}
+
 export type SupportAutoReplyResult = {
   threadId: string;
   sent: boolean;

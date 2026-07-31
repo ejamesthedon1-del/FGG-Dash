@@ -11,7 +11,7 @@ import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -209,6 +209,21 @@ def consume_oauth_state(state: str) -> bool:
         data.pop("oauthStateAt", None)
         _write(data)
     return bool(expected) and expected == state
+
+
+def list_auto_replies(limit: int = 50) -> List[Dict[str, Any]]:
+    with _lock:
+        data = _read()
+    replies = data.get("autoReplies") or {}
+    if not isinstance(replies, dict):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for tid, row in replies.items():
+        if not isinstance(row, dict):
+            continue
+        rows.append({"threadId": tid, **row})
+    rows.sort(key=lambda r: str(r.get("at") or ""), reverse=True)
+    return rows[: max(1, min(limit, 200))]
 
 
 def get_auto_reply(thread_id: str) -> Optional[Dict[str, Any]]:

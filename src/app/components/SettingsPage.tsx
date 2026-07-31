@@ -1,17 +1,26 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { Bell, LogOut, Settings2, User } from "lucide-react";
+import { Bell, LifeBuoy, Loader2, LogOut, Settings2, User } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "../lib/use-auth";
 import { roleLabel, userFirstName } from "../lib/auth-roles";
+import {
+  fetchSupportAutoReplyConfig,
+  type SupportAutoReplyConfig,
+} from "../lib/support-gmail";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { cn } from "./ui/utils";
 
-type SettingsSection = "account" | "preferences" | "notifications";
+type SettingsSection =
+  | "account"
+  | "preferences"
+  | "notifications"
+  | "auto-replies";
 
 const GENERAL_NAV: {
-  id: SettingsSection;
+  id: Exclude<SettingsSection, "auto-replies">;
   label: string;
   icon: typeof User;
 }[] = [
@@ -20,11 +29,30 @@ const GENERAL_NAV: {
   { id: "notifications", label: "Notifications", icon: Bell },
 ];
 
+function formatReplyAt(iso?: string): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export function SettingsPage() {
   const navigate = useNavigate();
   const { user, role, isCeo } = useAuth();
   const [section, setSection] = useState<SettingsSection>("account");
   const [signingOut, setSigningOut] = useState(false);
+  const [autoConfig, setAutoConfig] = useState<SupportAutoReplyConfig | null>(
+    null,
+  );
+  const [autoLoading, setAutoLoading] = useState(false);
+  const [autoError, setAutoError] = useState<string | null>(null);
 
   const firstName = userFirstName(user);
   const email = user?.email ?? "—";
@@ -32,6 +60,34 @@ export function SettingsPage() {
     const source = firstName || email;
     return source && source !== "—" ? source.charAt(0).toUpperCase() : "?";
   }, [firstName, email]);
+
+  const loadAutoReplies = useCallback(async () => {
+    if (!isCeo) return;
+    setAutoLoading(true);
+    setAutoError(null);
+    try {
+      const data = await fetchSupportAutoReplyConfig();
+      setAutoConfig(data);
+    } catch (err) {
+      setAutoError(
+        err instanceof Error ? err.message : "Failed to load auto-replies",
+      );
+    } finally {
+      setAutoLoading(false);
+    }
+  }, [isCeo]);
+
+  useEffect(() => {
+    if (section === "auto-replies" && isCeo) {
+      void loadAutoReplies();
+    }
+  }, [section, isCeo, loadAutoReplies]);
+
+  useEffect(() => {
+    if (!isCeo && section === "auto-replies") {
+      setSection("account");
+    }
+  }, [isCeo, section]);
 
   const handleSignOut = async () => {
     if (!supabase) {
@@ -51,7 +107,6 @@ export function SettingsPage() {
 
   return (
     <div className="flex min-h-full bg-white">
-      {/* Secondary settings nav */}
       <aside
         className="flex w-56 shrink-0 flex-col border-r border-gray-200 bg-white sm:w-60"
         aria-label="Settings sections"
@@ -89,10 +144,32 @@ export function SettingsPage() {
               ))}
             </div>
           </div>
+
+          {isCeo ? (
+            <div>
+              <p className="px-2.5 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                Support
+              </p>
+              <div className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSection("auto-replies")}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors",
+                    section === "auto-replies"
+                      ? "bg-gray-100 text-gray-950"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+                  )}
+                >
+                  <LifeBuoy className="h-4 w-4 shrink-0 opacity-70" />
+                  Auto-replies
+                </button>
+              </div>
+            </div>
+          ) : null}
         </nav>
       </aside>
 
-      {/* Main settings content */}
       <div className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-8 sm:px-8 lg:px-10">
           {section === "account" ? (
@@ -141,7 +218,9 @@ export function SettingsPage() {
               </section>
 
               <section className="border-b border-gray-200 py-8">
-                <h2 className="text-base font-semibold text-gray-950">Account Security</h2>
+                <h2 className="text-base font-semibold text-gray-950">
+                  Account Security
+                </h2>
                 <p className="mt-1 text-sm text-gray-500">
                   Manage how you access this dashboard.
                 </p>
@@ -209,7 +288,9 @@ export function SettingsPage() {
 
           {section === "notifications" ? (
             <section>
-              <h2 className="text-base font-semibold text-gray-950">Notifications</h2>
+              <h2 className="text-base font-semibold text-gray-950">
+                Notifications
+              </h2>
               <p className="mt-1 text-sm text-gray-500">
                 Alert preferences for Order Flow and floor updates.
               </p>
@@ -221,6 +302,145 @@ export function SettingsPage() {
                 </p>
               </div>
             </section>
+          ) : null}
+
+          {section === "auto-replies" && isCeo ? (
+            <div className="space-y-8">
+              <section>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-950">
+                      Support auto-replies
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Stage templates and a log of replies sent from Support.
+                      CEO view only.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={autoLoading}
+                    onClick={() => void loadAutoReplies()}
+                  >
+                    {autoLoading ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : null}
+                    Refresh
+                  </Button>
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {autoConfig?.liveEnabled ? (
+                    <Badge variant="default">Live sending ON</Badge>
+                  ) : (
+                    <Badge variant="secondary">Test mode — no customer emails</Badge>
+                  )}
+                  {autoConfig?.connected ? (
+                    <Badge variant="outline">
+                      Gmail: {autoConfig.email || "connected"}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">Gmail not connected</Badge>
+                  )}
+                  {autoConfig && !autoConfig.canSend ? (
+                    <Badge variant="secondary">Needs send permission</Badge>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Live mode is controlled by{" "}
+                  <code className="text-[11px]">SUPPORT_AUTO_REPLY_LIVE</code> on
+                  the backend. Leave it off until you&apos;re ready.
+                </p>
+                {autoError ? (
+                  <p className="mt-3 text-sm text-red-600">{autoError}</p>
+                ) : null}
+              </section>
+
+              <section>
+                <h3 className="text-sm font-semibold text-gray-950">
+                  Reply templates by Order Flow stage
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  These are the bodies customers get (plus greeting / order
+                  number / closing).
+                </p>
+                {autoLoading && !autoConfig ? (
+                  <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading…
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {(autoConfig?.templates || []).map((t) => (
+                      <div
+                        key={t.stage}
+                        className="rounded-lg border border-gray-200 p-4"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-950">
+                            {t.label}
+                          </p>
+                          <code className="text-[10px] text-gray-400">
+                            {t.stage}
+                          </code>
+                        </div>
+                        <pre className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
+                          {t.body}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section>
+                <h3 className="text-sm font-semibold text-gray-950">
+                  Sent auto-replies
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Recorded when a live (or test-to-self) send succeeds. Empty
+                  while you&apos;re still in test mode with no sends.
+                </p>
+                {(autoConfig?.replies || []).length === 0 ? (
+                  <div className="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center">
+                    <LifeBuoy className="mx-auto h-5 w-5 text-gray-400" />
+                    <p className="mt-2 text-sm font-medium text-gray-800">
+                      No auto-replies logged yet
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-200">
+                    {(autoConfig?.replies || []).map((r) => (
+                      <li
+                        key={`${r.threadId}-${r.at || r.gmailMessageId || ""}`}
+                        className="px-4 py-3 text-sm"
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <p className="font-medium text-gray-950">
+                            {r.orderName || "Order"}
+                            {r.stage ? (
+                              <span className="ml-2 text-xs font-normal text-gray-500">
+                                {r.stage}
+                              </span>
+                            ) : null}
+                          </p>
+                          <span className="text-xs text-gray-500">
+                            {formatReplyAt(r.at)}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-gray-500">
+                          {r.customerEmail || "—"}
+                          {r.brand ? ` · ${r.brand}` : ""}
+                          {r.testToSelf ? " · test to self" : ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </div>
           ) : null}
         </div>
       </div>
