@@ -28,9 +28,12 @@ const COLUMN_LABELS: Record<string, string> = {
 
 export function DataTableViewOptions<TData>({
   table,
+  columnLabels,
 }: {
   table: Table<TData>;
+  columnLabels?: Record<string, string>;
 }) {
+  const labels = { ...COLUMN_LABELS, ...columnLabels };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -59,7 +62,7 @@ export function DataTableViewOptions<TData>({
               checked={column.getIsVisible()}
               onCheckedChange={(value) => column.toggleVisibility(!!value)}
             >
-              {COLUMN_LABELS[column.id] ?? column.id}
+              {labels[column.id] ?? column.id}
             </DropdownMenuCheckboxItem>
           ))}
       </DropdownMenuContent>

@@ -19,25 +19,17 @@ import { toast } from "sonner";
 
 import {
   nextStage,
-  ORDER_FLOW_STAGES,
   STAGE_LABELS,
   formatOrderLabel,
   type OrderFlowOrder,
   type OrderFlowStage,
 } from "../lib/order-flow";
 import { cn } from "./ui/utils";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { ButtonGroup } from "./ui/button-group";
 import { Checkbox } from "./ui/checkbox";
 import { Input } from "./ui/input";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "./ui/combobox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,20 +54,6 @@ import {
 import { DataTableColumnHeader } from "./ui/data-table-column-header";
 import { DataTablePagination } from "./ui/data-table-pagination";
 import { DataTableViewOptions } from "./ui/data-table-view-options";
-
-type ComboboxOption = { value: string; label: string };
-
-const STAGE_OPTIONS: ComboboxOption[] = ORDER_FLOW_STAGES.map((s) => ({
-  value: s,
-  label: STAGE_LABELS[s],
-}));
-
-function optionByValue(
-  options: ComboboxOption[],
-  value: string,
-): ComboboxOption | null {
-  return options.find((o) => o.value === value) ?? null;
-}
 
 function orderRowId(order: OrderFlowOrder) {
   return `${order.brand}::${order.id}`;
@@ -251,7 +229,7 @@ function buildColumns(
       cell: ({ row }) => (
         <button
           type="button"
-          className="font-medium text-blue-700 hover:underline"
+          className="text-xs font-medium text-blue-700 hover:underline"
           onClick={() => actions.onOpenDetail(row.original)}
         >
           {row.original.orderNumber}
@@ -373,38 +351,9 @@ function buildColumns(
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Stage" />
       ),
-      cell: ({ row }) => {
-        const order = row.original;
-        return (
-          <Combobox
-            items={STAGE_OPTIONS}
-            value={optionByValue(STAGE_OPTIONS, order.stage)}
-            disabled={actions.saving}
-            onValueChange={(item) => {
-              if (!item || item.value === order.stage) return;
-              actions.onRequestStageChange(item.value as OrderFlowStage, [
-                order,
-              ]);
-            }}
-            isItemEqualToValue={(a, b) => a.value === b.value}
-          >
-            <ComboboxInput
-              placeholder="Select a stage"
-              disabled={actions.saving}
-            />
-            <ComboboxContent>
-              <ComboboxEmpty>No stages found.</ComboboxEmpty>
-              <ComboboxList>
-                {(item) => (
-                  <ComboboxItem key={item.value} value={item}>
-                    {item.label}
-                  </ComboboxItem>
-                )}
-              </ComboboxList>
-            </ComboboxContent>
-          </Combobox>
-        );
-      },
+      cell: ({ row }) => (
+        <Badge>{STAGE_LABELS[row.original.stage]}</Badge>
+      ),
       enableSorting: true,
       filterFn: (row, _id, value) => {
         if (!value) return true;

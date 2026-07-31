@@ -11,7 +11,6 @@ import {
   deleteMaterial,
   deleteRecipe,
   ensureLivdonSeedIfEmpty,
-  isLowStock,
   loadBrandSupplies,
   SUPPLY_BRAND_LABELS,
   SUPPLY_BRANDS,
@@ -27,9 +26,10 @@ import {
   type SupplyRecipeLine,
   type SupplyUnit,
 } from "../lib/shop-supplies-storage";
+import { InventoryDataTable } from "./InventoryDataTable";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Badge } from "./ui/badge";
+import { Label } from "./ui/label";
 import {
   Select,
   SelectContent,
@@ -41,20 +41,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Textarea } from "./ui/textarea";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "./ui/sheet";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "./ui/tooltip";
 import { cn } from "./ui/utils";
-import { ExternalLink, ImagePlus, MoreHorizontal, Package, Plus, Trash2 } from "lucide-react";
+import { CircleHelp, ExternalLink, ImagePlus, Package, Plus, Trash2 } from "lucide-react";
 
 type CategoryFilter = "all" | SupplyCategory;
 
@@ -392,10 +393,32 @@ export function ShopSuppliesPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-0.5">
           <h2 className="text-2xl font-semibold tracking-tight text-gray-950">
             Inventory
           </h2>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="-ml-0.5 size-5"
+                aria-label="About inventory"
+              >
+                <CircleHelp />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={4} className="max-w-[14rem] text-pretty">
+              <p>
+                Track clothing blanks,
+                <br />
+                DTF prints, tags, bags,
+                <br />
+                and shipping supplies
+              </p>
+            </TooltipContent>
+          </Tooltip>
         </div>
         <Select
           value={brand}
@@ -405,7 +428,7 @@ export function ShopSuppliesPage() {
             setEditingRecipeId(null);
           }}
         >
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-fit">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -426,42 +449,6 @@ export function ShopSuppliesPage() {
         </TabsList>
 
         <TabsContent value="inventory" className="space-y-4 outline-none">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setCategoryFilter("all")}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium",
-                  categoryFilter === "all"
-                    ? "border-gray-900 bg-gray-900 text-white"
-                    : "border-gray-200 bg-white text-gray-700",
-                )}
-              >
-                All
-              </button>
-              {SUPPLY_CATEGORIES.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setCategoryFilter(c)}
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-xs font-medium",
-                    categoryFilter === c
-                      ? "border-gray-900 bg-gray-900 text-white"
-                      : "border-gray-200 bg-white text-gray-700",
-                  )}
-                >
-                  {SUPPLY_CATEGORY_LABELS[c]}
-                </button>
-              ))}
-            </div>
-            <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={openAddMaterial}>
-              <Plus className="size-4 stroke-[2.25]" />
-              Add material
-            </Button>
-          </div>
-
           <input
             ref={addPhotoInputRef}
             type="file"
@@ -484,16 +471,16 @@ export function ShopSuppliesPage() {
               if (!open) resetAddForm();
             }}
           >
-            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto border-l border-gray-200 bg-white p-0 sm:max-w-md">
-              <SheetHeader className="border-b border-gray-100 px-5 py-4 text-left">
+            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-sm">
+              <SheetHeader className="text-left">
                 <SheetTitle>Add material</SheetTitle>
                 <SheetDescription>
-                  Create a supply item for {SUPPLY_BRAND_LABELS[brand]}. You can receive more stock
-                  later from Manage stock.
+                  Create a supply item for {SUPPLY_BRAND_LABELS[brand]}. You can
+                  receive more stock later from Manage stock.
                 </SheetDescription>
               </SheetHeader>
-              <div className="space-y-5 px-5 py-5">
-                <div className="flex flex-wrap items-center gap-3">
+              <div className="grid flex-1 auto-rows-min gap-4 px-4">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     className="group relative shrink-0"
@@ -512,27 +499,32 @@ export function ShopSuppliesPage() {
                   {matPhoto ? (
                     <Button
                       type="button"
-                      size="sm"
-                      variant="secondary"
+                      size="xs"
+                      variant="outline"
                       onClick={() => setMatPhoto(null)}
                     >
                       Remove photo
                     </Button>
                   ) : (
-                    <p className="text-xs text-gray-500">Optional photo</p>
+                    <p className="text-xs text-muted-foreground">Optional photo</p>
                   )}
                 </div>
                 <div className="grid gap-2">
+                  <Label htmlFor="add-material-name">Name</Label>
                   <Input
-                    placeholder="Name (e.g. Left chest DTF)"
+                    id="add-material-name"
+                    placeholder="e.g. Left chest DTF"
                     value={matName}
                     onChange={(e) => setMatName(e.target.value)}
                   />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="add-material-category">Category</Label>
                   <Select
                     value={matCategory}
                     onValueChange={(v) => setMatCategory(v as SupplyCategory)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="add-material-category" className="w-fit">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -543,23 +535,37 @@ export function ShopSuppliesPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <div className="grid grid-cols-3 gap-2">
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="grid w-20 gap-2">
+                    <Label htmlFor="add-on-hand">On hand</Label>
                     <Input
+                      id="add-on-hand"
                       type="number"
                       min={0}
-                      placeholder="On hand"
                       value={matQty}
                       onChange={(e) => setMatQty(e.target.value)}
+                      className="w-20"
                     />
+                  </div>
+                  <div className="grid w-20 gap-2">
+                    <Label htmlFor="add-low-at">Low at</Label>
                     <Input
+                      id="add-low-at"
                       type="number"
                       min={0}
-                      placeholder="Low at"
                       value={matLow}
                       onChange={(e) => setMatLow(e.target.value)}
+                      className="w-20"
                     />
-                    <Select value={matUnit} onValueChange={(v) => setMatUnit(v as SupplyUnit)}>
-                      <SelectTrigger>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="add-unit">Unit</Label>
+                    <Select
+                      value={matUnit}
+                      onValueChange={(v) => setMatUnit(v as SupplyUnit)}
+                    >
+                      <SelectTrigger id="add-unit" className="w-fit">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -570,94 +576,76 @@ export function ShopSuppliesPage() {
                     </Select>
                   </div>
                 </div>
-                <Button type="button" className="w-full" onClick={onAddMaterial}>
+              </div>
+              <SheetFooter>
+                <Button type="button" size="sm" onClick={onAddMaterial}>
                   Add material
                 </Button>
-              </div>
+                <SheetClose asChild>
+                  <Button type="button" size="sm" variant="outline">
+                    Close
+                  </Button>
+                </SheetClose>
+              </SheetFooter>
             </SheetContent>
           </Sheet>
 
-          {materials.length ? (
-            <ul className="space-y-2">
-              {materials.map((m) => (
-                <li
-                  key={m.id}
-                  className="rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50/60"
-                >
-                  <div className="flex items-start gap-3 p-4">
-                    <button
+          <Card className="gap-0">
+            <CardHeader className="px-6 pb-0 pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="text-base">
+                  {categoryFilter === "all"
+                    ? "All materials"
+                    : SUPPLY_CATEGORY_LABELS[categoryFilter]}
+                </CardTitle>
+                <p className="text-sm text-gray-500">
+                  {materials.length} item{materials.length === 1 ? "" : "s"}
+                </p>
+              </div>
+            </CardHeader>
+            <CardContent className="px-6 pt-1.5 pb-4">
+              <InventoryDataTable
+                data={materials}
+                onOpenDetail={openMaterialDetail}
+                onDelete={onDeleteMaterial}
+                toolbarActions={
+                  <>
+                    <Select
+                      value={categoryFilter}
+                      onValueChange={(v) =>
+                        setCategoryFilter(v as CategoryFilter)
+                      }
+                    >
+                      <SelectTrigger
+                        aria-label="Filter by category"
+                        className="w-fit"
+                      >
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All categories</SelectItem>
+                        {SUPPLY_CATEGORIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {SUPPLY_CATEGORY_LABELS[c]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
                       type="button"
-                      className="flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/35"
-                      onClick={() => openMaterialDetail(m)}
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      onClick={openAddMaterial}
                     >
-                      <MaterialPhotoThumb photoDataUrl={m.photoDataUrl} name={m.name} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={cn(
-                              "h-2 w-2 shrink-0 rounded-full",
-                              isLowStock(m) ? "bg-red-500" : "bg-emerald-500",
-                            )}
-                            title={isLowStock(m) ? "Low stock" : "In stock"}
-                            aria-label={isLowStock(m) ? "Low stock" : "In stock"}
-                          />
-                          <p className="font-semibold text-gray-950">{m.name}</p>
-                          <Badge variant="outline" className="text-xs">
-                            {SUPPLY_CATEGORY_LABELS[m.category]}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-sm text-gray-600">
-                          <span className="font-semibold tabular-nums text-gray-950">
-                            {m.qtyOnHand}
-                          </span>{" "}
-                          {m.unit} on hand · low at {m.lowStockAt}
-                        </p>
-                      </div>
-                    </button>
-                    <div
-                      className="shrink-0"
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    >
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="secondary"
-                            className="size-8"
-                            aria-label={`More options for ${m.name}`}
-                          >
-                            <MoreHorizontal className="size-4 stroke-[2.25]" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openMaterialDetail(m)}>
-                            Manage stock
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openMaterialDetail(m)}>
-                            Item info
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-red-600 focus:text-red-600"
-                            onClick={() => onDeleteMaterial(m)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center text-sm text-gray-500">
-              No materials yet. Add tags, prints, bags, and shipping supplies above.
-            </div>
-          )}
+                      <Plus className="size-3.5 stroke-[2.25]" />
+                      Add material
+                    </Button>
+                  </>
+                }
+              />
+            </CardContent>
+          </Card>
 
           <Sheet
             open={Boolean(detailMaterial)}
@@ -665,25 +653,53 @@ export function ShopSuppliesPage() {
               if (!open) setDetailMaterialId(null);
             }}
           >
-            <SheetContent className="flex w-full flex-col gap-0 overflow-hidden border-l border-gray-200 bg-white p-0 sm:max-w-lg">
+            <SheetContent className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-sm">
               <div
                 ref={detailSheetRef}
                 className="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto"
               >
               {detailMaterial ? (
                 <>
-                  <SheetHeader className="border-b border-gray-100 px-5 py-4 text-left">
+                  <SheetHeader className="text-left">
                     <div className="flex items-start gap-3 pr-6">
-                      <MaterialPhotoThumb
-                        photoDataUrl={detailMaterial.photoDataUrl}
-                        name={detailMaterial.name}
-                        size="lg"
-                      />
+                      <button
+                        type="button"
+                        className="group relative shrink-0"
+                        onClick={() => detailPhotoInputRef.current?.click()}
+                        title={
+                          detailMaterial.photoDataUrl ? "Change photo" : "Add photo"
+                        }
+                        aria-label={
+                          detailMaterial.photoDataUrl ? "Change photo" : "Add photo"
+                        }
+                      >
+                        {detailMaterial.photoDataUrl ? (
+                          <>
+                            <MaterialPhotoThumb
+                              photoDataUrl={detailMaterial.photoDataUrl}
+                              name={detailMaterial.name}
+                              size="lg"
+                            />
+                            <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                              <span className="text-xs font-medium text-white">
+                                Change
+                              </span>
+                            </span>
+                          </>
+                        ) : (
+                          <div className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border bg-muted/40 px-1 text-center text-muted-foreground transition-colors group-hover:border-foreground/30 group-hover:bg-muted group-focus-visible:border-foreground/30">
+                            <ImagePlus className="h-4 w-4 stroke-[2]" />
+                            <span className="text-[10px] font-medium leading-tight">
+                              Add photo
+                            </span>
+                          </div>
+                        )}
+                      </button>
                       <div className="min-w-0">
-                        <SheetTitle className="text-lg">{detailMaterial.name}</SheetTitle>
+                        <SheetTitle>{detailMaterial.name}</SheetTitle>
                         <SheetDescription className="mt-1">
                           {SUPPLY_CATEGORY_LABELS[detailMaterial.category]} ·{" "}
-                          <span className="font-semibold tabular-nums text-gray-800">
+                          <span className="font-medium tabular-nums text-foreground">
                             {detailMaterial.qtyOnHand}
                           </span>{" "}
                           {detailMaterial.unit} on hand
@@ -692,165 +708,245 @@ export function ShopSuppliesPage() {
                     </div>
                   </SheetHeader>
 
-                  <div className="space-y-6 px-5 py-5">
-                    <section className="space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-900">Receive stock</h3>
-                      <p className="text-xs text-gray-500">
-                        Enter how many were added to inventory.
-                      </p>
-                      <div className="flex gap-2">
+                  <div className="grid flex-1 auto-rows-min gap-6 px-4 pb-4">
+                    <section className="grid gap-2">
+                      <div className="flex items-center gap-0.5">
+                        <h3 className="text-sm font-medium">Receive stock</h3>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              className="-ml-0.5 size-5"
+                              aria-label="About receive stock"
+                            >
+                              <CircleHelp />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={4} className="max-w-[12.5rem] text-pretty">
+                            <p>
+                              Enter how many were
+                              <br />
+                              added to inventory
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
                         <Input
+                          id="receive-qty"
                           type="number"
                           min={1}
                           value={receiveQty}
                           onChange={(e) => setReceiveQty(e.target.value)}
-                          className="w-28"
-                          aria-label="Quantity added"
+                          className="w-20"
+                          aria-label="Quantity to add"
                         />
-                        <Button type="button" onClick={onReceiveStock}>
+                        <Button type="button" size="sm" onClick={onReceiveStock}>
                           Add to stock
                         </Button>
                       </div>
                     </section>
 
-                    <section className="space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-900">Photo</h3>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="tertiary"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => detailPhotoInputRef.current?.click()}
-                        >
-                          <ImagePlus className="h-3.5 w-3.5" />
-                          {detailMaterial.photoDataUrl ? "Change photo" : "Add photo"}
-                        </Button>
-                        {detailMaterial.photoDataUrl ? (
-                          <Button
-                            type="button"
-                            variant="tertiary"
-                            size="sm"
-                            onClick={() => {
-                              setData(
-                                updateMaterial(brand, detailMaterial.id, {
-                                  photoDataUrl: "",
-                                }),
-                              );
-                              toast.message("Photo removed");
-                            }}
-                          >
-                            Remove photo
-                          </Button>
-                        ) : null}
-                      </div>
-                    </section>
-
-                    <section className="space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-900">Settings</h3>
-                      <div className="grid gap-2">
-                        <Input
-                          placeholder="Name"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                        />
-                        <Select
-                          value={editCategory}
-                          onValueChange={(v) => setEditCategory(v as SupplyCategory)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SUPPLY_CATEGORIES.map((c) => (
-                              <SelectItem key={c} value={c}>
-                                {SUPPLY_CATEGORY_LABELS[c]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <div className="grid grid-cols-3 gap-2">
+                    <section className="grid gap-3">
+                      <h3 className="text-sm font-medium">Settings</h3>
+                      <div className="grid gap-3">
+                        <div className="grid gap-2">
+                          <Label htmlFor="edit-material-name">Name</Label>
                           <Input
-                            type="number"
-                            min={0}
-                            placeholder="On hand"
-                            value={editOnHand}
-                            onChange={(e) => setEditOnHand(e.target.value)}
+                            id="edit-material-name"
+                            placeholder="e.g. Left chest DTF"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
                           />
-                          <Input
-                            type="number"
-                            min={0}
-                            placeholder="Low at"
-                            value={editLow}
-                            onChange={(e) => setEditLow(e.target.value)}
-                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="edit-material-category">Category</Label>
                           <Select
-                            value={editUnit}
-                            onValueChange={(v) => setEditUnit(v as SupplyUnit)}
+                            value={editCategory}
+                            onValueChange={(v) => setEditCategory(v as SupplyCategory)}
                           >
-                            <SelectTrigger>
+                            <SelectTrigger id="edit-material-category" className="w-fit">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="ea">Each</SelectItem>
-                              <SelectItem value="roll">Roll</SelectItem>
-                              <SelectItem value="pack">Pack</SelectItem>
+                              {SUPPLY_CATEGORIES.map((c) => (
+                                <SelectItem key={c} value={c}>
+                                  {SUPPLY_CATEGORY_LABELS[c]}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
-                        <Button type="button" variant="secondary" size="sm" onClick={onSaveMaterialEdits}>
-                          Save settings
-                        </Button>
+                        <div className="flex flex-wrap items-end gap-3">
+                          <div className="grid w-20 gap-2">
+                            <div className="flex items-center gap-0.5">
+                              <Label htmlFor="edit-on-hand">On hand</Label>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="-ml-0.5 size-5"
+                                    aria-label="About on hand"
+                                  >
+                                    <CircleHelp />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent sideOffset={4} className="max-w-[12.5rem] text-pretty">
+                                  <p>Current quantity<br />in inventory</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                            <Input
+                              id="edit-on-hand"
+                              type="number"
+                              min={0}
+                              value={editOnHand}
+                              onChange={(e) => setEditOnHand(e.target.value)}
+                              className="w-20"
+                            />
+                          </div>
+                          <div className="grid w-20 gap-2">
+                            <div className="flex items-center gap-0.5">
+                              <Label htmlFor="edit-low-at">Low at</Label>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="-ml-0.5 size-5"
+                                    aria-label="About low stock at"
+                                  >
+                                    <CircleHelp />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent sideOffset={4} className="max-w-[12.5rem] text-pretty">
+                                  <p>
+                                    Show low-stock alert when
+                                    <br />
+                                    on hand falls to this number
+                                    <br />
+                                    or below
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                            <Input
+                              id="edit-low-at"
+                              type="number"
+                              min={0}
+                              value={editLow}
+                              onChange={(e) => setEditLow(e.target.value)}
+                              className="w-20"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <div className="flex items-center gap-0.5">
+                              <Label htmlFor="edit-unit">Unit</Label>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="-ml-0.5 size-5"
+                                    aria-label="About unit"
+                                  >
+                                    <CircleHelp />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent sideOffset={4} className="max-w-[12.5rem] text-pretty">
+                                  <p>
+                                    How this item is counted
+                                    <br />
+                                    (each, roll, or pack)
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                            <Select
+                              value={editUnit}
+                              onValueChange={(v) => setEditUnit(v as SupplyUnit)}
+                            >
+                              <SelectTrigger id="edit-unit" className="w-fit">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ea">Each</SelectItem>
+                                <SelectItem value="roll">Roll</SelectItem>
+                                <SelectItem value="pack">Pack</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={onSaveMaterialEdits}
+                          >
+                            Save settings
+                          </Button>
+                        </div>
                       </div>
                     </section>
 
-                    <section className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <section className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3">
                       <div>
-                        <h3 className="text-base font-semibold text-gray-950">Item info</h3>
-                        <p className="mt-1 text-xs text-gray-500">
+                        <h3 className="text-sm font-medium">Item info</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Identification notes and a reorder link for ops managers.
                         </p>
                       </div>
 
-                      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                      <div className="overflow-hidden rounded-md border border-border bg-background">
                         {detailMaterial.photoDataUrl ? (
                           <img
                             src={detailMaterial.photoDataUrl}
                             alt={detailMaterial.name}
-                            className="max-h-56 w-full object-contain bg-white"
+                            className="max-h-40 w-full object-contain"
                           />
                         ) : (
-                          <div className="flex h-40 flex-col items-center justify-center gap-2 text-gray-400">
-                            <Package className="h-8 w-8" />
-                            <p className="text-xs">No photo yet — add one above</p>
+                          <div className="flex h-24 flex-col items-center justify-center gap-1 text-muted-foreground">
+                            <Package className="h-5 w-5" />
+                            <p className="text-xs">No photo yet — tap the square above</p>
                           </div>
                         )}
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium text-gray-700">
-                          How to identify this item
-                        </label>
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-notes">How to identify this item</Label>
                         <Textarea
-                          rows={5}
-                          placeholder="Vendor, SKU, size, color, bin location, what it looks like…"
+                          id="edit-notes"
+                          rows={4}
+                          placeholder="Vendor, SKU, size, color, bin location…"
                           value={editNotes}
                           onChange={(e) => setEditNotes(e.target.value)}
-                          className="min-h-[120px] resize-y bg-white text-sm"
+                          className="min-h-[96px] resize-y text-sm"
                         />
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium text-gray-700">Reorder link</label>
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-reorder-url">Reorder link</Label>
                         <Input
+                          id="edit-reorder-url"
                           type="url"
                           placeholder="https://supplier.com/product/…"
                           value={editReorderUrl}
                           onChange={(e) => setEditReorderUrl(e.target.value)}
-                          className="bg-white"
                         />
                         <div className="flex flex-wrap gap-2">
-                          <Button type="button" variant="secondary" size="sm" onClick={onSaveItemInfo}>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={onSaveItemInfo}
+                          >
                             Save item info
                           </Button>
                           {normalizeReorderUrl(editReorderUrl || detailMaterial.reorderUrl || "") ? (
@@ -864,7 +960,7 @@ export function ShopSuppliesPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >
-                                <ExternalLink className="size-4 stroke-[2.25]" />
+                                <ExternalLink className="size-3.5 stroke-[2.25]" />
                                 Open reorder site
                               </a>
                             </Button>
