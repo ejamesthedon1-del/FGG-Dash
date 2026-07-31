@@ -309,21 +309,20 @@ async def get_thread(thread_id: str) -> Dict[str, Any]:
     }
 
 
-# Shopify storefront contact-form notifications (Support inbox only)
+# Shopify storefront contact-form notifications only (not other Shopify mail)
 CONTACT_FORM_QUERY = (
-    'in:inbox newer_than:90d '
-    '(from:mailer@shopify.com OR subject:"New customer message")'
+    'in:inbox newer_than:90d subject:"New customer message"'
 )
 
 
-def _is_shopify_contact_thread(subject: str, from_header: str) -> bool:
+def _is_shopify_contact_thread(subject: str, from_header: str = "") -> bool:
+    """Strict: Shopify contact form notifications use this subject pattern."""
+    del from_header  # from alone is too broad (order/shipping mailer@shopify.com)
     subj = (subject or "").strip().lower()
-    frm = (from_header or "").strip().lower()
-    if "new customer message" in subj:
+    # e.g. "New customer message on July 31, 2026 at 4:04 pm"
+    if subj.startswith("new customer message"):
         return True
-    if "mailer@shopify.com" in frm:
-        return True
-    if "shopify.com" in frm and "contact" in subj:
+    if "new customer message on" in subj:
         return True
     return False
 
