@@ -139,6 +139,11 @@ async def support_gmail_threads(max: int = 30) -> dict:
     return await gmail_support.list_inbox_threads(max_results=max)
 
 
+@app.get("/api/support/gmail/threads/{thread_id}")
+async def support_gmail_thread(thread_id: str) -> dict:
+    return await gmail_support.get_thread(thread_id)
+
+
 @app.post("/api/mockups/generate")
 async def generate_clothing_mockup(
     prompt: str = Form(..., description="Freeform edit prompt"),

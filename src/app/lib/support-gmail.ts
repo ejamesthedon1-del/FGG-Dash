@@ -50,12 +50,35 @@ export async function fetchSupportThreads(
   return (await res.json()) as SupportThreadsResponse;
 }
 
-export async function disconnectSupportGmail(): Promise<void> {
-  const res = await fetch(apiUrl("/api/support/gmail/disconnect"), {
-    method: "POST",
-  });
+export type SupportThreadMessage = {
+  id?: string;
+  from: string;
+  to: string;
+  subject: string;
+  date: string;
+  snippet: string;
+  bodyText: string;
+  bodyHtml: string;
+  unread: boolean;
+};
+
+export type SupportThreadDetail = {
+  id: string;
+  subject: string;
+  messages: SupportThreadMessage[];
+  gmailUrl: string;
+  email?: string | null;
+};
+
+export async function fetchSupportThread(
+  threadId: string,
+): Promise<SupportThreadDetail> {
+  const res = await fetch(
+    apiUrl(`/api/support/gmail/threads/${encodeURIComponent(threadId)}`),
+  );
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `Disconnect failed (${res.status})`);
+    throw new Error(text || `Thread failed (${res.status})`);
   }
+  return (await res.json()) as SupportThreadDetail;
 }

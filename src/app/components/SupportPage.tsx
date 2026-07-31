@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { ExternalLink, LifeBuoy, Loader2, Mail, RefreshCw } from "lucide-react";
+import { ArrowLeft, ExternalLink, LifeBuoy, Loader2, Mail, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import {
   disconnectSupportGmail,
   fetchSupportGmailStatus,
+  fetchSupportThread,
   fetchSupportThreads,
   supportGmailConnectUrl,
   type SupportThread,
+  type SupportThreadDetail,
 } from "../lib/support-gmail";
 import { cn } from "./ui/utils";
 
@@ -29,6 +31,19 @@ function formatThreadDate(iso: string): string {
   }
 }
 
+function messageBody(text: string, html: string, snippet: string): string {
+  if (text.trim()) return text.trim();
+  if (html.trim()) {
+    return html
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  return snippet.trim();
+}
+
 export function SupportPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -40,6 +55,9 @@ export function SupportPage() {
   const [redirectUri, setRedirectUri] = useState<string | null>(null);
   const [threads, setThreads] = useState<SupportThread[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<SupportThreadDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(async (opts?: { soft?: boolean }) => {
     if (opts?.soft) setRefreshing(true);
@@ -58,6 +76,8 @@ export function SupportPage() {
         setEmail(data.email ?? status.email ?? null);
       } else {
         setThreads([]);
+        setSelectedId(null);
+        setDetail(null);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load Support";
@@ -91,12 +111,32 @@ export function SupportPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, load]);
 
+  const openThread = async (threadId: string) => {
+    setSelectedId(threadId);
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const data = await fetchSupportThread(threadId);
+      setDetail(data);
+      setThreads((prev) =>
+        prev.map((t) => (t.id === threadId ? { ...t, unread: false } : t)),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not open thread");
+      setSelectedId(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const onDisconnect = async () => {
     try {
       await disconnectSupportGmail();
       setConnected(false);
       setEmail(null);
       setThreads([]);
+      setSelectedId(null);
+      setDetail(null);
       toast.message("Gmail disconnected");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Disconnect failed");
@@ -175,11 +215,11 @@ export function SupportPage() {
             <p className="text-sm text-muted-foreground">
               Connect{" "}
               <span className="font-medium text-foreground">
-                ejames@futuregarmentgroup.com
+                orders@futuregarmentgroup.com
               </span>
               . On Google’s screen choose that account or{" "}
               <span className="font-medium text-foreground">Use another account</span>
-              . Incognito works if Chrome is stuck on personal Gmail. Read-only
+              . Incognito works if Chrome is stuck on another Gmail. Read-only
               for now.
             </p>
             {redirectUri ? (
@@ -216,7 +256,72 @@ export function SupportPage() {
         </Card>
       ) : null}
 
-      {!loading && connected ? (
+      {!loading && connected && selectedId ? (
+        <Card className="gap-2">
+          <CardHeader className="pb-0 pt-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 space-y-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2"
+                  onClick={() => {
+                    setSelectedId(null);
+                    setDetail(null);
+                  }}
+                >
+                  <ArrowLeft className="size-3.5" />
+                  Back to inbox
+                </Button>
+                <CardTitle className="text-base text-pretty">
+                  {detail?.subject || "Thread"}
+                </CardTitle>
+              </div>
+              {detail?.gmailUrl ? (
+                <Button type="button" variant="outline" size="sm" className="gap-1" asChild>
+                  <a href={detail.gmailUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-3.5" />
+                    Open in Gmail
+                  </a>
+                </Button>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 pb-4 pt-2">
+            {detailLoading ? (
+              <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading thread…
+              </div>
+            ) : null}
+            {!detailLoading && detail
+              ? detail.messages.map((m) => (
+                  <div
+                    key={m.id || `${m.from}-${m.date}`}
+                    className="rounded-md border border-border p-3"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground">{m.from}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatThreadDate(m.date)}
+                      </p>
+                    </div>
+                    {m.to ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">To: {m.to}</p>
+                    ) : null}
+                    <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
+                      {messageBody(m.bodyText, m.bodyHtml, m.snippet) ||
+                        "(No message body)"}
+                    </pre>
+                  </div>
+                ))
+              : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!loading && connected && !selectedId ? (
         <Card className="gap-1">
           <CardHeader className="pb-0 pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -239,12 +344,11 @@ export function SupportPage() {
               <ul className="divide-y divide-border rounded-md border">
                 {threads.map((t) => (
                   <li key={t.id}>
-                    <a
-                      href={t.gmailUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => void openThread(t.id)}
                       className={cn(
-                        "flex items-start gap-3 px-3 py-3 transition-colors hover:bg-muted/50",
+                        "flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/50",
                         t.unread && "bg-brand-soft/40",
                       )}
                     >
@@ -276,8 +380,7 @@ export function SupportPage() {
                           </p>
                         ) : null}
                       </div>
-                      <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                    </a>
+                    </button>
                   </li>
                 ))}
               </ul>

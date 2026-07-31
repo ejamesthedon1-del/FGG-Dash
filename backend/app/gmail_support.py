@@ -177,6 +177,9 @@ async def fetch_profile_email(access_token: str) -> Optional[str]:
 
 def _header_map(payload: Dict[str, Any]) -> Dict[str, str]:
     headers = ((payload.get("payload") or {}).get("headers")) or []
+    # Also allow calling with a message payload dict directly
+    if "headers" in payload and "payload" not in payload:
+        headers = payload.get("headers") or []
     out: Dict[str, str] = {}
     for h in headers:
         name = str(h.get("name") or "").strip().lower()
@@ -195,6 +198,106 @@ def _parse_date(value: str) -> Optional[str]:
         return dt.astimezone(timezone.utc).isoformat()
     except Exception:
         return None
+
+
+def _b64url_decode(data: str) -> bytes:
+    import base64
+
+    padded = data + "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(padded.encode("utf-8"))
+
+
+def _walk_parts(part: Dict[str, Any], out: List[tuple[str, str]]) -> None:
+    mime = str(part.get("mimeType") or "")
+    body = part.get("body") or {}
+    data = body.get("data")
+    if data and mime.startswith("text/"):
+        try:
+            text = _b64url_decode(data).decode("utf-8", errors="replace")
+            out.append((mime, text))
+        except Exception:
+            pass
+    for child in part.get("parts") or []:
+        if isinstance(child, dict):
+            _walk_parts(child, out)
+
+
+def _extract_body(message: Dict[str, Any]) -> Dict[str, str]:
+    payload = message.get("payload") or {}
+    collected: List[tuple[str, str]] = []
+    _walk_parts(payload, collected)
+    plain = next((t for m, t in collected if m == "text/plain"), "")
+    html = next((t for m, t in collected if m == "text/html"), "")
+    if not plain and not html and payload.get("body", {}).get("data"):
+        try:
+            raw = _b64url_decode(payload["body"]["data"]).decode(
+                "utf-8", errors="replace"
+            )
+            if str(payload.get("mimeType") or "").startswith("text/html"):
+                html = raw
+            else:
+                plain = raw
+        except Exception:
+            pass
+    return {"text": plain.strip(), "html": html.strip()}
+
+
+async def get_thread(thread_id: str) -> Dict[str, Any]:
+    tid = (thread_id or "").strip()
+    if not tid:
+        raise HTTPException(status_code=400, detail="thread id required")
+    access, tokens = await get_valid_access_token()
+    async with httpx.AsyncClient(timeout=40.0) as client:
+        res = await client.get(
+            f"{GMAIL_API}/users/me/threads/{tid}",
+            headers={"Authorization": f"Bearer {access}"},
+            params={"format": "full"},
+        )
+        if res.status_code == 401:
+            tokens = await refresh_access_token(tokens)
+            access = tokens["access_token"]
+            res = await client.get(
+                f"{GMAIL_API}/users/me/threads/{tid}",
+                headers={"Authorization": f"Bearer {access}"},
+                params={"format": "full"},
+            )
+        if res.status_code == 404:
+            raise HTTPException(status_code=404, detail="Thread not found")
+        if res.status_code >= 400:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Gmail thread failed ({res.status_code}): {res.text}",
+            )
+        body = res.json()
+
+    messages_out: List[Dict[str, Any]] = []
+    subject = "(no subject)"
+    for msg in body.get("messages") or []:
+        headers = _header_map(msg)
+        if headers.get("subject"):
+            subject = headers["subject"]
+        content = _extract_body(msg)
+        messages_out.append(
+            {
+                "id": msg.get("id"),
+                "from": headers.get("from") or "",
+                "to": headers.get("to") or "",
+                "subject": headers.get("subject") or subject,
+                "date": _parse_date(headers.get("date") or "") or "",
+                "snippet": msg.get("snippet") or "",
+                "bodyText": content["text"],
+                "bodyHtml": content["html"],
+                "unread": "UNREAD" in (msg.get("labelIds") or []),
+            }
+        )
+
+    return {
+        "id": tid,
+        "subject": subject,
+        "messages": messages_out,
+        "gmailUrl": f"https://mail.google.com/mail/u/0/#inbox/{tid}",
+        "email": tokens.get("email"),
+    }
 
 
 async def list_inbox_threads(max_results: int = 30) -> Dict[str, Any]:
