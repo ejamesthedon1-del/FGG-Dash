@@ -3,10 +3,12 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   ExternalLink,
+  Inbox,
   LifeBuoy,
   Loader2,
   Mail,
   RefreshCw,
+  Reply,
   Search,
 } from "lucide-react";
 import { Button } from "./ui/button";
@@ -16,10 +18,13 @@ import { Input } from "./ui/input";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import {
   disconnectSupportGmail,
+  fetchSupportActivity,
   fetchSupportGmailStatus,
   fetchSupportThread,
   fetchSupportThreads,
+  runSupportAutoReplies,
   supportGmailConnectUrl,
+  type SupportActivityEvent,
   type SupportThread,
   type SupportThreadDetail,
 } from "../lib/support-gmail";
@@ -234,6 +239,93 @@ function ShopifyContactBody({ data }: { data: ShopifyContactSubmission }) {
   );
 }
 
+function SupportActivityFeed({
+  activity,
+  selectedId,
+  onOpen,
+  maxHeightClass = "max-h-72",
+}: {
+  activity: SupportActivityEvent[];
+  selectedId?: string | null;
+  onOpen: (threadId: string) => void;
+  maxHeightClass?: string;
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Live feed
+        </p>
+        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+          Updates ~30s
+        </span>
+      </div>
+      {activity.length === 0 ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">
+          No recent contact form activity yet.
+        </p>
+      ) : (
+        <ul
+          className={cn(
+            "space-y-0 overflow-y-auto divide-y divide-border",
+            maxHeightClass,
+          )}
+        >
+          {activity.slice(0, 30).map((ev) => (
+            <li key={ev.id}>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full gap-2.5 px-0.5 py-2.5 text-left transition-colors hover:bg-muted/40",
+                  ev.threadId === selectedId && "bg-muted/50",
+                )}
+                onClick={() => {
+                  if (ev.threadId) onOpen(ev.threadId);
+                }}
+                disabled={!ev.threadId}
+              >
+                <div
+                  className={cn(
+                    "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full",
+                    ev.type === "replied"
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                  aria-hidden
+                >
+                  {ev.type === "replied" ? (
+                    <Reply className="size-3.5" />
+                  ) : (
+                    <Inbox className="size-3.5" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-xs font-medium text-foreground">
+                      {ev.type === "replied" ? "Auto-replied" : "Received"}
+                    </p>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {formatRelative(ev.at)}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    {ev.type === "replied"
+                      ? [ev.orderName, ev.stage, ev.customerEmail]
+                          .filter(Boolean)
+                          .join(" · ") || "Status reply sent"
+                      : ev.subject || ev.snippet || "Contact form"}
+                  </p>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function SupportPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -252,6 +344,16 @@ export function SupportPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
+  const [activity, setActivity] = useState<SupportActivityEvent[]>([]);
+
+  const loadActivity = useCallback(async () => {
+    try {
+      const feed = await fetchSupportActivity(40);
+      setActivity(feed.events || []);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
 
   const load = useCallback(async (opts?: { soft?: boolean }) => {
     if (opts?.soft) setRefreshing(true);
@@ -267,13 +369,29 @@ export function SupportPage() {
       setClientId(status.clientId ?? null);
       setRedirectUri(status.redirectUri ?? null);
       if (status.connected) {
+        if (status.canSend && status.autoReplyLive) {
+          try {
+            const auto = await runSupportAutoReplies(20, { dryRun: false });
+            if (auto.sent > 0) {
+              toast.success(
+                `Auto-replied to ${auto.sent} ${
+                  auto.sent === 1 ? "message" : "messages"
+                }`,
+              );
+            }
+          } catch {
+            /* non-fatal */
+          }
+        }
         const data = await fetchSupportThreads(30);
         setThreads(data.threads || []);
         setEmail(data.email ?? status.email ?? null);
+        await loadActivity();
       } else {
         setThreads([]);
         setSelectedId(null);
         setDetail(null);
+        setActivity([]);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load Support";
@@ -282,11 +400,19 @@ export function SupportPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [loadActivity]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!connected) return;
+    const id = window.setInterval(() => {
+      void load({ soft: true });
+    }, 30000);
+    return () => window.clearInterval(id);
+  }, [connected, load]);
 
   useEffect(() => {
     const flag = searchParams.get("gmail");
@@ -737,8 +863,15 @@ export function SupportPage() {
           {/* Details */}
           <aside className="flex min-h-0 flex-col overflow-y-auto">
             {!selectedId ? (
-              <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
-                Thread details appear here
+              <div className="space-y-4 p-4">
+                <p className="text-center text-sm text-muted-foreground">
+                  Select a thread for details
+                </p>
+                <SupportActivityFeed
+                  activity={activity}
+                  onOpen={(id) => void openThread(id)}
+                  maxHeightClass="max-h-[28rem]"
+                />
               </div>
             ) : (
               <div className="space-y-4 p-4">
@@ -819,6 +952,12 @@ export function SupportPage() {
                     </a>
                   </Button>
                 ) : null}
+
+                <SupportActivityFeed
+                  activity={activity}
+                  selectedId={selectedId}
+                  onOpen={(id) => void openThread(id)}
+                />
 
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   Inbox: {email || "connected"}. Auto-reply templates live in

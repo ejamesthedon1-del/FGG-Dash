@@ -144,6 +144,61 @@ async def support_gmail_thread(thread_id: str) -> dict:
     return await gmail_support.get_thread(thread_id)
 
 
+@app.get("/api/support/gmail/activity")
+async def support_gmail_activity(max: int = 40) -> dict:
+    """Live feed: contact-form received + auto-replied events."""
+    events: list[dict] = []
+    connected = False
+    mailbox = None
+    try:
+        listed = await gmail_support.list_inbox_threads(max_results=min(max, 50))
+        connected = True
+        mailbox = listed.get("email")
+        for t in listed.get("threads") or []:
+            events.append(
+                {
+                    "id": f"recv-{t.get('id')}",
+                    "type": "received",
+                    "at": t.get("date") or "",
+                    "threadId": t.get("id"),
+                    "subject": t.get("subject") or "",
+                    "snippet": t.get("snippet") or "",
+                    "from": t.get("from") or "",
+                    "unread": bool(t.get("unread")),
+                }
+            )
+    except Exception as exc:
+        return {
+            "connected": False,
+            "email": None,
+            "events": [],
+            "error": str(exc),
+        }
+
+    for row in gmail_store.list_auto_replies(min(max, 80)):
+        events.append(
+            {
+                "id": f"reply-{row.get('threadId')}-{row.get('at') or row.get('gmailMessageId') or ''}",
+                "type": "replied",
+                "at": row.get("at") or "",
+                "threadId": row.get("threadId"),
+                "customerEmail": row.get("customerEmail") or "",
+                "orderName": row.get("orderName") or "",
+                "stage": row.get("stage") or "",
+                "brand": row.get("brand") or "",
+                "testToSelf": bool(row.get("testToSelf")),
+            }
+        )
+
+    events.sort(key=lambda e: str(e.get("at") or ""), reverse=True)
+    return {
+        "connected": connected,
+        "email": mailbox,
+        "liveEnabled": support_auto_reply.auto_reply_is_live(),
+        "events": events[: max(1, min(max, 60))],
+    }
+
+
 @app.get("/api/support/gmail/auto-reply/config")
 async def support_gmail_auto_reply_config() -> dict:
     """CEO Settings: templates + recent auto-reply log (test mode aware)."""

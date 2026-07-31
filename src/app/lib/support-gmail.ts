@@ -125,6 +125,41 @@ export async function fetchSupportAutoReplyConfig(): Promise<SupportAutoReplyCon
   return (await res.json()) as SupportAutoReplyConfig;
 }
 
+export type SupportActivityEvent = {
+  id: string;
+  type: "received" | "replied";
+  at: string;
+  threadId?: string;
+  subject?: string;
+  snippet?: string;
+  from?: string;
+  unread?: boolean;
+  customerEmail?: string;
+  orderName?: string;
+  stage?: string;
+  brand?: string;
+  testToSelf?: boolean;
+};
+
+export type SupportActivityFeed = {
+  connected: boolean;
+  email?: string | null;
+  liveEnabled?: boolean;
+  events: SupportActivityEvent[];
+  error?: string;
+};
+
+export async function fetchSupportActivity(
+  max = 40,
+): Promise<SupportActivityFeed> {
+  const res = await fetch(apiUrl(`/api/support/gmail/activity?max=${max}`));
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Activity failed (${res.status})`);
+  }
+  return (await res.json()) as SupportActivityFeed;
+}
+
 export type SupportAutoReplyResult = {
   threadId: string;
   sent: boolean;
