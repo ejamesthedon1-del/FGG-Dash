@@ -37,6 +37,7 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -45,6 +46,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "./ui/sidebar";
+import { useOrderFlowNewCount } from "../lib/use-order-flow-new-count";
 
 const LOGO_SRC = "/fgg-logo.png?v=2";
 
@@ -175,7 +177,15 @@ const OPS_NAV: NavItem[] = [
   },
 ];
 
-function NavMenuItems({ items }: { items: NavItem[] }) {
+function NavMenuItems({
+  items,
+  orderFlowNewCount = 0,
+  onOrderFlowOpen,
+}: {
+  items: NavItem[];
+  orderFlowNewCount?: number;
+  onOrderFlowOpen?: () => void;
+}) {
   const { pathname } = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -183,17 +193,24 @@ function NavMenuItems({ items }: { items: NavItem[] }) {
     <>
       {items.map((item) => {
         const Icon = item.icon;
+        const showNewOrders =
+          item.to === "/order-flow" && orderFlowNewCount > 0;
         return (
           <SidebarMenuItem key={item.to}>
             <SidebarMenuButton
               asChild
-              tooltip={item.label}
+              tooltip={
+                showNewOrders
+                  ? `${item.label} (+${orderFlowNewCount})`
+                  : item.label
+              }
               isActive={item.match(pathname)}
             >
               <NavLink
                 to={item.to}
                 end={item.end}
                 onClick={() => {
+                  if (item.to === "/order-flow") onOrderFlowOpen?.();
                   if (isMobile) setOpenMobile(false);
                 }}
               >
@@ -201,6 +218,11 @@ function NavMenuItems({ items }: { items: NavItem[] }) {
                 <span>{item.label}</span>
               </NavLink>
             </SidebarMenuButton>
+            {showNewOrders ? (
+              <SidebarMenuBadge className="bg-brand text-brand-foreground">
+                +{orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
+              </SidebarMenuBadge>
+            ) : null}
           </SidebarMenuItem>
         );
       })}
@@ -229,6 +251,7 @@ function AppSidebar({
 }) {
   const { pathname } = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
+  const { count: orderFlowNewCount, clearBadge } = useOrderFlowNewCount(email);
   const closeMobile = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -278,13 +301,22 @@ function AppSidebar({
               >
                 <CollapsibleTrigger>
                   Operations
+                  {orderFlowNewCount > 0 ? (
+                    <span className="ml-1.5 rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-brand-foreground">
+                      +{orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
+                    </span>
+                  ) : null}
                   <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
                 </CollapsibleTrigger>
               </SidebarGroupLabel>
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    <NavMenuItems items={CEO_OPS} />
+                    <NavMenuItems
+                      items={CEO_OPS}
+                      orderFlowNewCount={orderFlowNewCount}
+                      onOrderFlowOpen={clearBadge}
+                    />
                   </SidebarMenu>
                 </SidebarGroupContent>
               </CollapsibleContent>
@@ -295,7 +327,11 @@ function AppSidebar({
             <SidebarGroupLabel>Menu</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                <NavMenuItems items={OPS_NAV} />
+                <NavMenuItems
+                  items={OPS_NAV}
+                  orderFlowNewCount={orderFlowNewCount}
+                  onOrderFlowOpen={clearBadge}
+                />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
