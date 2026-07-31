@@ -31,17 +31,31 @@ function formatThreadDate(iso: string): string {
   }
 }
 
+function htmlToReadableText(html: string): string {
+  return html
+    .replace(/\r\n/g, "\n")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function messageBody(text: string, html: string, snippet: string): string {
-  if (text.trim()) return text.trim();
-  if (html.trim()) {
-    return html
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-  return snippet.trim();
+  const plain = (text || "").replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (plain) return plain;
+  const fromHtml = html ? htmlToReadableText(html) : "";
+  if (fromHtml) return fromHtml;
+  return (snippet || "").trim();
 }
 
 export function SupportPage() {
@@ -296,26 +310,32 @@ export function SupportPage() {
               </div>
             ) : null}
             {!detailLoading && detail
-              ? detail.messages.map((m) => (
-                  <div
-                    key={m.id || `${m.from}-${m.date}`}
-                    className="rounded-md border border-border p-3"
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground">{m.from}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatThreadDate(m.date)}
-                      </p>
-                    </div>
-                    {m.to ? (
-                      <p className="mt-0.5 text-xs text-muted-foreground">To: {m.to}</p>
-                    ) : null}
-                    <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
-                      {messageBody(m.bodyText, m.bodyHtml, m.snippet) ||
-                        "(No message body)"}
-                    </pre>
-                  </div>
-                ))
+              ? detail.messages.map((m) => {
+                  const body = messageBody(m.bodyText, m.bodyHtml, m.snippet);
+                  return (
+                    <article
+                      key={m.id || `${m.from}-${m.date}`}
+                      className="rounded-md border border-border bg-background p-4"
+                    >
+                      <div className="text-base leading-relaxed text-foreground">
+                        {body ? (
+                          <p className="whitespace-pre-wrap text-pretty">{body}</p>
+                        ) : (
+                          <p className="text-muted-foreground">(No message body)</p>
+                        )}
+                      </div>
+                      <div className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+                        <p className="truncate font-medium text-foreground/80">
+                          {m.from}
+                        </p>
+                        <p className="mt-0.5">
+                          {formatThreadDate(m.date)}
+                          {m.to ? ` · To ${m.to}` : ""}
+                        </p>
+                      </div>
+                    </article>
+                  );
+                })
               : null}
           </CardContent>
         </Card>

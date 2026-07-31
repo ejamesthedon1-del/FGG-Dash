@@ -226,8 +226,11 @@ def _extract_body(message: Dict[str, Any]) -> Dict[str, str]:
     payload = message.get("payload") or {}
     collected: List[tuple[str, str]] = []
     _walk_parts(payload, collected)
-    plain = next((t for m, t in collected if m == "text/plain"), "")
-    html = next((t for m, t in collected if m == "text/html"), "")
+    plains = [t for m, t in collected if m == "text/plain" and t.strip()]
+    htmls = [t for m, t in collected if m == "text/html" and t.strip()]
+    # Prefer the longest plain body (main content vs tiny parts)
+    plain = max(plains, key=len) if plains else ""
+    html = max(htmls, key=len) if htmls else ""
     if not plain and not html and payload.get("body", {}).get("data"):
         try:
             raw = _b64url_decode(payload["body"]["data"]).decode(
