@@ -59,9 +59,16 @@ def build_authorize_url() -> str:
         "scope": " ".join(GMAIL_SCOPES),
         "access_type": "offline",
         "include_granted_scopes": "true",
+        # Always show chooser so personal Gmail isn't auto-picked.
         "prompt": "select_account consent",
         "state": state,
     }
+    hint = (s.gmail_login_hint or "").strip()
+    if hint:
+        params["login_hint"] = hint
+    hd = (s.gmail_hosted_domain or "").strip()
+    if hd:
+        params["hd"] = hd
     return f"{AUTH_URL}?{urlencode(params)}"
 
 
