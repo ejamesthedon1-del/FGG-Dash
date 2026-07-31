@@ -59,7 +59,7 @@ def build_authorize_url() -> str:
         "scope": " ".join(GMAIL_SCOPES),
         "access_type": "offline",
         "include_granted_scopes": "true",
-        "prompt": "consent",
+        "prompt": "select_account consent",
         "state": state,
     }
     return f"{AUTH_URL}?{urlencode(params)}"
