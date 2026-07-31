@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   approveRiskOrder,
   denyRiskOrder,
+  formatOrderLabel,
   type OrderFlowOrder,
   type OrderFlowRiskQueue,
   type RiskLevel,
@@ -19,6 +20,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { cn } from "./ui/utils";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -156,37 +158,31 @@ export function OrderFlowRiskReviewSection({ riskQueue, busy, onChanged }: Props
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["pending", "Pending", riskQueue.pendingCount],
-                ["approved", "Approved", riskQueue.approved.length],
-                ["denied", "Denied", riskQueue.denied.length],
-              ] as const
-            ).map(([id, label, count]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setFilter(id)}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-                  filter === id
-                    ? "border-gray-900 bg-gray-900 text-white"
-                    : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
-                )}
-              >
-                {label}
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 py-0.5 text-[11px]",
-                    filter === id ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600",
-                  )}
-                >
-                  {count}
+          <Tabs
+            value={filter}
+            onValueChange={(v) => setFilter(v as RiskFilter)}
+          >
+            <TabsList>
+              <TabsTrigger value="pending">
+                Pending
+                <span className="text-muted-foreground tabular-nums">
+                  {riskQueue.pendingCount}
                 </span>
-              </button>
-            ))}
-          </div>
+              </TabsTrigger>
+              <TabsTrigger value="approved">
+                Approved
+                <span className="text-muted-foreground tabular-nums">
+                  {riskQueue.approved.length}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="denied">
+                Denied
+                <span className="text-muted-foreground tabular-nums">
+                  {riskQueue.denied.length}
+                </span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           {busy && !list.length ? (
             <div className="flex min-h-[200px] items-center justify-center text-sm text-gray-500">
@@ -242,7 +238,7 @@ export function OrderFlowRiskReviewSection({ riskQueue, busy, onChanged }: Props
                             {order.customer} · {money(order)}
                           </p>
                           <p className="mt-0.5 text-xs text-gray-500">
-                            {order.product}
+                            {formatOrderLabel(order.product)}
                             {order.quantity ? ` × ${order.quantity}` : ""}
                             {order.orderDate ? ` · ${order.orderDate}` : ""}
                           </p>

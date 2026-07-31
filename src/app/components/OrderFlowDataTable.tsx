@@ -14,18 +14,20 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { Loader2, MoreHorizontal } from "lucide-react";
+import { ArrowRight, CheckCircle2, Copy, Eye, Loader2, MoreHorizontal } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   nextStage,
   ORDER_FLOW_STAGES,
   STAGE_LABELS,
+  formatOrderLabel,
   type OrderFlowOrder,
   type OrderFlowStage,
 } from "../lib/order-flow";
 import { cn } from "./ui/utils";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { ButtonGroup } from "./ui/button-group";
 import { Checkbox } from "./ui/checkbox";
 import { Input } from "./ui/input";
 import {
@@ -39,11 +41,16 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "./ui/hover-card";
 import {
   Table,
   TableBody,
@@ -74,77 +81,120 @@ function orderRowId(order: OrderFlowOrder) {
   return `${order.brand}::${order.id}`;
 }
 
-function deadlineClass(state: OrderFlowOrder["deadlineState"]) {
-  switch (state) {
-    case "overdue":
-      return "text-rose-700 font-semibold";
-    case "due_today":
-      return "text-amber-800 font-semibold";
-    case "upcoming":
-      return "text-orange-700 font-medium";
-    default:
-      return "text-gray-700";
-  }
+function orderedAgeLabel(order: OrderFlowOrder): string | null {
+  if (order.stage === "shipped") return null;
+  if (order.orderAgeDays == null) return null;
+  return `${order.orderAgeDays}d`;
 }
 
-function agePriorityBadge(order: OrderFlowOrder) {
-  if (order.stage === "shipped") return null;
+function orderedTitle(order: OrderFlowOrder): string | undefined {
+  if (order.stage === "shipped") return undefined;
   if (order.highPriority) {
-    return (
-      <Badge
-        variant="outline"
-        className="w-fit border-rose-400 bg-rose-100 font-semibold text-rose-900"
-      >
-        High priority · {order.orderAgeDays ?? 7}+ days
-      </Badge>
-    );
+    return `High priority · ${order.orderAgeDays ?? 7}+ days old`;
   }
   if (order.earlyWarning) {
     const daysLeft = Math.max(0, 7 - (order.orderAgeDays ?? 3));
-    return (
-      <Badge
-        variant="outline"
-        className="w-fit border-amber-400 bg-amber-50 font-semibold text-amber-950"
-      >
-        Early warning · {daysLeft}d to late
-      </Badge>
-    );
+    return `Early warning · ${daysLeft}d until late`;
   }
-  return null;
+  return undefined;
 }
 
-function deadlineBadge(order: OrderFlowOrder) {
-  if (order.stage === "shipped") return null;
-  if (order.highPriority || order.earlyWarning) return agePriorityBadge(order);
-  if (!order.expectedShipDate) return null;
-  if (order.deadlineState === "overdue") {
-    return (
-      <Badge variant="outline" className="border-rose-300 bg-rose-50 text-rose-800">
-        Overdue
-      </Badge>
-    );
-  }
-  if (order.deadlineState === "due_today") {
-    return (
-      <Badge
-        variant="outline"
-        className="border-amber-300 bg-amber-50 text-amber-900"
-      >
-        Due today
-      </Badge>
-    );
-  }
-  if (order.deadlineState === "upcoming") {
-    return (
-      <Badge
-        variant="outline"
-        className="border-orange-200 bg-orange-50 text-orange-800"
-      >
-        Ships soon
-      </Badge>
-    );
-  }
-  return null;
+function productSubtitle(order: OrderFlowOrder): string {
+  const lines =
+    order.lineItems?.length > 0
+      ? order.lineItems
+      : [
+          {
+            color: order.color,
+            size: order.size,
+          },
+        ];
+  if (lines.length > 1) return `${lines.length} lines`;
+  const line = lines[0];
+  return (
+    [line?.color, line?.size]
+      .filter(Boolean)
+      .map((part) => formatOrderLabel(part))
+      .join(" · ") || "—"
+  );
+}
+
+function OrderRowActions({
+  order,
+  saving,
+  onOpenDetail,
+  onRequestStageChange,
+}: {
+  order: OrderFlowOrder;
+  saving: boolean;
+  onOpenDetail: (order: OrderFlowOrder) => void;
+  onRequestStageChange: (
+    stage: OrderFlowStage,
+    orders: OrderFlowOrder[],
+  ) => void;
+}) {
+  const nxt = nextStage(order.stage);
+
+  return (
+    <ButtonGroup>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="More options"
+          >
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="z-[100] w-40">
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              onSelect={() => {
+                onOpenDetail(order);
+              }}
+            >
+              <Eye />
+              View details
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={async () => {
+                try {
+                  await navigator.clipboard.writeText(order.orderNumber);
+                  toast.success("Order number copied");
+                } catch {
+                  toast.error("Could not copy");
+                }
+              }}
+            >
+              <Copy />
+              Copy order #
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            {nxt ? (
+              <DropdownMenuItem
+                disabled={saving}
+                onSelect={() => {
+                  void onRequestStageChange(nxt, [order]);
+                }}
+              >
+                <ArrowRight />
+                Move to {STAGE_LABELS[nxt]}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled>
+                <CheckCircle2 />
+                Shipped
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </ButtonGroup>
+  );
 }
 
 export type OrderFlowTableActions = {
@@ -219,23 +269,69 @@ function buildColumns(
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Product" />
       ),
-      cell: ({ row }) => (
-        <span className="block max-w-[180px] truncate" title={row.original.product}>
-          {row.original.product}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "color",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Color" />
-      ),
-    },
-    {
-      accessorKey: "size",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Size" />
-      ),
+      cell: ({ row }) => {
+        const order = row.original;
+        const lines =
+          order.lineItems?.length > 0
+            ? order.lineItems
+            : [
+                {
+                  product: order.product,
+                  variant: order.variant,
+                  color: order.color,
+                  size: order.size,
+                  quantity: order.quantity,
+                },
+              ];
+        const subtitle = productSubtitle(order);
+        return (
+          <HoverCard openDelay={10} closeDelay={100}>
+            <HoverCardTrigger asChild>
+              <button
+                type="button"
+                className="block max-w-[200px] text-left underline-offset-4 hover:underline"
+              >
+                <span className="block truncate font-medium text-foreground">
+                  {formatOrderLabel(order.product)}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {subtitle}
+                </span>
+              </button>
+            </HoverCardTrigger>
+            <HoverCardContent
+              align="start"
+              side="right"
+              className="flex w-64 flex-col gap-2"
+            >
+              <div>
+                <div className="font-semibold">
+                  {formatOrderLabel(order.product)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {order.brandLabel}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5 border-t border-border pt-2">
+                {lines.map((line, i) => (
+                  <div key={`${line.product}-${i}`} className="text-sm">
+                    <div className="font-medium leading-snug">
+                      {formatOrderLabel(line.product || order.product)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {[line.variant, line.color, line.size]
+                        .filter(Boolean)
+                        .map((part) => formatOrderLabel(part))
+                        .join(" · ") || "—"}
+                      {line.quantity != null ? ` · Qty ${line.quantity}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </HoverCardContent>
+          </HoverCard>
+        );
+      },
     },
     {
       accessorKey: "quantity",
@@ -253,42 +349,22 @@ function buildColumns(
       ),
       cell: ({ row }) => {
         const order = row.original;
+        const age = orderedAgeLabel(order);
         return (
-          <div
+          <span
+            title={orderedTitle(order)}
             className={cn(
-              "flex flex-col gap-1 tabular-nums whitespace-normal",
+              "tabular-nums whitespace-nowrap",
               order.highPriority
-                ? "font-semibold text-rose-800"
+                ? "font-medium text-rose-700"
                 : order.earlyWarning
-                  ? "font-semibold text-amber-900"
-                  : "text-foreground",
+                  ? "font-medium text-amber-800"
+                  : "text-muted-foreground",
             )}
           >
-            <span>{order.orderDate}</span>
-            {agePriorityBadge(order)}
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: "expectedShipDate",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Ship by" />
-      ),
-      cell: ({ row }) => {
-        const order = row.original;
-        return (
-          <div
-            className={cn(
-              "flex flex-col gap-1 tabular-nums whitespace-normal",
-              deadlineClass(order.deadlineState),
-            )}
-          >
-            <span>{order.expectedShipDate || "—"}</span>
-            {!order.highPriority && !order.earlyWarning
-              ? deadlineBadge(order)
-              : null}
-          </div>
+            {order.orderDate}
+            {age ? <span className="opacity-70"> · {age}</span> : null}
+          </span>
         );
       },
     },
@@ -314,7 +390,6 @@ function buildColumns(
           >
             <ComboboxInput
               placeholder="Select a stage"
-              className="h-8 w-[136px]"
               disabled={actions.saving}
             />
             <ComboboxContent>
@@ -339,39 +414,14 @@ function buildColumns(
     {
       id: "actions",
       enableHiding: false,
-      cell: ({ row }) => {
-        const order = row.original;
-        const nxt = nextStage(order.stage);
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => actions.onOpenDetail(order)}>
-                View details
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {nxt ? (
-                <DropdownMenuItem
-                  disabled={actions.saving}
-                  onClick={() =>
-                    void actions.onRequestStageChange(nxt, [order])
-                  }
-                >
-                  Move to {STAGE_LABELS[nxt]}
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem disabled>Shipped</DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        );
-      },
+      cell: ({ row }) => (
+        <OrderRowActions
+          order={row.original}
+          saving={actions.saving}
+          onOpenDetail={actions.onOpenDetail}
+          onRequestStageChange={actions.onRequestStageChange}
+        />
+      ),
     },
   ];
 }
@@ -383,6 +433,7 @@ type OrderFlowDataTableProps = {
   onSelectedChange: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
   >;
+  toolbarActions?: React.ReactNode;
 } & OrderFlowTableActions;
 
 export function OrderFlowDataTable({
@@ -393,6 +444,7 @@ export function OrderFlowDataTable({
   onSelectedChange,
   onOpenDetail,
   onRequestStageChange,
+  toolbarActions,
 }: OrderFlowDataTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -480,18 +532,25 @@ export function OrderFlowDataTable({
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          placeholder="Filter orders…"
-          value={globalFilter}
-          onChange={(event) => setGlobalFilter(event.target.value)}
-          className="h-8 max-w-sm"
-        />
-        <DataTableViewOptions table={table} />
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Filter orders…"
+            value={globalFilter}
+            onChange={(event) => setGlobalFilter(event.target.value)}
+            className="max-w-sm"
+          />
+          <DataTableViewOptions table={table} />
+        </div>
+        {toolbarActions ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {toolbarActions}
+          </div>
+        ) : null}
       </div>
 
-      <div className="overflow-hidden rounded-md border">
+      <div className="overflow-x-auto rounded-md border">
         {loading ? (
           <div className="flex items-center gap-2 px-4 py-10 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />

@@ -202,6 +202,20 @@ async def get_order_flow(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.get("/api/order-flow/receipt")
+async def get_order_flow_receipt(brand: str, shopifyOrderId: str) -> dict:
+    """Full blanks receipt (includes dataUrl) for a single order."""
+    brand_key = (brand or "").strip()
+    order_id = (shopifyOrderId or "").strip()
+    if not brand_key or not order_id:
+        raise HTTPException(status_code=400, detail="brand and shopifyOrderId are required")
+    record = order_flow_store.get_record(brand_key, order_id) or {}
+    receipt = order_flow_store.get_blanks_receipt(record)
+    if not receipt:
+        raise HTTPException(status_code=404, detail="No blanks receipt for this order")
+    return {"blanksReceipt": receipt}
+
+
 @app.post("/api/order-flow/status")
 async def post_order_flow_status(body: OrderFlowStatusUpdateRequest) -> dict:
     """Move one or many orders to a FGG production stage (batch-safe)."""

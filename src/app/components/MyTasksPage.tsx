@@ -32,6 +32,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "./ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "./ui/utils";
 
 type ViewMode = "board" | "list";
@@ -239,124 +240,118 @@ export function MyTasksPage() {
         </div>
       </header>
 
-      <div
-        className="flex gap-1 border-b border-gray-200"
-        role="tablist"
-        aria-label="Tasks view"
+      <Tabs
+        value={view}
+        onValueChange={(v) => setView(v as ViewMode)}
+        className="gap-4"
       >
-        {(
-          [
-            { id: "board", label: "Board" },
-            { id: "list", label: "List" },
-          ] as const
-        ).map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={view === tab.id}
-            onClick={() => setView(tab.id)}
-            className={cn(
-              "border-b-2 px-3 pb-2.5 text-sm font-medium transition-colors",
-              view === tab.id
-                ? "border-brand text-brand"
-                : "border-transparent text-gray-500 hover:text-gray-800",
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+        <TabsList>
+          <TabsTrigger value="board">Board</TabsTrigger>
+          <TabsTrigger value="list">List</TabsTrigger>
+        </TabsList>
 
-      {tasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-6 py-16 text-center">
-          <p className="text-base font-semibold text-gray-950">No tasks yet</p>
-          <p className="mt-1.5 max-w-sm text-sm text-gray-500">
-            Your personal board is empty. Add your first task to start tracking work for the shift.
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            className="mt-5 gap-1.5"
-            onClick={openCreate}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add your first task
-          </Button>
-        </div>
-      ) : view === "board" ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {BOARD_COLUMNS.map((status) => {
-            const columnTasks = tasksByStatus(tasks, status);
-            return (
-              <section key={status} className="min-w-0">
-                <div className="mb-3 flex items-baseline justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-gray-950">
-                    {TASK_STATUS_LABELS[status]}
-                  </h3>
-                  <span className="text-xs font-medium text-gray-400">
-                    {columnTasks.length}
-                  </span>
-                </div>
-                <div className="space-y-2.5 rounded-lg border border-gray-100 bg-gray-50/80 p-2.5 min-h-[12rem]">
-                  {columnTasks.length === 0 ? (
-                    <p className="px-2 py-6 text-center text-xs text-gray-400">
-                      No tasks
-                    </p>
-                  ) : (
-                    columnTasks.map((task) => (
-                      <TaskCard key={task.id} task={task} onOpen={openTask} />
-                    ))
-                  )}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-          {BOARD_COLUMNS.map((status, index) => {
-            const columnTasks = tasksByStatus(tasks, status);
-            if (columnTasks.length === 0) return null;
-            return (
-              <div key={status} className={cn(index > 0 && "border-t border-gray-100")}>
-                <p className="bg-gray-50 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                  {TASK_STATUS_LABELS[status]} · {columnTasks.length}
-                </p>
-                <ul>
-                  {columnTasks.map((task) => (
-                    <li key={task.id} className="border-t border-gray-50 first:border-t-0">
-                      <button
-                        type="button"
-                        onClick={() => openTask(task)}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50/80"
-                      >
-                        <CheckSquare className="h-4 w-4 shrink-0 text-gray-300" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-gray-950">
-                            {task.title}
-                          </p>
-                          <p className="truncate text-xs text-gray-500">
-                            {formatDue(task.dueDate)}
-                          </p>
-                        </div>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                            priorityBadgeClass(task.priority),
-                          )}
-                        >
-                          {TASK_PRIORITY_LABELS[task.priority]}
+        {tasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-6 py-16 text-center">
+            <p className="text-base font-semibold text-gray-950">No tasks yet</p>
+            <p className="mt-1.5 max-w-sm text-sm text-gray-500">
+              Your personal board is empty. Add your first task to start tracking work for the shift.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              className="mt-5 gap-1.5"
+              onClick={openCreate}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add your first task
+            </Button>
+          </div>
+        ) : (
+          <>
+            <TabsContent value="board">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                {BOARD_COLUMNS.map((status) => {
+                  const columnTasks = tasksByStatus(tasks, status);
+                  return (
+                    <section key={status} className="min-w-0">
+                      <div className="mb-3 flex items-baseline justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-gray-950">
+                          {TASK_STATUS_LABELS[status]}
+                        </h3>
+                        <span className="text-xs font-medium text-gray-400">
+                          {columnTasks.length}
                         </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                      </div>
+                      <div className="min-h-[12rem] space-y-2.5 rounded-lg border border-gray-100 bg-gray-50/80 p-2.5">
+                        {columnTasks.length === 0 ? (
+                          <p className="px-2 py-6 text-center text-xs text-gray-400">
+                            No tasks
+                          </p>
+                        ) : (
+                          columnTasks.map((task) => (
+                            <TaskCard key={task.id} task={task} onOpen={openTask} />
+                          ))
+                        )}
+                      </div>
+                    </section>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      )}
+            </TabsContent>
+
+            <TabsContent value="list">
+              <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                {BOARD_COLUMNS.map((status, index) => {
+                  const columnTasks = tasksByStatus(tasks, status);
+                  if (columnTasks.length === 0) return null;
+                  return (
+                    <div
+                      key={status}
+                      className={cn(index > 0 && "border-t border-gray-100")}
+                    >
+                      <p className="bg-gray-50 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                        {TASK_STATUS_LABELS[status]} · {columnTasks.length}
+                      </p>
+                      <ul>
+                        {columnTasks.map((task) => (
+                          <li
+                            key={task.id}
+                            className="border-t border-gray-50 first:border-t-0"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => openTask(task)}
+                              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50/80"
+                            >
+                              <CheckSquare className="h-4 w-4 shrink-0 text-gray-300" />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-gray-950">
+                                  {task.title}
+                                </p>
+                                <p className="truncate text-xs text-gray-500">
+                                  {formatDue(task.dueDate)}
+                                </p>
+                              </div>
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                  priorityBadgeClass(task.priority),
+                                )}
+                              >
+                                {TASK_PRIORITY_LABELS[task.priority]}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            </TabsContent>
+          </>
+        )}
+      </Tabs>
 
       <Sheet
         open={panel !== null}

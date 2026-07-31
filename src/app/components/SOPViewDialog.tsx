@@ -137,7 +137,7 @@ export function SOPViewDialog({ sop, open, onOpenChange }: Props) {
           ) : (
             <div className="rounded-md border bg-white p-6 shadow-sm">
               {hasText ? (
-                <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-900">{sop.description}</div>
+                <div className="typeset typeset-docs max-w-[37em] whitespace-pre-wrap">{sop.description}</div>
               ) : (
                 <p className="text-sm text-gray-500">No written steps — attach a PDF when creating this SOP to view it here.</p>
               )}

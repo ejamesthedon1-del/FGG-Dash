@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   /** Comma-separated emails that get the CEO role (profit dashboards) */
   readonly VITE_CEO_EMAILS?: string;
   readonly VITE_API_BASE_URL?: string;
+  /** Set to "0" to disable local Vite sign-in bypass */
+  readonly VITE_DEV_AUTH_BYPASS?: string;
 }
 
 interface ImportMeta {

@@ -136,11 +136,11 @@ export function TrainingModuleDetail() {
               <CardDescription>Read through, then update your completion status on the right.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="whitespace-pre-wrap rounded-lg bg-gray-50/80 p-4 text-sm leading-relaxed text-gray-800">
+              <div className="typeset typeset-docs max-w-[37em] whitespace-pre-wrap rounded-lg bg-gray-50/80 p-4 text-foreground">
                 {module.content.trim() ? (
                   module.content
                 ) : (
-                  <span className="text-gray-400">Content will be added for this module.</span>
+                  <span className="text-muted-foreground">Content will be added for this module.</span>
                 )}
               </div>
             </CardContent>
@@ -225,7 +225,9 @@ export function TrainingModuleDetail() {
                 <CardTitle className="text-base">Key takeaways</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{module.notesTakeaways}</p>
+                <div className="typeset typeset-docs max-w-[37em] whitespace-pre-wrap">
+                  {module.notesTakeaways}
+                </div>
               </CardContent>
             </Card>
           ) : null}

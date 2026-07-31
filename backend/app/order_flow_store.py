@@ -99,6 +99,42 @@ def get_blanks_receipt(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return _extract_blanks_receipt(record)
 
 
+def blanks_receipt_meta(receipt: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """List-safe receipt (no base64 dataUrl) so order-flow payloads stay small."""
+    if not isinstance(receipt, dict):
+        return None
+    data_url = str(receipt.get("dataUrl") or "").strip()
+    name = str(receipt.get("name") or "").strip()
+    if not data_url and not name:
+        return None
+    return {
+        "name": name or "Blanks order receipt",
+        "mimeType": str(receipt.get("mimeType") or "").strip(),
+        "uploadedAt": receipt.get("uploadedAt"),
+        "hasFile": bool(data_url),
+    }
+
+
+def slim_history_for_list(history: Any) -> List[Dict[str, Any]]:
+    """Drop nested receipt dataUrls from history (they duplicate blanksReceipt)."""
+    if not isinstance(history, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        slim = dict(entry)
+        nested = slim.get("receipt")
+        if isinstance(nested, dict):
+            meta = blanks_receipt_meta(nested)
+            if meta:
+                slim["receipt"] = meta
+            else:
+                slim.pop("receipt", None)
+        out.append(slim)
+    return out
+
+
 def _extract_risk_review(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     review = record.get("riskReview")
     if isinstance(review, dict) and str(review.get("status") or "").lower() in {

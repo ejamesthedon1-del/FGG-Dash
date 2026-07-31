@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import {
   fetchOrderFlow,
+  fetchOrderFlowReceipt,
   markOrderSuppliesApplied,
   nextStage,
   normalizeOrderFlowStage,
   ORDER_FLOW_STAGES,
   orderHasSuppliesApplied,
   STAGE_LABELS,
+  formatOrderLabel,
   updateOrderFlowNotes,
   updateOrderFlowStatus,
   type BlanksReceipt,
@@ -441,6 +443,22 @@ export function OrderFlowPage() {
     setDetail(order);
     setNotesDraft(order.notes || "");
     setDetailTab("overview");
+    const needsReceipt =
+      Boolean(order.blanksReceipt?.hasFile) && !order.blanksReceipt?.dataUrl;
+    if (!needsReceipt) return;
+    void (async () => {
+      try {
+        const receipt = await fetchOrderFlowReceipt(order.brand, order.id);
+        if (!receipt) return;
+        setDetail((d) =>
+          d && d.id === order.id && d.brand === order.brand
+            ? { ...d, blanksReceipt: receipt }
+            : d,
+        );
+      } catch {
+        /* list still works without downloadable receipt */
+      }
+    })();
   };
 
   const saveNotes = async () => {
@@ -567,7 +585,7 @@ export function OrderFlowPage() {
             }}
             isItemEqualToValue={(a, b) => a.value === b.value}
           >
-            <ComboboxInput placeholder="Select a brand" className="w-[148px]" />
+            <ComboboxInput placeholder="Select a brand" />
             <ComboboxContent>
               <ComboboxEmpty>No brands found.</ComboboxEmpty>
               <ComboboxList>
@@ -605,10 +623,10 @@ export function OrderFlowPage() {
       >
         <TabsList>
           <TabsTrigger value="production">Production</TabsTrigger>
-          <TabsTrigger value="risk" className="gap-2">
+          <TabsTrigger value="risk">
             Risk review
             {riskQueue.pendingCount > 0 ? (
-              <span className="rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              <span className="rounded-md bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                 {riskQueue.pendingCount}
               </span>
             ) : null}
@@ -646,7 +664,7 @@ export function OrderFlowPage() {
                   : "border-gray-200 bg-white hover:bg-gray-50",
               )}
             >
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-sm text-muted-foreground">
                 {s.label}
               </p>
               <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{s.count}</p>
@@ -655,52 +673,8 @@ export function OrderFlowPage() {
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={selectedOrders.length > 0 ? "default" : "outline"}
-          className="gap-2"
-          disabled={selectedOrders.length === 0}
-          onClick={() => {
-            try {
-              const html = buildBlanksPrintHtml(selectedOrders);
-              setBlanksSlipHtml(html);
-              setBlanksSlipOpen(true);
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Could not open blanks slip");
-            }
-          }}
-        >
-          <Printer className="h-4 w-4" />
-          Print blanks needed
-        </Button>
-        {bulkNextActions.length > 0 ? (
-          bulkNextActions.map((action) => (
-            <Button
-              key={`${action.stage}-${action.next}`}
-              type="button"
-              size="sm"
-              disabled={saving}
-              onClick={() => void requestStageChange(action.next, action.orders)}
-            >
-              Move {action.orders.length} → {STAGE_LABELS[action.next]}
-            </Button>
-          ))
-        ) : (
-          <Button type="button" size="sm" disabled>
-            Move to next stage
-          </Button>
-        )}
-        <p className="text-sm text-gray-600 sm:ml-1">
-          {selectedOrders.length > 0
-            ? `${selectedOrders.length} order(s) selected · stays selected across stages`
-            : "Select orders to print a blanks slip or move them to the next stage."}
-        </p>
-      </div>
-
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="gap-2">
+        <CardHeader className="pb-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base">
               {STAGE_LABELS[stage]}
@@ -719,6 +693,55 @@ export function OrderFlowPage() {
             onSelectedChange={setSelected}
             onOpenDetail={openDetail}
             onRequestStageChange={requestStageChange}
+            toolbarActions={
+              <>
+                <Button
+                  type="button"
+                  variant={selectedOrders.length > 0 ? "default" : "outline"}
+                  className="gap-2"
+                  disabled={selectedOrders.length === 0}
+                  onClick={() => {
+                    try {
+                      const html = buildBlanksPrintHtml(selectedOrders);
+                      setBlanksSlipHtml(html);
+                      setBlanksSlipOpen(true);
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : "Could not open blanks slip",
+                      );
+                    }
+                  }}
+                >
+                  <Printer className="h-4 w-4" />
+                  Print blanks needed
+                </Button>
+                {bulkNextActions.length > 0 ? (
+                  bulkNextActions.map((action) => (
+                    <Button
+                      key={`${action.stage}-${action.next}`}
+                      type="button"
+                      disabled={saving}
+                      onClick={() =>
+                        void requestStageChange(action.next, action.orders)
+                      }
+                    >
+                      Move {action.orders.length} → {STAGE_LABELS[action.next]}
+                    </Button>
+                  ))
+                ) : (
+                  <Button type="button" disabled>
+                    Move to next stage
+                  </Button>
+                )}
+                <p className="text-sm text-muted-foreground sm:ml-1">
+                  {selectedOrders.length > 0
+                    ? `${selectedOrders.length} selected`
+                    : "Select orders to print or advance"}
+                </p>
+              </>
+            }
           />
         </CardContent>
       </Card>
@@ -893,19 +916,25 @@ export function OrderFlowPage() {
                       {detail.stageLabel}
                     </Badge>
                   </DetailMetaRow>
-                  {detail.blanksReceipt?.dataUrl ? (
+                  {detail.blanksReceipt?.dataUrl || detail.blanksReceipt?.hasFile ? (
                     <DetailMetaRow icon={FileText} label="Receipt">
-                      <a
-                        href={detail.blanksReceipt.dataUrl}
-                        download={detail.blanksReceipt.name || "blanks-receipt"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex max-w-full items-center gap-1.5 font-medium text-brand hover:underline"
-                      >
-                        <span className="truncate">
-                          {detail.blanksReceipt.name || "Blanks order receipt"}
+                      {detail.blanksReceipt.dataUrl ? (
+                        <a
+                          href={detail.blanksReceipt.dataUrl}
+                          download={detail.blanksReceipt.name || "blanks-receipt"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex max-w-full items-center gap-1.5 font-medium text-brand hover:underline"
+                        >
+                          <span className="truncate">
+                            {detail.blanksReceipt.name || "Blanks order receipt"}
+                          </span>
+                        </a>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          {detail.blanksReceipt.name || "Blanks order receipt"} (loading…)
                         </span>
-                      </a>
+                      )}
                     </DetailMetaRow>
                   ) : null}
                   <DetailMetaRow icon={User} label="Customer">
@@ -968,9 +997,12 @@ export function OrderFlowPage() {
                       <div key={`${item.product}-${idx}`} className="flex gap-2 text-sm">
                         <Shirt className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden />
                         <div className="min-w-0">
-                          <p className="font-medium text-gray-900">{item.product}</p>
+                          <p className="font-medium text-gray-900">
+                            {formatOrderLabel(item.product)}
+                          </p>
                           <p className="text-gray-500">
-                            {item.color} · {item.size} · qty {item.quantity}
+                            {formatOrderLabel(item.color)} ·{" "}
+                            {formatOrderLabel(item.size)} · qty {item.quantity}
                           </p>
                           {"productId" in item && item.productId ? (
                             <p className="mt-0.5 truncate font-mono text-[11px] text-gray-400">

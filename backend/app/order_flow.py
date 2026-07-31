@@ -16,10 +16,10 @@ BRAND_LABELS = {
 }
 
 STAGE_LABELS = {
-    "needs_blanks": "Needs Blanks",
+    "needs_blanks": "Needs blanks",
     "blanks_ordered": "Ordered",
-    "in_production": "In Production",
-    "ready_to_ship": "Ready to Ship",
+    "in_production": "In production",
+    "ready_to_ship": "Ready to ship",
     "shipped": "Shipped",
 }
 
@@ -383,8 +383,10 @@ def merge_order(
         "cancelledAt": node.get("cancelledAt"),
         "autoShippedFromShopify": auto_shipped,
         "notes": record.get("notes") or "",
-        "blanksReceipt": order_flow_store.get_blanks_receipt(record),
-        "history": record.get("history") or [],
+        "blanksReceipt": order_flow_store.blanks_receipt_meta(
+            order_flow_store.get_blanks_receipt(record)
+        ),
+        "history": order_flow_store.slim_history_for_list(record.get("history") or []),
         "shopifyNote": node.get("note") or "",
         "tags": node.get("tags") or [],
         "total": {
@@ -438,7 +440,7 @@ def _order_from_denied_record(record: Dict[str, Any]) -> Dict[str, Any]:
         "cancelledAt": snapshot.get("cancelledAt") or review.get("decidedAt"),
         "notes": record.get("notes") or "",
         "blanksReceipt": None,
-        "history": record.get("history") or [],
+        "history": order_flow_store.slim_history_for_list(record.get("history") or []),
         "shopifyNote": "",
         "tags": snapshot.get("tags") or [],
         "total": snapshot.get("total") or {"amount": 0, "currency": "USD"},

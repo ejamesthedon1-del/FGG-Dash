@@ -11,6 +11,10 @@ import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 import { resolveAppRole, type AppRole } from "./auth-roles";
 import {
+  createDevBypassUser,
+  isDevAuthBypassEnabled,
+} from "./dev-auth";
+import {
   clearSessionViewMode,
   readSessionViewMode,
   readViewModePreference,
@@ -36,6 +40,8 @@ export type AuthState = {
   isCeo: boolean;
   /** Signed-in users can manage floor content. */
   canManageContent: boolean;
+  /** True when local Vite preview is skipping Supabase sign-in. */
+  isDevAuthBypass: boolean;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -47,6 +53,7 @@ type SessionSlice = {
   accountRole: AppRole | null;
   accountIsCeo: boolean;
   isSignedIn: boolean;
+  isDevAuthBypass: boolean;
 };
 
 const SESSION_INITIAL: SessionSlice = {
@@ -56,6 +63,7 @@ const SESSION_INITIAL: SessionSlice = {
   accountRole: null,
   accountIsCeo: false,
   isSignedIn: false,
+  isDevAuthBypass: false,
 };
 
 function fromSession(session: Session | null): Omit<SessionSlice, "loading"> {
@@ -68,6 +76,19 @@ function fromSession(session: Session | null): Omit<SessionSlice, "loading"> {
     accountRole,
     accountIsCeo: accountRole === "ceo",
     isSignedIn: Boolean(session),
+    isDevAuthBypass: false,
+  };
+}
+
+function fromDevBypass(): Omit<SessionSlice, "loading"> {
+  const user = createDevBypassUser();
+  return {
+    session: null,
+    user,
+    accountRole: "ceo",
+    accountIsCeo: true,
+    isSignedIn: true,
+    isDevAuthBypass: true,
   };
 }
 
@@ -77,16 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [needsViewPick, setNeedsViewPick] = useState(false);
 
   useEffect(() => {
-    if (!supabase) {
-      setSessionState({ ...SESSION_INITIAL, loading: false });
-      return;
-    }
-
     let mounted = true;
 
-    const applySession = (session: Session | null) => {
+    const applySignedInAccount = (next: Omit<SessionSlice, "loading">) => {
       if (!mounted) return;
-      const next = fromSession(session);
       setSessionState({ ...next, loading: false });
 
       if (!next.isSignedIn || !next.user?.email) {
@@ -112,6 +127,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const pref = readViewModePreference(next.user.email);
       setViewModeState(pref ?? "ceo");
       setNeedsViewPick(true);
+    };
+
+    // Local Vite only — skip Supabase gate so UI can be previewed without push/env.
+    if (isDevAuthBypassEnabled()) {
+      applySignedInAccount(fromDevBypass());
+      return () => {
+        mounted = false;
+      };
+    }
+
+    if (!supabase) {
+      setSessionState({ ...SESSION_INITIAL, loading: false });
+      return;
+    }
+
+    const applySession = (session: Session | null) => {
+      applySignedInAccount(fromSession(session));
     };
 
     supabase.auth.getSession().then(({ data }) => {
@@ -166,6 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setViewMode,
       isCeo: sessionState.accountIsCeo && viewMode === "ceo",
       canManageContent: sessionState.isSignedIn,
+      isDevAuthBypass: sessionState.isDevAuthBypass,
     };
   }, [sessionState, viewMode, needsViewPick, setViewMode]);
 

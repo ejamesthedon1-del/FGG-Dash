@@ -53,8 +53,11 @@ export type SuppliesAppliedStamp = {
 export type BlanksReceipt = {
   name: string;
   mimeType: string;
-  dataUrl: string;
+  /** Present when full file is loaded; omitted from list payloads. */
+  dataUrl?: string;
   uploadedAt?: string;
+  /** True when a file exists server-side but dataUrl was stripped from the list. */
+  hasFile?: boolean;
 };
 
 export type RiskRecommendation = "NONE" | "ACCEPT" | "INVESTIGATE" | "CANCEL" | string;
@@ -140,12 +143,24 @@ export type OrderFlowResponse = {
 };
 
 export const STAGE_LABELS: Record<OrderFlowStage, string> = {
-  needs_blanks: "Needs Blanks",
+  needs_blanks: "Needs blanks",
   blanks_ordered: "Ordered",
-  in_production: "In Production",
-  ready_to_ship: "Ready to Ship",
+  in_production: "In production",
+  ready_to_ship: "Ready to ship",
   shipped: "Shipped",
 };
+
+/** Sentence-case ALL CAPS Shopify labels; leave mixed-case text alone. */
+export function formatOrderLabel(value: string | null | undefined): string {
+  const s = String(value ?? "").trim();
+  if (!s || s === "—") return s || "—";
+  const letters = s.replace(/[^A-Za-z]/g, "");
+  if (letters.length >= 2 && letters === letters.toUpperCase()) {
+    const lower = s.toLowerCase();
+    return lower.replace(/[a-z]/, (c) => c.toUpperCase());
+  }
+  return s;
+}
 
 export function nextStage(stage: OrderFlowStage): OrderFlowStage | null {
   const i = ORDER_FLOW_STAGES.indexOf(stage);
@@ -219,7 +234,17 @@ export async function fetchOrderFlow(params?: {
   if (params?.stage) qs.set("stage", params.stage);
   if (params?.days) qs.set("days", String(params.days));
   const url = apiUrl(`/api/order-flow${qs.toString() ? `?${qs}` : ""}`);
-  const res = await fetch(url);
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to fetch";
+    throw new Error(
+      msg === "Failed to fetch"
+        ? "Could not reach Order Flow API (network or payload too large). Try Refresh, or redeploy the backend if this keeps happening."
+        : msg,
+    );
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Order flow failed (${res.status})`);
@@ -235,6 +260,21 @@ export async function fetchOrderFlow(params?: {
     pendingCount: data.riskQueue?.pendingCount ?? data.riskQueue?.pending?.length ?? 0,
   };
   return { ...data, orders: enriched, riskQueue };
+}
+
+export async function fetchOrderFlowReceipt(
+  brand: string,
+  shopifyOrderId: string,
+): Promise<BlanksReceipt | null> {
+  const qs = new URLSearchParams({ brand, shopifyOrderId });
+  const res = await fetch(apiUrl(`/api/order-flow/receipt?${qs}`));
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Receipt fetch failed (${res.status})`);
+  }
+  const data = (await res.json()) as { blanksReceipt?: BlanksReceipt };
+  return data.blanksReceipt ?? null;
 }
 
 function riskSnapshot(order: OrderFlowOrder): Record<string, unknown> {

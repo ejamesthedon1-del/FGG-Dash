@@ -453,8 +453,8 @@ export function SystemDetail() {
       </div>
 
       {/* Resources Tabs */}
-      <Tabs defaultValue="all" className="space-y-4">
-        <TabsList className="flex flex-wrap h-auto gap-1">
+      <Tabs defaultValue="all" className="gap-4">
+        <TabsList>
           <TabsTrigger value="all">
             All ({system.resources.length})
           </TabsTrigger>

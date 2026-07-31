@@ -147,7 +147,7 @@ function NoteBlock({ title, body }: { title: string; body?: string }) {
   return (
     <div>
       <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</h4>
-      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{body.trim()}</p>
+      <p className="typeset typeset-docs mt-1 max-w-[37em] whitespace-pre-wrap">{body.trim()}</p>
     </div>
   );
 }
