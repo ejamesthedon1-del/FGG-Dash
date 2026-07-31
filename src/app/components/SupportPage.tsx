@@ -169,14 +169,15 @@ export function SupportPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Connect the inbox that receives Shopify contact-form messages
-              (e.g.{" "}
+              Connect{" "}
               <span className="font-medium text-foreground">
                 ejames@futuregarmentgroup.com
-              </span>
-              ). Google will show an account picker — use{" "}
-              <span className="font-medium text-foreground">Use another account</span>{" "}
-              if your personal Gmail is selected. Read-only for now.
+              </span>{" "}
+              (store contact inbox). You should see Google’s account list — pick
+              that address or{" "}
+              <span className="font-medium text-foreground">Use another account</span>
+              . If Chrome only has your personal Gmail signed in, try an
+              Incognito window. Read-only for now.
             </p>
             <Button type="button" size="sm" className="gap-1.5" asChild>
               <a href={supportGmailConnectUrl()}>

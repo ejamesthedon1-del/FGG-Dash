@@ -41,9 +41,9 @@ class Settings(BaseSettings):
     gmail_client_secret: Optional[str] = None
     gmail_redirect_uri: str = "http://localhost:8000/api/support/gmail/callback"
     gmail_project_id: Optional[str] = None
-    # Prefer this Google account / Workspace domain on Connect
-    gmail_login_hint: Optional[str] = "ejames@futuregarmentgroup.com"
-    gmail_hosted_domain: Optional[str] = "futuregarmentgroup.com"
+    # Prefer this Google account / Workspace domain on Connect (optional; leave empty to always show chooser)
+    gmail_login_hint: Optional[str] = None
+    gmail_hosted_domain: Optional[str] = None
     # Where to send the browser after OAuth (Vite dev or production app URL)
     frontend_origin: Optional[str] = None
 

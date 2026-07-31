@@ -59,17 +59,22 @@ def build_authorize_url() -> str:
         "scope": " ".join(GMAIL_SCOPES),
         "access_type": "offline",
         "include_granted_scopes": "true",
-        # Always show chooser so personal Gmail isn't auto-picked.
         "prompt": "select_account consent",
         "state": state,
     }
+    # Optional — only if explicitly set. login_hint/hd often hide "Use another account".
     hint = (s.gmail_login_hint or "").strip()
     if hint:
         params["login_hint"] = hint
     hd = (s.gmail_hosted_domain or "").strip()
     if hd:
         params["hd"] = hd
-    return f"{AUTH_URL}?{urlencode(params)}"
+    auth = f"{AUTH_URL}?{urlencode(params)}"
+    # AccountChooser always exposes "Use another account" / add account.
+    return (
+        "https://accounts.google.com/AccountChooser?"
+        + urlencode({"continue": auth})
+    )
 
 
 async def exchange_code(code: str) -> Dict[str, Any]:
