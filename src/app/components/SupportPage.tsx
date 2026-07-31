@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
+  AlertTriangle,
   ExternalLink,
   Inbox,
   LifeBuoy,
@@ -626,11 +627,76 @@ export function SupportPage() {
       ) : null}
 
       {!loading && connected ? (
-        <p className="text-xs text-muted-foreground">
-          {autoReplyLive
-            ? "Status asks auto-reply. Escalated threads need an ops manager."
-            : "Auto-replies are in test mode. Templates are in Settings (CEO)."}
-        </p>
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            {autoReplyLive
+              ? "Status asks auto-reply. Escalated threads need an ops manager."
+              : "Auto-replies are in test mode. Templates are in Settings (CEO)."}
+          </p>
+
+          {/* Real escalations */}
+          {needsCount > 0 ? (
+            <div
+              className="flex flex-wrap items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5"
+              role="status"
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold text-amber-950">
+                    {needsCount}{" "}
+                    {needsCount === 1
+                      ? "message needs attention"
+                      : "messages need attention"}
+                  </p>
+                  <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600">
+                    +{needsCount > 99 ? "99" : needsCount}
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-xs text-amber-900/80">
+                  Auto-reply couldn&apos;t finish these — open{" "}
+                  <button
+                    type="button"
+                    className="font-medium underline underline-offset-2"
+                    onClick={() => setFilter("needs")}
+                  >
+                    Needs attention
+                  </button>{" "}
+                  for ops to respond.
+                </p>
+              </div>
+            </div>
+          ) : (
+            /* Example notification so the alert + badge design is visible */
+            <div
+              className="flex flex-wrap items-start gap-3 rounded-md border border-dashed border-amber-200/80 bg-amber-50/50 px-3 py-2.5"
+              role="note"
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600/70" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium text-amber-950/80">
+                    Example: 1 message needs attention
+                  </p>
+                  <Badge
+                    variant="outline"
+                    className="border-amber-300 bg-amber-100/80 text-[10px] text-amber-900"
+                  >
+                    Example
+                  </Badge>
+                  <Badge className="bg-amber-600/80 text-[10px] text-white hover:bg-amber-600/80">
+                    +1
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-xs text-amber-900/70">
+                  When a contact form can&apos;t be auto-replied (refund, no
+                  matching order, etc.), you&apos;ll see an alert like this —
+                  and a matching +N badge on Support in the sidebar.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       ) : null}
 
       {!loading && !configured ? (

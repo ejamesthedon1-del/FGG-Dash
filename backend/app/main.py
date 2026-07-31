@@ -199,6 +199,13 @@ async def support_gmail_activity(max: int = 40) -> dict:
     }
 
 
+@app.get("/api/support/gmail/escalations/count")
+async def support_gmail_escalations_count() -> dict:
+    """Lightweight count for Support nav badge."""
+    rows = gmail_store.list_escalations(200)
+    return {"count": len(rows), "connected": bool(gmail_store.get_tokens())}
+
+
 @app.post("/api/support/gmail/escalations/{thread_id}/resolve")
 async def support_gmail_resolve_escalation(thread_id: str) -> dict:
     """Ops marks an escalated thread as handled."""

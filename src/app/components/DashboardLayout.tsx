@@ -48,6 +48,7 @@ import {
   useSidebar,
 } from "./ui/sidebar";
 import { useOrderFlowNewCount } from "../lib/use-order-flow-new-count";
+import { useSupportEscalationCount } from "../lib/use-support-escalation-count";
 
 const LOGO_SRC = "/fgg-logo.png?v=2";
 
@@ -195,10 +196,12 @@ const OPS_NAV: NavItem[] = [
 function NavMenuItems({
   items,
   orderFlowNewCount = 0,
+  supportEscalationCount = 0,
   onOrderFlowOpen,
 }: {
   items: NavItem[];
   orderFlowNewCount?: number;
+  supportEscalationCount?: number;
   onOrderFlowOpen?: () => void;
 }) {
   const { pathname } = useLocation();
@@ -210,13 +213,20 @@ function NavMenuItems({
         const Icon = item.icon;
         const showNewOrders =
           item.to === "/order-flow" && orderFlowNewCount > 0;
+        const showSupportEsc =
+          item.to === "/support" && supportEscalationCount > 0;
+        const badgeCount = showNewOrders
+          ? orderFlowNewCount
+          : showSupportEsc
+            ? supportEscalationCount
+            : 0;
         return (
           <SidebarMenuItem key={item.to}>
             <SidebarMenuButton
               asChild
               tooltip={
-                showNewOrders
-                  ? `${item.label} (+${orderFlowNewCount})`
+                badgeCount > 0
+                  ? `${item.label} (+${badgeCount})`
                   : item.label
               }
               isActive={item.match(pathname)}
@@ -233,9 +243,15 @@ function NavMenuItems({
                 <span>{item.label}</span>
               </NavLink>
             </SidebarMenuButton>
-            {showNewOrders ? (
-              <SidebarMenuBadge className="bg-brand text-brand-foreground">
-                +{orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
+            {badgeCount > 0 ? (
+              <SidebarMenuBadge
+                className={
+                  showSupportEsc
+                    ? "bg-amber-600 text-white"
+                    : "bg-brand text-brand-foreground"
+                }
+              >
+                +{badgeCount > 99 ? "99" : badgeCount}
               </SidebarMenuBadge>
             ) : null}
           </SidebarMenuItem>
@@ -267,6 +283,7 @@ function AppSidebar({
   const { pathname } = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
   const { count: orderFlowNewCount, clearBadge } = useOrderFlowNewCount(email);
+  const { count: supportEscalationCount } = useSupportEscalationCount(true);
   const closeMobile = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -330,6 +347,7 @@ function AppSidebar({
                     <NavMenuItems
                       items={CEO_OPS}
                       orderFlowNewCount={orderFlowNewCount}
+                      supportEscalationCount={supportEscalationCount}
                       onOrderFlowOpen={clearBadge}
                     />
                   </SidebarMenu>
@@ -345,6 +363,7 @@ function AppSidebar({
                 <NavMenuItems
                   items={OPS_NAV}
                   orderFlowNewCount={orderFlowNewCount}
+                  supportEscalationCount={supportEscalationCount}
                   onOrderFlowOpen={clearBadge}
                 />
               </SidebarMenu>
