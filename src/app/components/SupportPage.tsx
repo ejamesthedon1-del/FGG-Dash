@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { ArrowLeft, ExternalLink, LifeBuoy, Loader2, Mail, RefreshCw } from "lucide-react";
+import {
+  ExternalLink,
+  LifeBuoy,
+  Loader2,
+  Mail,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Input } from "./ui/input";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import {
   disconnectSupportGmail,
   fetchSupportGmailStatus,
@@ -16,10 +25,23 @@ import {
 } from "../lib/support-gmail";
 import { cn } from "./ui/utils";
 
+type InboxFilter = "all" | "unread";
+
 function formatThreadDate(iso: string): string {
   if (!iso) return "";
   try {
     const d = new Date(iso);
+    const now = new Date();
+    const sameDay =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    if (sameDay) {
+      return d.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
     return d.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
@@ -28,6 +50,23 @@ function formatThreadDate(iso: string): string {
     });
   } catch {
     return iso;
+  }
+}
+
+function formatRelative(iso: string): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso).getTime();
+    const diff = Date.now() - d;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 48) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  } catch {
+    return "—";
   }
 }
 
@@ -58,6 +97,25 @@ function messageBody(text: string, html: string, snippet: string): string {
   return (snippet || "").trim();
 }
 
+function parseFrom(from: string): { name: string; email: string } {
+  const match = from.match(/^(.*?)\s*<([^>]+)>\s*$/);
+  if (match) {
+    return {
+      name: (match[1] || "").replace(/^"|"$/g, "").trim() || match[2],
+      email: match[2].trim(),
+    };
+  }
+  if (from.includes("@")) return { name: from.split("@")[0] || from, email: from };
+  return { name: from || "Unknown", email: "" };
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+}
+
 export function SupportPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -72,6 +130,8 @@ export function SupportPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SupportThreadDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<InboxFilter>("all");
 
   const load = useCallback(async (opts?: { soft?: boolean }) => {
     if (opts?.soft) setRefreshing(true);
@@ -125,6 +185,19 @@ export function SupportPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, load]);
 
+  const filteredThreads = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return threads.filter((t) => {
+      if (filter === "unread" && !t.unread) return false;
+      if (!q) return true;
+      return (
+        t.subject.toLowerCase().includes(q) ||
+        t.from.toLowerCase().includes(q) ||
+        t.snippet.toLowerCase().includes(q)
+      );
+    });
+  }, [threads, query, filter]);
+
   const openThread = async (threadId: string) => {
     setSelectedId(threadId);
     setDetail(null);
@@ -157,8 +230,14 @@ export function SupportPage() {
     }
   };
 
+  const selectedListItem = threads.find((t) => t.id === selectedId) ?? null;
+  const latestMessage = detail?.messages?.[detail.messages.length - 1];
+  const contact = parseFrom(
+    latestMessage?.from || selectedListItem?.from || "",
+  );
+
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-gray-950">
@@ -233,8 +312,7 @@ export function SupportPage() {
               </span>
               . On Google’s screen choose that account or{" "}
               <span className="font-medium text-foreground">Use another account</span>
-              . Incognito works if Chrome is stuck on another Gmail. Read-only
-              for now.
+              .
             </p>
             {redirectUri ? (
               <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
@@ -242,11 +320,11 @@ export function SupportPage() {
                   If you see redirect_uri_mismatch
                 </p>
                 <p className="mt-1">
-                  Google Cloud → Clients → the client whose ID ends with{" "}
+                  Add this redirect URI to the OAuth client ending in{" "}
                   <code className="text-[11px]">
                     {(clientId || "").slice(-28) || "…googleusercontent.com"}
-                  </code>{" "}
-                  → Authorized redirect URIs → add exactly:
+                  </code>
+                  :
                 </p>
                 <code className="mt-2 block break-all rounded bg-background px-2 py-1.5 text-[11px] text-foreground">
                   {redirectUri}
@@ -270,143 +348,286 @@ export function SupportPage() {
         </Card>
       ) : null}
 
-      {!loading && connected && selectedId ? (
-        <Card className="gap-2">
-          <CardHeader className="pb-0 pt-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0 space-y-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2"
-                  onClick={() => {
-                    setSelectedId(null);
-                    setDetail(null);
-                  }}
-                >
-                  <ArrowLeft className="size-3.5" />
-                  Back to inbox
-                </Button>
-                <CardTitle className="text-base text-pretty">
-                  {detail?.subject || "Thread"}
-                </CardTitle>
+      {!loading && connected ? (
+        <div className="grid min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-background lg:grid-cols-[260px_minmax(0,1fr)_240px]">
+          {/* Inbox list */}
+          <section className="flex min-h-0 flex-col border-b border-border lg:border-b-0 lg:border-r">
+            <div className="space-y-2 border-b border-border p-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search inbox…"
+                  className="pl-7"
+                  aria-label="Search inbox"
+                />
               </div>
-              {detail?.gmailUrl ? (
-                <Button type="button" variant="outline" size="sm" className="gap-1" asChild>
-                  <a href={detail.gmailUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="size-3.5" />
-                    Open in Gmail
-                  </a>
-                </Button>
+              <Tabs
+                value={filter}
+                onValueChange={(v) => setFilter(v as InboxFilter)}
+              >
+                <TabsList className="w-full">
+                  <TabsTrigger value="all" className="flex-1">
+                    All
+                  </TabsTrigger>
+                  <TabsTrigger value="unread" className="flex-1">
+                    Unread
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {email} · {filteredThreads.length} shown
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {error ? (
+                <p className="p-3 text-sm text-rose-700">{error}</p>
               ) : null}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3 pb-4 pt-2">
-            {detailLoading ? (
-              <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                Loading thread…
-              </div>
-            ) : null}
-            {!detailLoading && detail
-              ? detail.messages.map((m) => {
-                  const body = messageBody(m.bodyText, m.bodyHtml, m.snippet);
-                  return (
-                    <article
-                      key={m.id || `${m.from}-${m.date}`}
-                      className="rounded-md border border-border bg-background p-4"
-                    >
-                      <div className="text-base leading-relaxed text-foreground">
-                        {body ? (
-                          <p className="whitespace-pre-wrap text-pretty">{body}</p>
-                        ) : (
-                          <p className="text-muted-foreground">(No message body)</p>
-                        )}
-                      </div>
-                      <div className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
-                        <p className="truncate font-medium text-foreground/80">
-                          {m.from}
-                        </p>
-                        <p className="mt-0.5">
-                          {formatThreadDate(m.date)}
-                          {m.to ? ` · To ${m.to}` : ""}
-                        </p>
-                      </div>
-                    </article>
-                  );
-                })
-              : null}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {!loading && connected && !selectedId ? (
-        <Card className="gap-1">
-          <CardHeader className="pb-0 pt-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <CardTitle className="text-base">Inbox</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                {email || "Connected"} · {threads.length} thread
-                {threads.length === 1 ? "" : "s"}
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-2 pb-4">
-            {error ? (
-              <p className="mb-3 text-sm text-rose-700">{error}</p>
-            ) : null}
-            {threads.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No recent inbox threads.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border rounded-md border">
-                {threads.map((t) => (
-                  <li key={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => void openThread(t.id)}
-                      className={cn(
-                        "flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/50",
-                        t.unread && "bg-brand-soft/40",
-                      )}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p
-                            className={cn(
-                              "truncate text-sm",
-                              t.unread
-                                ? "font-semibold text-foreground"
-                                : "font-medium text-foreground",
-                            )}
+              {filteredThreads.length === 0 ? (
+                <p className="p-6 text-center text-sm text-muted-foreground">
+                  No threads match.
+                </p>
+              ) : (
+                <ul>
+                  {filteredThreads.map((t) => {
+                    const who = parseFrom(t.from);
+                    const active = t.id === selectedId;
+                    return (
+                      <li key={t.id} className="border-b border-border">
+                        <button
+                          type="button"
+                          onClick={() => void openThread(t.id)}
+                          className={cn(
+                            "flex w-full gap-2.5 px-3 py-3 text-left transition-colors hover:bg-muted/50",
+                            active && "bg-muted",
+                            t.unread && !active && "bg-brand-soft/30",
+                          )}
+                        >
+                          <div
+                            className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground"
+                            aria-hidden
                           >
-                            {t.subject}
-                          </p>
-                          {t.unread ? (
-                            <Badge variant="default" className="text-[10px]">
-                              Unread
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {t.from}
-                          {t.date ? ` · ${formatThreadDate(t.date)}` : ""}
-                        </p>
-                        {t.snippet ? (
-                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                            {t.snippet}
-                          </p>
-                        ) : null}
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                            {initials(who.name)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p
+                                className={cn(
+                                  "truncate text-sm",
+                                  t.unread
+                                    ? "font-semibold text-foreground"
+                                    : "font-medium text-foreground",
+                                )}
+                              >
+                                {who.name}
+                              </p>
+                              <span className="shrink-0 text-[10px] text-muted-foreground">
+                                {formatThreadDate(t.date)}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 truncate text-xs text-foreground/90">
+                              {t.subject}
+                            </p>
+                            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+                              {t.snippet}
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                              {t.unread ? (
+                                <Badge variant="default" className="text-[10px]">
+                                  New
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Read
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="gap-1 text-[10px]">
+                                <Mail className="size-2.5" />
+                                Gmail
+                              </Badge>
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          {/* Thread */}
+          <section className="flex min-h-[320px] min-w-0 flex-col border-b border-border lg:border-b-0 lg:border-r">
+            {!selectedId ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
+                <Mail className="size-8 opacity-40" />
+                <p>Select a conversation</p>
+              </div>
+            ) : (
+              <>
+                <div className="border-b border-border px-4 py-3">
+                  <h3 className="text-base font-semibold text-pretty text-foreground">
+                    {detail?.subject || selectedListItem?.subject || "Thread"}
+                  </h3>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {selectedListItem?.unread || detail?.messages.some((m) => m.unread) ? (
+                      <Badge variant="default" className="text-[10px]">
+                        New
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[10px]">
+                        Read
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="text-[10px]">
+                      #support
+                    </Badge>
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                  {detailLoading ? (
+                    <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" />
+                      Loading thread…
+                    </div>
+                  ) : null}
+                  {!detailLoading && detail
+                    ? detail.messages.map((m) => {
+                        const who = parseFrom(m.from);
+                        const body = messageBody(m.bodyText, m.bodyHtml, m.snippet);
+                        return (
+                          <article
+                            key={m.id || `${m.from}-${m.date}`}
+                            className="rounded-md border border-border p-4"
+                          >
+                            <div className="mb-3 flex items-start gap-2.5">
+                              <div
+                                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground"
+                                aria-hidden
+                              >
+                                {initials(who.name)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                  <p className="text-sm font-medium text-foreground">
+                                    {who.name}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {formatThreadDate(m.date)}
+                                  </p>
+                                </div>
+                                <p className="truncate text-[11px] text-muted-foreground">
+                                  {who.email || m.from}
+                                  {m.to ? ` · to ${m.to}` : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-[15px] leading-relaxed text-foreground">
+                              {body ? (
+                                <p className="whitespace-pre-wrap text-pretty">{body}</p>
+                              ) : (
+                                <p className="text-muted-foreground">(No message body)</p>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })
+                    : null}
+                </div>
+              </>
             )}
-          </CardContent>
-        </Card>
+          </section>
+
+          {/* Details */}
+          <aside className="flex min-h-0 flex-col overflow-y-auto">
+            {!selectedId ? (
+              <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                Thread details appear here
+              </div>
+            ) : (
+              <div className="space-y-4 p-4">
+                <div className="flex flex-col items-center text-center">
+                  <div
+                    className="flex size-14 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground"
+                    aria-hidden
+                  >
+                    {initials(contact.name)}
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-foreground">
+                    {contact.name}
+                  </p>
+                  {contact.email ? (
+                    <p className="mt-0.5 break-all text-xs text-muted-foreground">
+                      {contact.email}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="space-y-2 rounded-md border border-border p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Thread details
+                  </p>
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-muted-foreground">Status</span>
+                    {selectedListItem?.unread ? (
+                      <Badge variant="default">New</Badge>
+                    ) : (
+                      <Badge variant="secondary">Read</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-muted-foreground">Source</span>
+                    <span className="inline-flex items-center gap-1 font-medium">
+                      <Mail className="size-3.5" />
+                      Gmail
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-muted-foreground">Last activity</span>
+                    <span className="font-medium">
+                      {formatRelative(
+                        latestMessage?.date || selectedListItem?.date || "",
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-muted-foreground">Messages</span>
+                    <span className="font-medium tabular-nums">
+                      {detail?.messages.length ??
+                        selectedListItem?.messageCount ??
+                        "—"}
+                    </span>
+                  </div>
+                </div>
+
+                {detail?.gmailUrl ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-1.5"
+                    asChild
+                  >
+                    <a
+                      href={detail.gmailUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="size-3.5" />
+                      Open in Gmail
+                    </a>
+                  </Button>
+                ) : null}
+
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Inbox: {email || "connected"}. Replies from Dash come in a
+                  later phase.
+                </p>
+              </div>
+            )}
+          </aside>
+        </div>
       ) : null}
     </div>
   );
