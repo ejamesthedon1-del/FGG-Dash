@@ -25,8 +25,9 @@ export type SupportThreadsResponse = {
   threads: SupportThread[];
 };
 
-export function supportGmailConnectUrl(): string {
-  return apiUrl("/api/support/gmail/connect");
+export function supportGmailConnectUrl(opts?: { switchAccount?: boolean }): string {
+  const q = opts?.switchAccount ? "?switch=1" : "";
+  return apiUrl(`/api/support/gmail/connect${q}`);
 }
 
 export async function fetchSupportGmailStatus(): Promise<SupportGmailStatus> {

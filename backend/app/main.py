@@ -101,8 +101,14 @@ async def support_gmail_status() -> dict:
 
 
 @app.get("/api/support/gmail/connect")
-async def support_gmail_connect():
-    return RedirectResponse(url=gmail_support.build_authorize_url(), status_code=302)
+async def support_gmail_connect(switch: int = 0):
+    # switch=1: bounce through Google logout first so a different account can be chosen
+    url = gmail_support.build_authorize_url()
+    if switch:
+        from urllib.parse import urlencode
+
+        url = "https://accounts.google.com/Logout?" + urlencode({"continue": url})
+    return RedirectResponse(url=url, status_code=302)
 
 
 @app.get("/api/support/gmail/callback")

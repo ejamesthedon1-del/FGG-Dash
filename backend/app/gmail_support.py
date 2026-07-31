@@ -70,7 +70,10 @@ def build_authorize_url() -> str:
     if hd:
         params["hd"] = hd
     auth = f"{AUTH_URL}?{urlencode(params)}"
-    return auth
+    # Route through AccountChooser so Chrome doesn't auto-bind the personal session.
+    return "https://accounts.google.com/AccountChooser?" + urlencode(
+        {"continue": auth}
+    )
 
 
 async def exchange_code(code: str) -> Dict[str, Any]:

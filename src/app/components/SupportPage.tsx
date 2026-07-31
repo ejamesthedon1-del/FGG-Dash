@@ -199,12 +199,19 @@ export function SupportPage() {
                 </code>
               </div>
             ) : null}
-            <Button type="button" size="sm" className="gap-1.5" asChild>
-              <a href={supportGmailConnectUrl()}>
-                <Mail className="size-3.5" />
-                Connect Gmail
-              </a>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" className="gap-1.5" asChild>
+                <a href={supportGmailConnectUrl()}>
+                  <Mail className="size-3.5" />
+                  Connect Gmail
+                </a>
+              </Button>
+              <Button type="button" size="sm" variant="outline" asChild>
+                <a href={supportGmailConnectUrl({ switchAccount: true })}>
+                  Use a different Google account
+                </a>
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : null}
