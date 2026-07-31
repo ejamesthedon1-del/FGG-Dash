@@ -688,4 +688,12 @@ async def process_auto_replies(
             preview_count += 1
 
     return {
-     
+        "ok": True,
+        "dryRun": preview_only,
+        "liveEnabled": live,
+        "processed": len(results),
+        "sent": sent_count,
+        "previews": preview_count,
+        "results": results,
+        "email": listed.get("email"),
+    }
