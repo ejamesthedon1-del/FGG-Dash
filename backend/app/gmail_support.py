@@ -70,11 +70,7 @@ def build_authorize_url() -> str:
     if hd:
         params["hd"] = hd
     auth = f"{AUTH_URL}?{urlencode(params)}"
-    # AccountChooser always exposes "Use another account" / add account.
-    return (
-        "https://accounts.google.com/AccountChooser?"
-        + urlencode({"continue": auth})
-    )
+    return auth
 
 
 async def exchange_code(code: str) -> Dict[str, Any]:
@@ -271,9 +267,15 @@ async def list_inbox_threads(max_results: int = 30) -> Dict[str, Any]:
 
 async def get_connection_status() -> Dict[str, Any]:
     tokens = gmail_store.get_tokens()
+    s = get_settings()
+    base = {
+        "configured": gmail_configured(),
+        "clientId": (s.gmail_client_id or "").strip() or None,
+        "redirectUri": redirect_uri(),
+    }
     if not tokens:
         return {
-            "configured": gmail_configured(),
+            **base,
             "connected": False,
             "email": None,
         }
@@ -283,13 +285,13 @@ async def get_connection_status() -> Dict[str, Any]:
         if email and email != tokens.get("email"):
             gmail_store.save_tokens({"email": email})
         return {
-            "configured": gmail_configured(),
+            **base,
             "connected": True,
             "email": email,
         }
     except HTTPException:
         return {
-            "configured": gmail_configured(),
+            **base,
             "connected": False,
             "email": tokens.get("email"),
         }

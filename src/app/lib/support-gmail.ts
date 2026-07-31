@@ -4,6 +4,8 @@ export type SupportGmailStatus = {
   configured: boolean;
   connected: boolean;
   email?: string | null;
+  clientId?: string | null;
+  redirectUri?: string | null;
 };
 
 export type SupportThread = {

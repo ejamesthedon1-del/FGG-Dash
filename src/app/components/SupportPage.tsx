@@ -36,6 +36,8 @@ export function SupportPage() {
   const [configured, setConfigured] = useState(false);
   const [connected, setConnected] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [redirectUri, setRedirectUri] = useState<string | null>(null);
   const [threads, setThreads] = useState<SupportThread[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +50,8 @@ export function SupportPage() {
       setConfigured(status.configured);
       setConnected(status.connected);
       setEmail(status.email ?? null);
+      setClientId(status.clientId ?? null);
+      setRedirectUri(status.redirectUri ?? null);
       if (status.connected) {
         const data = await fetchSupportThreads(30);
         setThreads(data.threads || []);
@@ -172,13 +176,29 @@ export function SupportPage() {
               Connect{" "}
               <span className="font-medium text-foreground">
                 ejames@futuregarmentgroup.com
-              </span>{" "}
-              (store contact inbox). You should see Google’s account list — pick
-              that address or{" "}
+              </span>
+              . On Google’s screen choose that account or{" "}
               <span className="font-medium text-foreground">Use another account</span>
-              . If Chrome only has your personal Gmail signed in, try an
-              Incognito window. Read-only for now.
+              . Incognito works if Chrome is stuck on personal Gmail. Read-only
+              for now.
             </p>
+            {redirectUri ? (
+              <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">
+                  If you see redirect_uri_mismatch
+                </p>
+                <p className="mt-1">
+                  Google Cloud → Clients → the client whose ID ends with{" "}
+                  <code className="text-[11px]">
+                    {(clientId || "").slice(-28) || "…googleusercontent.com"}
+                  </code>{" "}
+                  → Authorized redirect URIs → add exactly:
+                </p>
+                <code className="mt-2 block break-all rounded bg-background px-2 py-1.5 text-[11px] text-foreground">
+                  {redirectUri}
+                </code>
+              </div>
+            ) : null}
             <Button type="button" size="sm" className="gap-1.5" asChild>
               <a href={supportGmailConnectUrl()}>
                 <Mail className="size-3.5" />
