@@ -6,6 +6,7 @@ import asyncio
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from .config import get_settings
 from .schemas import (
@@ -21,7 +22,7 @@ from .schemas import (
 from .shopify import ShopifyGraphQLError, cancel_order_for_fraud, get_shopify_client
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
-from . import mockups, order_flow_store, product_costs_store
+from . import gmail_store, gmail_support, mockups, order_flow_store, product_costs_store
 from .order_flow import build_order_flow
 from .shopify_color import PRODUCT_COLOR_GRAPHQL, product_label_with_color, resolve_product_color
 
@@ -87,7 +88,49 @@ async def health() -> dict:
         "mockups": {
             "falConfigured": bool((get_settings().fal_key or "").strip()),
         },
+        "support": {
+            "gmailConfigured": gmail_support.gmail_configured(),
+            "gmailConnected": bool(gmail_store.get_tokens()),
+        },
     }
+
+
+@app.get("/api/support/gmail/status")
+async def support_gmail_status() -> dict:
+    return await gmail_support.get_connection_status()
+
+
+@app.get("/api/support/gmail/connect")
+async def support_gmail_connect():
+    return RedirectResponse(url=gmail_support.build_authorize_url(), status_code=302)
+
+
+@app.get("/api/support/gmail/callback")
+async def support_gmail_callback(code: str | None = None, state: str | None = None, error: str | None = None):
+    front = gmail_support.frontend_origin()
+    if error:
+        return RedirectResponse(url=f"{front}/support?gmail=error&reason={error}", status_code=302)
+    if not code or not state:
+        return RedirectResponse(url=f"{front}/support?gmail=error&reason=missing_code", status_code=302)
+    if not gmail_store.consume_oauth_state(state):
+        return RedirectResponse(url=f"{front}/support?gmail=error&reason=invalid_state", status_code=302)
+    try:
+        await gmail_support.exchange_code(code)
+    except HTTPException as exc:
+        detail = str(exc.detail).replace(" ", "_")[:80]
+        return RedirectResponse(url=f"{front}/support?gmail=error&reason={detail}", status_code=302)
+    return RedirectResponse(url=f"{front}/support?gmail=connected", status_code=302)
+
+
+@app.post("/api/support/gmail/disconnect")
+async def support_gmail_disconnect() -> dict:
+    gmail_store.clear_tokens()
+    return {"ok": True, "connected": False}
+
+
+@app.get("/api/support/gmail/threads")
+async def support_gmail_threads(max: int = 30) -> dict:
+    return await gmail_support.list_inbox_threads(max_results=max)
 
 
 @app.post("/api/mockups/generate")

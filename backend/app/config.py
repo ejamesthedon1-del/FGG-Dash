@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     # Optional fal.ai key for photoreal clothing mockups (CEO Mockups page)
     fal_key: Optional[str] = None
 
+    # Optional Gmail OAuth for Support inbox
+    gmail_client_id: Optional[str] = None
+    gmail_client_secret: Optional[str] = None
+    gmail_redirect_uri: str = "http://localhost:8000/api/support/gmail/callback"
+    gmail_project_id: Optional[str] = None
+    # Where to send the browser after OAuth (Vite dev or production app URL)
+    frontend_origin: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

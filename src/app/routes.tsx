@@ -18,6 +18,7 @@ import { TrainingCenterPage } from "./components/TrainingCenterPage";
 import { TrainingModuleDetail } from "./components/TrainingModuleDetail";
 import { OrderFlowPage } from "./components/OrderFlowPage";
 import { ShopSuppliesPage } from "./components/ShopSuppliesPage";
+import { SupportPage } from "./components/SupportPage";
 import { CeoOnly } from "./components/CeoOnly";
 import { NotFoundPage, RouteErrorPage } from "./components/RouteErrorPage";
 
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { index: true, Component: SystemsOverview },
       { path: "order-flow", Component: OrderFlowPage },
       { path: "shop-supplies", Component: ShopSuppliesPage },
+      { path: "support", Component: SupportPage },
       { path: "my-tasks", Component: MyTasksPage },
       { path: "sops/create", Component: ceoPage(CreateSOP) },
       { path: "sops/edit/:id", Component: ceoPage(EditSOP) },

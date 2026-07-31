@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ClipboardList,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   Package,
   Settings,
@@ -125,6 +126,13 @@ const CEO_OPS: NavItem[] = [
       pathname === "/shop-supplies" || pathname.startsWith("/shop-supplies"),
   },
   {
+    to: "/support",
+    label: "Support",
+    icon: LifeBuoy,
+    match: (pathname) =>
+      pathname === "/support" || pathname.startsWith("/support"),
+  },
+  {
     to: "/sops",
     label: "Knowledge Base",
     icon: ClipboardList,
@@ -161,6 +169,13 @@ const OPS_NAV: NavItem[] = [
     icon: Boxes,
     match: (pathname) =>
       pathname === "/shop-supplies" || pathname.startsWith("/shop-supplies"),
+  },
+  {
+    to: "/support",
+    label: "Support",
+    icon: LifeBuoy,
+    match: (pathname) =>
+      pathname === "/support" || pathname.startsWith("/support"),
   },
   {
     to: "/my-tasks",
