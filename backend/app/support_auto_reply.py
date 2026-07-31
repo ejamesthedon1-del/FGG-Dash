@@ -43,14 +43,19 @@ STATUS_INTENT = re.compile(
     r"where'?s?\s+my\s+order|"
     r"wheres\s+my\s+order|"
     r"order\s+status|"
-    r"status\s+of\s+(my\s+)?order|"
-    r"track(ing)?(\s+my\s+order)?|"
-    r"when\s+(will|does|is)\s+(my\s+)?order|"
+    r"status\s+(update|of\s+(my\s+)?order)|"
+    r"status\s+update|"
+    r"track(ing)?(\s+(number|my\s+order|#))?|"
+    r"when\s+(will|does|is|can)\s+(my\s+)?(order|i\s+(get|receive|expect))|"
+    r"when\s+i\s+can\s+expect|"
+    r"expect(ed)?\s+to\s+(arrive|receive)|"
     r"has\s+(my\s+)?order\s+shipped|"
     r"update\s+on\s+(my\s+)?order|"
     r"any\s+update|"
     r"still\s+waiting|"
-    r"haven'?t\s+received"
+    r"haven'?t\s+received|"
+    r"haven'?t\s+heard|"
+    r"no\s+updates?"
     r")\b",
     re.I,
 )
@@ -77,30 +82,76 @@ SHOPIFY_CONTACT_LABELS = {
     "order #",
 }
 
-STAGE_MESSAGES = {
+STAGE_BODIES = {
     "needs_blanks": (
-        "Your order is being processed — we're gathering materials to get "
-        "production started."
+        "We've got your order and it's in the queue — we're still lining up "
+        "materials before production starts.\n\n"
+        "There's no tracking yet at this stage. As soon as it ships, the store "
+        "sends tracking in a separate email. If you're waiting on a date, we're "
+        "working through it in order and will move it forward as soon as blanks "
+        "are ready."
     ),
     "blanks_ordered": (
-        "Your order is being processed — blanks have been ordered and we're "
-        "preparing for production."
+        "Your order is moving — blanks are ordered and we're getting set for "
+        "production.\n\n"
+        "We don't have a tracking number yet (that only comes after it ships). "
+        "Once it goes out, you'll get tracking from the store automatically. "
+        "Appreciate the patience while we get it through."
     ),
     "in_production": (
-        "Your order is currently in production and finishing up."
+        "Your order is in production right now and we're finishing it up.\n\n"
+        "Tracking isn't available until it ships — when it does, the store emails "
+        "it to you. If you were expecting it sooner, sorry for the wait; we're "
+        "pushing it through and you'll hear from us when it's on the way."
     ),
     "ready_to_ship": (
-        "Your order is complete and being prepared for shipment."
+        "Good timing — your order is done and getting packed to ship.\n\n"
+        "You should get tracking from the store as soon as it leaves. If a few "
+        "days pass and you still don't see that email, reply here and we'll "
+        "check on it."
     ),
     "shipped": (
-        "Your order has shipped. You should also receive tracking from the store "
-        "when it's available."
+        "Good news — your order has already shipped.\n\n"
+        "Tracking is usually sent in a separate email from the store around the "
+        "same time, so it may already be in your inbox (worth a quick look in "
+        "spam/promotions too). If you can't find it, just reply to this message "
+        "and we'll pull the tracking for you."
     ),
 }
 
 
 def _normalize_label(line: str) -> str:
     return line.replace(":", "").strip().lower()
+
+
+def detect_ask_flags(text: str) -> Dict[str, bool]:
+    body = (text or "").lower()
+    return {
+        "tracking": bool(
+            re.search(r"\b(track(ing)?(\s+number)?|tracking\s+#)\b", body)
+        ),
+        "eta": bool(
+            re.search(
+                r"\b("
+                r"when\s+(can|will|should|do)\s+i\s+(get|receive|expect)|"
+                r"expect(ed)?\s+to\s+arrive|"
+                r"eta|arrival|deliver(y|ed)?|"
+                r"how\s+long|"
+                r"any\s+idea\s+when"
+                r")\b",
+                body,
+            )
+        ),
+        "status": bool(
+            re.search(
+                r"\b("
+                r"status|update|where'?s?\s+my\s+order|wheres\s+my\s+order|"
+                r"what'?s\s+going\s+on|haven'?t\s+heard|no\s+updates?"
+                r")\b",
+                body,
+            )
+        ),
+    }
 
 
 def parse_shopify_contact_form(text: str) -> Optional[Dict[str, str]]:
@@ -199,9 +250,16 @@ def is_status_inquiry(text: str) -> bool:
         return False
     if STATUS_INTENT.search(body):
         return True
+    flags = detect_ask_flags(body)
+    if flags["tracking"] or flags["eta"] or flags["status"]:
+        return True
     # Short Shopify-style asks: "Hi wheres my order?"
-    if len(body) < 180 and re.search(r"\border\b", body, re.I):
-        if re.search(r"\b(where|status|track|shipped|update|waiting)\b", body, re.I):
+    if len(body) < 280 and re.search(r"\border\b", body, re.I):
+        if re.search(
+            r"\b(where|status|track|shipped|update|waiting|expect|arrive)\b",
+            body,
+            re.I,
+        ):
             return True
     return False
 
@@ -212,22 +270,59 @@ def build_status_reply(
     order_name: str,
     stage: str,
     brand_label: str = "",
+    customer_message: str = "",
 ) -> str:
     stage_key = order_flow_store.normalize_stage(stage)
-    status_line = STAGE_MESSAGES.get(
+    body = STAGE_BODIES.get(
         stage_key,
-        f"Your order is currently marked as {STAGE_LABELS.get(stage_key, stage_key)}.",
+        (
+            f"I checked on your order — it's currently marked as "
+            f"{STAGE_LABELS.get(stage_key, stage_key)}. "
+            "If you need anything else, just reply here."
+        ),
     )
     first = (customer_name or "").strip().split()[0] if customer_name else ""
     greeting = f"Hi {first}," if first else "Hi,"
     brand_bit = f" ({brand_label})" if brand_label else ""
-    return (
-        f"{greeting}\n\n"
-        f"Thanks for reaching out about your order {order_name}{brand_bit}.\n\n"
-        f"{status_line}\n\n"
-        "If you have any other questions, just reply to this email.\n\n"
-        "— Future Garment Group Support"
+
+    opener = (
+        f"Thanks for reaching out about order {order_name}{brand_bit}."
+        if order_name
+        else "Thanks for reaching out."
     )
+
+    flags = detect_ask_flags(customer_message)
+    # Light natural add-ons when they asked specific things
+    extras: List[str] = []
+    if stage_key == "shipped" and (flags["tracking"] or flags["eta"]):
+        extras.append(
+            "On timing — once you have the tracking link, that’ll give you the "
+            "most accurate delivery window from the carrier."
+        )
+    elif stage_key != "shipped" and flags["tracking"] and not flags["eta"]:
+        extras.append(
+            "So for tracking specifically: we can’t share a number until it "
+            "ships, but you’ll get that email as soon as it goes out."
+        )
+    elif stage_key != "shipped" and flags["eta"]:
+        extras.append(
+            "I know a firm delivery date would help — we don’t have a locked-in "
+            "ETA until it ships, but we’ll keep it moving."
+        )
+
+    parts = [greeting, "", opener, "", body]
+    if extras:
+        parts.extend(["", extras[0]])
+    parts.extend(
+        [
+            "",
+            "If anything still looks off or you need us to dig further, just reply "
+            "to this email — happy to help.",
+            "",
+            "— Future Garment Group Support",
+        ]
+    )
+    return "\n".join(parts)
 
 
 async def find_orders_for_email(email: str) -> List[Dict[str, Any]]:
@@ -345,6 +440,14 @@ def extract_customer_context(
         customer_name = shopify.get("name") or ""
         customer_message = shopify.get("message") or plain
         order_hint = shopify.get("orderNumber") or ""
+    if not order_hint:
+        m_ord = re.search(
+            r"\border\s*#?\s*(\d{3,})\b|\b#(\d{3,})\b",
+            customer_message,
+            re.I,
+        )
+        if m_ord:
+            order_hint = m_ord.group(1) or m_ord.group(2) or ""
     if not customer_email:
         customer_email = reply_to or from_email
     if not customer_name:
@@ -453,6 +556,7 @@ async def try_auto_reply_thread(
         order_name=str(order.get("name") or ""),
         stage=str(order.get("stage") or "needs_blanks"),
         brand_label=BRAND_LABELS.get(str(order.get("brand") or ""), ""),
+        customer_message=str(ctx.get("message") or ""),
     )
 
     draft = {
@@ -584,12 +688,4 @@ async def process_auto_replies(
             preview_count += 1
 
     return {
-        "ok": True,
-        "dryRun": preview_only,
-        "liveEnabled": live,
-        "processed": len(results),
-        "sent": sent_count,
-        "previews": preview_count,
-        "results": results,
-        "email": listed.get("email"),
-    }
+     
