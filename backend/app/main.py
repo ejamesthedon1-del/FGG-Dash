@@ -1137,24 +1137,90 @@ async def get_brand_kpis(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+def _next_payout_date_from_schedule(schedule: dict | None) -> str | None:
+    """Estimate the next calendar payout date from ShopifyPaymentsPayoutSchedule."""
+    if not schedule:
+        return None
+    from datetime import date, timedelta
+    import calendar
+
+    today = date.today()
+    interval = str(schedule.get("interval") or "").upper()
+    if interval == "DAILY":
+        return (today + timedelta(days=1)).isoformat()
+    if interval == "WEEKLY":
+        weekday_map = {
+            "MONDAY": 0,
+            "TUESDAY": 1,
+            "WEDNESDAY": 2,
+            "THURSDAY": 3,
+            "FRIDAY": 4,
+            "SATURDAY": 5,
+            "SUNDAY": 6,
+        }
+        target = weekday_map.get(str(schedule.get("weeklyAnchor") or "").upper())
+        if target is None:
+            return None
+        days_ahead = (target - today.weekday()) % 7
+        if days_ahead == 0:
+            days_ahead = 7
+        return (today + timedelta(days=days_ahead)).isoformat()
+    if interval == "MONTHLY":
+        anchor = schedule.get("monthlyAnchor")
+        try:
+            day = int(anchor)
+        except (TypeError, ValueError):
+            return None
+        day = max(1, min(31, day))
+        year, month = today.year, today.month
+        for _ in range(3):
+            last = calendar.monthrange(year, month)[1]
+            candidate_day = min(day, last)
+            candidate = date(year, month, candidate_day)
+            if candidate > today:
+                return candidate.isoformat()
+            if month == 12:
+                year += 1
+                month = 1
+            else:
+                month += 1
+        return None
+    return None
+
+
 @app.get("/api/shopify/payments-balance")
 async def get_payments_balance(brand: str = "live-don") -> dict:
-    """Payout bank account + latest deposit via ShopifyPaymentsBankAccount.
+    """Shopify Payments balance, bank account, and recent/scheduled payouts.
 
-    https://shopify.dev/docs/api/admin-graphql/latest/objects/ShopifyPaymentsBankAccount
+    https://shopify.dev/docs/api/admin-graphql/latest/objects/ShopifyPaymentsAccount
 
-    Requires read_shopify_payments_bank_accounts (and payouts access for deposit history).
-    Note: this object does not expose a live bank balance — only the destination
-    account metadata and payouts that moved money to/from that bank.
+    Note: payoutSchedule is unavailable on some Shopify Payments accounts and will
+    break the whole query if requested — we derive next payout from SCHEDULED deposits.
     """
     brand_key = resolve_brand(brand)
     try:
         client = get_shopify_client(brand_key)
         data = await client.graphql(
             """
-            query ShopifyPaymentsBankAccounts {
+            query ShopifyPaymentsCashSplit {
               shopifyPaymentsAccount {
                 activated
+                balance {
+                  amount
+                  currencyCode
+                }
+                payouts(first: 12, reverse: true) {
+                  nodes {
+                    id
+                    issuedAt
+                    status
+                    transactionType
+                    net {
+                      amount
+                      currencyCode
+                    }
+                  }
+                }
                 bankAccounts(first: 5, reverse: true) {
                   nodes {
                     id
@@ -1187,34 +1253,73 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
                 "configured": False,
                 "activated": False,
                 "balances": [],
+                "balanceUsd": 0,
                 "totalUsd": 0,
                 "primaryAmount": 0,
                 "primaryCurrency": "USD",
                 "accounts": [],
                 "latestPayout": None,
+                "nextPayout": None,
+                "nextPayoutDate": None,
+                "payoutSchedule": None,
                 "error": "Shopify Payments account not available for this store",
             }
 
-        nodes = ((payments.get("bankAccounts") or {}).get("nodes")) or []
-        if not nodes:
-            return {
-                "brand": brand_key,
-                "configured": False,
-                "activated": bool(payments.get("activated")),
-                "balances": [],
-                "totalUsd": 0,
-                "primaryAmount": 0,
-                "primaryCurrency": "USD",
-                "accounts": [],
-                "latestPayout": None,
-                "error": (
-                    "No payout bank account found. "
-                    "Add scope read_shopify_payments_bank_accounts if this looks wrong."
-                ),
-            }
+        balance_rows = []
+        balance_usd = 0.0
+        for row in payments.get("balance") or []:
+            amount = round(float(row.get("amount") or 0), 2)
+            currency = row.get("currencyCode") or "USD"
+            balance_rows.append({"amount": amount, "currency": currency})
+            if currency == "USD":
+                balance_usd += amount
 
+        # Optional schedule — only if a separate probe succeeds (many shops reject this field).
+        payout_schedule = None
+        try:
+            schedule_data = await client.graphql(
+                """
+                query ShopifyPaymentsSchedule {
+                  shopifyPaymentsAccount {
+                    payoutSchedule {
+                      interval
+                      monthlyAnchor
+                      weeklyAnchor
+                    }
+                  }
+                }
+                """
+            )
+            schedule_raw = (schedule_data.get("shopifyPaymentsAccount") or {}).get(
+                "payoutSchedule"
+            )
+            if schedule_raw:
+                payout_schedule = {
+                    "interval": schedule_raw.get("interval"),
+                    "monthlyAnchor": schedule_raw.get("monthlyAnchor"),
+                    "weeklyAnchor": schedule_raw.get("weeklyAnchor"),
+                }
+        except ShopifyGraphQLError:
+            payout_schedule = None
+
+        account_payouts = []
+        for p in ((payments.get("payouts") or {}).get("nodes")) or []:
+            net = p.get("net") or {}
+            account_payouts.append(
+                {
+                    "id": p.get("id"),
+                    "issuedAt": p.get("issuedAt"),
+                    "status": p.get("status"),
+                    "transactionType": p.get("transactionType"),
+                    "amount": round(float(net.get("amount") or 0), 2),
+                    "currency": net.get("currencyCode") or "USD",
+                }
+            )
+
+        nodes = ((payments.get("bankAccounts") or {}).get("nodes")) or []
         accounts = []
         latest_payout = None
+        next_payout = None
 
         for row in nodes:
             payout_nodes = ((row.get("payouts") or {}).get("nodes")) or []
@@ -1233,13 +1338,12 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
 
                 status = (p.get("status") or "").upper()
                 tx = (p.get("transactionType") or "").upper()
-                # Deposits into the merchant bank (ignore withdrawals back to Shopify).
                 if tx == "WITHDRAWAL":
                     continue
+                # Prefer completed deposits for "latest"; scheduled is handled separately.
                 if latest_payout is None and status in {
                     "PAID",
                     "IN_TRANSIT",
-                    "SCHEDULED",
                     "PENDING",
                 }:
                     latest_payout = {
@@ -1259,7 +1363,39 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
                 }
             )
 
-        # If filter skipped everything, fall back to first payout on first account.
+        for entry in account_payouts:
+            status = (entry.get("status") or "").upper()
+            tx = (entry.get("transactionType") or "").upper()
+            if tx == "WITHDRAWAL" or status != "SCHEDULED":
+                continue
+            if next_payout is None or str(entry.get("issuedAt") or "") < str(
+                next_payout.get("issuedAt") or "9999"
+            ):
+                next_payout = entry
+
+        if next_payout is None:
+            for acct in accounts:
+                for entry in acct.get("payouts") or []:
+                    status = (entry.get("status") or "").upper()
+                    tx = (entry.get("transactionType") or "").upper()
+                    if tx == "WITHDRAWAL" or status != "SCHEDULED":
+                        continue
+                    if next_payout is None or str(entry.get("issuedAt") or "") < str(
+                        next_payout.get("issuedAt") or "9999"
+                    ):
+                        next_payout = {
+                            **entry,
+                            "bankName": acct.get("bankName"),
+                            "accountNumberLastDigits": acct.get("accountNumberLastDigits"),
+                        }
+
+        if latest_payout is None:
+            for entry in account_payouts:
+                tx = (entry.get("transactionType") or "").upper()
+                if tx == "WITHDRAWAL":
+                    continue
+                latest_payout = entry
+                break
         if latest_payout is None:
             for acct in accounts:
                 if acct["payouts"]:
@@ -1271,47 +1407,67 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
                     }
                     break
 
-        primary = accounts[0]
+        estimated_next = None
+        if next_payout and next_payout.get("issuedAt"):
+            estimated_next = str(next_payout["issuedAt"])[:10]
+        else:
+            estimated_next = _next_payout_date_from_schedule(payout_schedule)
+
+        primary = accounts[0] if accounts else {}
         primary_amount = float((latest_payout or {}).get("amount") or 0)
         primary_currency = (
             (latest_payout or {}).get("currency")
             or primary.get("currency")
             or "USD"
         )
-        total_usd = primary_amount if primary_currency == "USD" else 0.0
+        total_usd = balance_usd if balance_rows else (
+            primary_amount if primary_currency == "USD" else 0.0
+        )
 
         return {
             "brand": brand_key,
             "configured": True,
             "activated": bool(payments.get("activated")),
-            "balances": (
+            "balances": balance_rows
+            or (
                 [{"amount": round(primary_amount, 2), "currency": primary_currency}]
                 if latest_payout
                 else []
             ),
+            "balanceUsd": round(balance_usd, 2),
             "totalUsd": round(total_usd, 2),
             "primaryAmount": round(primary_amount, 2),
             "primaryCurrency": primary_currency,
             "accounts": accounts,
+            "accountPayouts": account_payouts,
             "latestPayout": latest_payout,
-            "error": None,
+            "nextPayout": next_payout,
+            "nextPayoutDate": estimated_next,
+            "payoutSchedule": payout_schedule,
+            "error": None if (accounts or balance_rows) else (
+                "No payout bank account found. "
+                "Add scope read_shopify_payments_bank_accounts if this looks wrong."
+            ),
         }
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ShopifyGraphQLError as exc:
         detail = str(exc)
-        if "ACCESS_DENIED" in detail or "read_shopify_payments_bank_accounts" in detail:
+        if "ACCESS_DENIED" in detail or "read_shopify_payments" in detail:
             raise HTTPException(
                 status_code=502,
                 detail=(
-                    "Bank account access denied. Add scope "
+                    "Shopify Payments access denied. Add scopes "
+                    "read_shopify_payments (or read_shopify_payments_accounts) and "
                     "read_shopify_payments_bank_accounts to both brand apps, "
-                    "then reinstall/refresh the app so the token picks up the scope."
+                    "then reinstall/refresh the app so the token picks up the scopes."
                 ),
             ) from exc
         raise HTTPException(status_code=502, detail=detail) from exc
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=502, detail=f"Shopify HTTP error: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

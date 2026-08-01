@@ -141,6 +141,8 @@ export type ShopifyPaymentsBalance = {
   configured: boolean;
   activated: boolean;
   balances: Array<{ amount: number; currency: string }>;
+  /** Live Shopify Payments balance in USD when available. */
+  balanceUsd?: number;
   /** Latest deposit amount in USD when applicable (combined totals). */
   totalUsd: number;
   /** Latest payout/deposit amount to the linked bank account. */
@@ -161,6 +163,14 @@ export type ShopifyPaymentsBalance = {
       currency: string;
     }>;
   }>;
+  accountPayouts?: Array<{
+    id?: string;
+    issuedAt?: string;
+    status?: string;
+    transactionType?: string;
+    amount: number;
+    currency: string;
+  }>;
   latestPayout?: {
     amount: number;
     currency: string;
@@ -168,6 +178,21 @@ export type ShopifyPaymentsBalance = {
     issuedAt?: string;
     bankName?: string | null;
     accountNumberLastDigits?: string | null;
+  } | null;
+  nextPayout?: {
+    amount: number;
+    currency: string;
+    status?: string;
+    issuedAt?: string;
+    bankName?: string | null;
+    accountNumberLastDigits?: string | null;
+  } | null;
+  /** YYYY-MM-DD estimated or scheduled next payout date. */
+  nextPayoutDate?: string | null;
+  payoutSchedule?: {
+    interval?: string | null;
+    monthlyAnchor?: number | null;
+    weeklyAnchor?: string | null;
   } | null;
   error?: string | null;
 };

@@ -176,6 +176,81 @@ const PIPELINE: Array<{ id: OrderFlowStage; icon: typeof Shirt }> = [
   { id: "ready_to_ship", icon: Truck },
 ];
 
+/** Same key as Support inbox first-time example escalation. */
+const SUPPORT_EXAMPLE_DISMISS_KEY = "fgg.support.exampleEscalation.dismissed";
+const PRIORITY_TODOS_DONE_KEY = "fgg.ops.priority-todos.done";
+
+type PriorityTodo = {
+  id: string;
+  source: string;
+  label: string;
+  tone: "action" | "critical";
+  to: string;
+};
+
+function readSupportExampleActive(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(SUPPORT_EXAMPLE_DISMISS_KEY) !== "1";
+  } catch {
+    return true;
+  }
+}
+
+function loadPriorityTodosDone(): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(PRIORITY_TODOS_DONE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, boolean> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (key.trim() && value === true) out[key] = true;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function togglePriorityTodoDone(
+  id: string,
+  completed: boolean,
+  current: Record<string, boolean>,
+): Record<string, boolean> {
+  const next = { ...current };
+  if (completed) next[id] = true;
+  else delete next[id];
+  try {
+    window.localStorage.setItem(PRIORITY_TODOS_DONE_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+  return next;
+}
+
+function buildNotificationPriorityTodos(supportExampleActive: boolean): PriorityTodo[] {
+  const items: PriorityTodo[] = [];
+  if (supportExampleActive) {
+    items.push({
+      id: "support-example-alex-rivera",
+      source: "Support",
+      label: "1 new message to reply to",
+      tone: "action",
+      to: "/support",
+    });
+  }
+  items.push({
+    id: "inventory-example-livdon-dtf",
+    source: "Inventory",
+    label: "1 item needs restocking",
+    tone: "critical",
+    to: "/shop-supplies",
+  });
+  return items;
+}
+
 export function SystemsOverview() {
   const { loading: authLoading, isCeo, user } = useAuth();
   const userId = user?.id ?? null;
@@ -191,11 +266,17 @@ export function SystemsOverview() {
   const [orders, setOrders] = useState<OrderFlowOrder[]>([]);
   const [flowLoading, setFlowLoading] = useState(true);
   const [flowError, setFlowError] = useState<string | null>(null);
+  const [supportExampleActive, setSupportExampleActive] = useState(readSupportExampleActive);
+  const [priorityTodosDone, setPriorityTodosDone] = useState<Record<string, boolean>>(
+    loadPriorityTodosDone,
+  );
 
   const loadHome = useCallback(() => {
     setHomeContent(OperatorDashboardStorage.getContent());
     setMyTasks(loadMyTasks(userId));
     setDueTodayDone(loadShiftDueTodayDone(userId));
+    setSupportExampleActive(readSupportExampleActive());
+    setPriorityTodosDone(loadPriorityTodosDone());
     const recentSops = SOPsStorage.getSOPs()
       .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
       .slice(0, 5)
@@ -231,7 +312,11 @@ export function SystemsOverview() {
 
   useEffect(() => {
     window.addEventListener("fgg-storage-sync", loadHome);
-    return () => window.removeEventListener("fgg-storage-sync", loadHome);
+    window.addEventListener("fgg-support-escalation-changed", loadHome);
+    return () => {
+      window.removeEventListener("fgg-storage-sync", loadHome);
+      window.removeEventListener("fgg-support-escalation-changed", loadHome);
+    };
   }, [loadHome]);
 
   const showCeoFinance = !authLoading && isCeo;
@@ -247,6 +332,10 @@ export function SystemsOverview() {
     countFor(stages, "ready_to_ship");
   const criticalCount = focusItems.filter((i) => i.tone === "critical").length;
   const metricValue = (n: number) => (flowLoading ? "—" : String(n));
+  const priorityTodos = useMemo(
+    () => buildNotificationPriorityTodos(supportExampleActive),
+    [supportExampleActive],
+  );
 
   if (showCeoFinance) {
     return (
@@ -290,40 +379,112 @@ export function SystemsOverview() {
         </div>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <DashboardMetricCard label="Open" value={metricValue(openOrders)} hint="All open stages" />
-        <DashboardMetricCard
-          label="Needs blanks"
-          value={metricValue(countFor(stages, "needs_blanks"))}
-        />
-        <DashboardMetricCard
-          label="In production"
-          value={metricValue(countFor(stages, "in_production"))}
-        />
-        <DashboardMetricCard
-          label="Ready to ship"
-          value={metricValue(countFor(stages, "ready_to_ship"))}
-        />
-      </section>
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-stretch">
+        <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <DashboardMetricCard label="Open" value={metricValue(openOrders)} hint="All open stages" />
+            <DashboardMetricCard
+              label="Needs blanks"
+              value={metricValue(countFor(stages, "needs_blanks"))}
+            />
+            <DashboardMetricCard
+              label="In production"
+              value={metricValue(countFor(stages, "in_production"))}
+            />
+            <DashboardMetricCard
+              label="Ready to ship"
+              value={metricValue(countFor(stages, "ready_to_ship"))}
+            />
+          </div>
 
-      <section>
-        <DashboardSectionHeader title="Jump into work" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <DashboardCtaCard
-            title="Order Flow"
-            description="Move orders through blanks, production, and ship."
-            to="/order-flow"
-          />
-          <DashboardCtaCard
-            title="Inventory"
-            description="Track tags, DTF, bags, and apply materials."
-            to="/shop-supplies"
-          />
-          <DashboardCtaCard
-            title="My Tasks"
-            description="Personal priorities for this shift."
-            to="/my-tasks"
-          />
+          <div className="grid grid-cols-1 gap-3">
+            <DashboardCtaCard
+              title="Order Flow"
+              description="Move orders through blanks, production, and ship."
+              to="/order-flow"
+            />
+            <DashboardCtaCard
+              title="Inventory"
+              description="Track tags, DTF, bags, and apply materials."
+              to="/shop-supplies"
+            />
+            <DashboardCtaCard
+              title="My Tasks"
+              description="Personal priorities for this shift."
+              to="/my-tasks"
+            />
+          </div>
+        </div>
+
+        <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-sm font-medium text-gray-500">Priorities</p>
+            {priorityTodos.length > 0 ? (
+              <span className="text-xs font-medium text-gray-400">
+                {priorityTodos.filter((item) => priorityTodosDone[item.id]).length}/
+                {priorityTodos.length}
+              </span>
+            ) : null}
+          </div>
+          {priorityTodos.length > 0 ? (
+            <ul className="mt-3 flex-1 space-y-2.5">
+              {priorityTodos.map((item) => {
+                const done = Boolean(priorityTodosDone[item.id]);
+                const id = `priority-todo-${item.id}`;
+                return (
+                  <li key={item.id} className="flex items-start gap-2 text-sm leading-snug text-gray-700">
+                    <Checkbox
+                      id={id}
+                      checked={done}
+                      onCheckedChange={(value) => {
+                        setPriorityTodosDone(
+                          togglePriorityTodoDone(item.id, Boolean(value), priorityTodosDone),
+                        );
+                      }}
+                      className={cn(
+                        "mt-0.5 rounded-full border-gray-300 bg-transparent shadow-none data-[state=checked]:bg-transparent",
+                        item.tone === "critical"
+                          ? "data-[state=checked]:border-red-500 data-[state=checked]:text-red-500"
+                          : "data-[state=checked]:border-brand data-[state=checked]:text-brand",
+                      )}
+                    />
+                    <label
+                      htmlFor={id}
+                      className={cn(
+                        "min-w-0 flex-1 cursor-pointer",
+                        done && "text-gray-400 line-through decoration-gray-300",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "font-medium",
+                          done
+                            ? "text-gray-400"
+                            : item.tone === "critical"
+                              ? "text-red-700"
+                              : "text-brand",
+                        )}
+                      >
+                        {item.source}
+                      </span>
+                      <span className="text-gray-400"> · </span>
+                      {item.label}
+                    </label>
+                    <Button
+                      asChild
+                      variant="secondary"
+                      size="sm"
+                      className="h-6 shrink-0 px-2 text-[11px] font-medium"
+                    >
+                      <Link to={item.to}>Open</Link>
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="mt-3 flex-1 text-sm text-gray-500">No new priorities at the moment</p>
+          )}
         </div>
       </section>
 
@@ -335,22 +496,7 @@ export function SystemsOverview() {
 
       <section>
         <DashboardSectionHeader title="Shift notes" />
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
-            <p className="text-sm font-medium text-gray-500">Priorities</p>
-            {homeContent.priorities.length > 0 ? (
-              <ul className="mt-3 space-y-2.5">
-                {homeContent.priorities.map((item) => (
-                  <li key={item} className="text-sm leading-snug text-gray-700">
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-3 text-sm text-gray-500">No new priorities at the moment</p>
-            )}
-          </div>
-
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
             <div className="flex items-baseline justify-between gap-2">
               <p className="text-sm font-medium text-gray-500">Due today</p>

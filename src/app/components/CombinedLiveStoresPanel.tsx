@@ -30,6 +30,7 @@ import {
   DashboardCtaCard,
   DashboardSectionHeader,
 } from "./dashboard/DashboardPrimitives";
+import { CeoCashSplitPanel } from "./CeoCashSplitPanel";
 
 type PeriodPreset = "today" | "yesterday" | "month" | "custom";
 
@@ -474,6 +475,14 @@ export function CombinedLiveStoresPanel() {
               </div>
             </div>
           </div>
+
+          <CeoCashSplitPanel
+            periodAds={totals.ads}
+            periodFees={totals.fees}
+            periodProduction={totals.production}
+            periodStart={state.periodStart}
+            periodEnd={state.periodEnd}
+          />
 
           <div>
             <DashboardSectionHeader title="Jump into work" />

@@ -31,6 +31,7 @@ export const SYNCED_STORAGE_KEYS = [
   "training-center-progress-v1",
   "order-flow-stages-v1",
   "fgg.shop-supplies.v1",
+  "fgg.cash-split-targets.v1",
 ] as const;
 
 export type SyncedStorageKey = (typeof SYNCED_STORAGE_KEYS)[number];
