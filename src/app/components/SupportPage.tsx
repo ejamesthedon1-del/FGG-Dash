@@ -838,11 +838,14 @@ export function SupportPage() {
                 onValueChange={(v) => setFilter(v as InboxFilter)}
               >
                 <TabsList className="w-full">
-                  <TabsTrigger value="needs" className="flex-1 gap-1">
+                  <TabsTrigger value="needs" className="flex-1 gap-1.5">
                     Needs attention
                     {needsCount > 0 ? (
-                      <span className="rounded bg-destructive px-1 text-[10px] tabular-nums text-white">
-                        {needsCount}
+                      <span
+                        className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-destructive text-[9px] font-semibold leading-none text-white tabular-nums"
+                        aria-label={`${needsCount} need attention`}
+                      >
+                        {needsCount > 9 ? "9+" : needsCount}
                       </span>
                     ) : null}
                   </TabsTrigger>
