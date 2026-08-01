@@ -1,5 +1,9 @@
 import { writeLocalAndSync } from "@/lib/synced-storage";
 import { apiUrl } from "./api-base";
+import {
+  recipeMaterialCost,
+  type BrandSupplies,
+} from "./shop-supplies-storage";
 
 export const PRODUCT_COSTS_KEY = "brand-hub-product-costs-v1";
 
@@ -149,4 +153,27 @@ export function productionCostForUnits(
     missingUnits: lines.filter((l) => l.missing).reduce((s, l) => s + l.units, 0),
     lines,
   };
+}
+
+/**
+ * Prefer complete recipe material rollups for garmentCost.
+ * Labor stays from manual Brand Hub costs.
+ */
+export function applyRecipeGarmentCosts(
+  costs: Record<string, ProductUnitCost>,
+  supplies: BrandSupplies,
+): Record<string, ProductUnitCost> {
+  const out: Record<string, ProductUnitCost> = { ...costs };
+  for (const recipe of supplies.recipes) {
+    const rolled = recipeMaterialCost(recipe, supplies.materials);
+    if (!rolled.complete || rolled.total <= 0) continue;
+    const key = recipe.productName.trim();
+    if (!key) continue;
+    const existing = out[key] ?? { garmentCost: 0, laborCost: 0 };
+    out[key] = {
+      garmentCost: rolled.total,
+      laborCost: Number(existing.laborCost) || 0,
+    };
+  }
+  return out;
 }

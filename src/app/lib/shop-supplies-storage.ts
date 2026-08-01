@@ -12,6 +12,7 @@ export const SUPPLY_BRAND_LABELS: Record<SupplyBrand, string> = {
 };
 
 export const SUPPLY_CATEGORIES = [
+  "blanks",
   "dtf_prints",
   "woven_labels",
   "patches",
@@ -24,6 +25,7 @@ export const SUPPLY_CATEGORIES = [
 export type SupplyCategory = (typeof SUPPLY_CATEGORIES)[number];
 
 export const SUPPLY_CATEGORY_LABELS: Record<SupplyCategory, string> = {
+  blanks: "Blanks",
   dtf_prints: "DTF prints",
   woven_labels: "Woven labels / tags",
   patches: "Patches",
@@ -42,6 +44,8 @@ export type SupplyMaterial = {
   qtyOnHand: number;
   lowStockAt: number;
   unit: SupplyUnit;
+  /** Cost per unit (USD) — used for inventory value and recipe COGS. */
+  unitCost: number;
   /** Ops notes: SKU, vendor, how to identify this supply. */
   notes: string;
   /** Vendor / product page for reordering. */
@@ -130,11 +134,42 @@ function isCategory(value: string): value is SupplyCategory {
   return (SUPPLY_CATEGORIES as readonly string[]).includes(value);
 }
 
+function clampMoney(n: number): number {
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+function normalizeMaterial(raw: unknown): SupplyMaterial | null {
+  if (!raw || typeof raw !== "object") return null;
+  const m = raw as Partial<SupplyMaterial> & { id?: string; name?: string };
+  if (!m.id || !m.name) return null;
+  const category = isCategory(String(m.category || "")) ? (m.category as SupplyCategory) : "other";
+  const unit =
+    m.unit === "roll" || m.unit === "pack" || m.unit === "ea" ? m.unit : "ea";
+  return {
+    id: String(m.id),
+    name: String(m.name),
+    category,
+    qtyOnHand: Math.max(0, Number(m.qtyOnHand) || 0),
+    lowStockAt: Math.max(0, Number(m.lowStockAt) || 0),
+    unit,
+    unitCost: clampMoney(Number(m.unitCost) || 0),
+    notes: typeof m.notes === "string" ? m.notes : "",
+    ...(m.reorderUrl ? { reorderUrl: String(m.reorderUrl) } : {}),
+    ...(m.photoDataUrl ? { photoDataUrl: String(m.photoDataUrl) } : {}),
+    createdAt: typeof m.createdAt === "string" ? m.createdAt : nowIso(),
+    updatedAt: typeof m.updatedAt === "string" ? m.updatedAt : nowIso(),
+  };
+}
+
 function normalizeBrandData(raw: unknown): BrandSupplies {
   if (!raw || typeof raw !== "object") return emptyBrand();
   const data = raw as Partial<BrandSupplies>;
+  const materials = Array.isArray(data.materials)
+    ? data.materials.map(normalizeMaterial).filter((m): m is SupplyMaterial => Boolean(m))
+    : [];
   return {
-    materials: Array.isArray(data.materials) ? data.materials : [],
+    materials,
     recipes: Array.isArray(data.recipes) ? data.recipes : [],
     events: Array.isArray(data.events) ? data.events.slice(0, MAX_EVENTS) : [],
   };
@@ -195,6 +230,56 @@ export function isLowStock(material: SupplyMaterial): boolean {
   return material.qtyOnHand <= material.lowStockAt;
 }
 
+export function materialUnitCost(material: SupplyMaterial): number {
+  return clampMoney(Number(material.unitCost) || 0);
+}
+
+export function materialInventoryValue(material: SupplyMaterial): number {
+  return clampMoney(materialUnitCost(material) * Math.max(0, material.qtyOnHand));
+}
+
+export function brandInventoryValue(brand: BrandSupplies): number {
+  return clampMoney(brand.materials.reduce((sum, m) => sum + materialInventoryValue(m), 0));
+}
+
+export type RecipeCostLine = {
+  materialId: string;
+  materialName: string;
+  category: SupplyCategory;
+  qtyPerUnit: number;
+  unitCost: number;
+  lineCost: number;
+  missingCost: boolean;
+};
+
+export function recipeMaterialCost(
+  recipe: SupplyRecipe,
+  materials: SupplyMaterial[],
+): { total: number; lines: RecipeCostLine[]; complete: boolean } {
+  const byId = new Map(materials.map((m) => [m.id, m]));
+  const lines: RecipeCostLine[] = recipe.lines.map((line) => {
+    const material = byId.get(line.materialId);
+    const unitCost = material ? materialUnitCost(material) : 0;
+    const qtyPerUnit = Math.max(0, Number(line.qtyPerUnit) || 0);
+    const missingCost = !material || unitCost <= 0;
+    return {
+      materialId: line.materialId,
+      materialName: material?.name ?? "Missing material",
+      category: material?.category ?? "other",
+      qtyPerUnit,
+      unitCost,
+      lineCost: clampMoney(unitCost * qtyPerUnit),
+      missingCost,
+    };
+  });
+  const total = clampMoney(lines.reduce((sum, l) => sum + l.lineCost, 0));
+  return {
+    total,
+    lines,
+    complete: lines.length > 0 && lines.every((l) => !l.missingCost),
+  };
+}
+
 export function addMaterial(
   brand: SupplyBrand,
   input: {
@@ -203,6 +288,7 @@ export function addMaterial(
     qtyOnHand?: number;
     lowStockAt?: number;
     unit?: SupplyUnit;
+    unitCost?: number;
     notes?: string;
     photoDataUrl?: string;
   },
@@ -219,6 +305,7 @@ export function addMaterial(
     qtyOnHand: Math.max(0, Number(input.qtyOnHand) || 0),
     lowStockAt: Math.max(0, Number(input.lowStockAt) || 0),
     unit: input.unit ?? "ea",
+    unitCost: clampMoney(Number(input.unitCost) || 0),
     notes: (input.notes || "").trim(),
     ...(photo ? { photoDataUrl: photo } : {}),
     createdAt: now,
@@ -240,6 +327,7 @@ export function updateMaterial(
       | "category"
       | "lowStockAt"
       | "unit"
+      | "unitCost"
       | "notes"
       | "qtyOnHand"
       | "photoDataUrl"
@@ -258,6 +346,8 @@ export function updateMaterial(
         lowStockAt:
           patch.lowStockAt != null ? Math.max(0, Number(patch.lowStockAt) || 0) : m.lowStockAt,
         unit: patch.unit ?? m.unit,
+        unitCost:
+          patch.unitCost != null ? clampMoney(Number(patch.unitCost) || 0) : m.unitCost,
         notes: patch.notes != null ? patch.notes.trim() : m.notes,
         qtyOnHand:
           patch.qtyOnHand != null ? Math.max(0, Number(patch.qtyOnHand) || 0) : m.qtyOnHand,
@@ -298,6 +388,8 @@ export function adjustMaterialQty(
     type: "receive" | "adjust";
     note?: string;
     by?: string;
+    /** When receiving stock, optional cost per unit to update weighted average. */
+    unitCost?: number;
   },
 ): BrandSupplies {
   const type = opts.type;
@@ -307,8 +399,28 @@ export function adjustMaterialQty(
     const material = current.materials.find((m) => m.id === materialId);
     if (!material) return current;
     const nextQty = Math.max(0, material.qtyOnHand + delta);
+    let nextUnitCost = materialUnitCost(material);
+    if (
+      type === "receive" &&
+      delta > 0 &&
+      opts.unitCost != null &&
+      Number.isFinite(opts.unitCost) &&
+      opts.unitCost >= 0
+    ) {
+      const receiveCost = clampMoney(opts.unitCost);
+      const prevQty = Math.max(0, material.qtyOnHand);
+      if (prevQty <= 0) {
+        nextUnitCost = receiveCost;
+      } else {
+        nextUnitCost = clampMoney(
+          (prevQty * nextUnitCost + delta * receiveCost) / (prevQty + delta),
+        );
+      }
+    }
     const materials = current.materials.map((m) =>
-      m.id === materialId ? { ...m, qtyOnHand: nextQty, updatedAt: nowIso() } : m,
+      m.id === materialId
+        ? { ...m, qtyOnHand: nextQty, unitCost: nextUnitCost, updatedAt: nowIso() }
+        : m,
     );
     return pushEvent(
       { ...current, materials },

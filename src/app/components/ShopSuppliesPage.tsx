@@ -8,10 +8,13 @@ import {
 import {
   addMaterial,
   adjustMaterialQty,
+  brandInventoryValue,
   deleteMaterial,
   deleteRecipe,
   ensureLivdonSeedIfEmpty,
   loadBrandSupplies,
+  materialUnitCost,
+  recipeMaterialCost,
   SUPPLY_BRAND_LABELS,
   SUPPLY_BRANDS,
   SUPPLY_CATEGORIES,
@@ -26,6 +29,12 @@ import {
   type SupplyRecipeLine,
   type SupplyUnit,
 } from "../lib/shop-supplies-storage";
+import {
+  getCostsForBrand,
+  persistProductCostsForBrand,
+  type ProductUnitCost,
+} from "../lib/brand-hub-product-costs";
+import { formatShopifyMoney } from "../lib/shopify-dashboard";
 import { InventoryDataTable } from "./InventoryDataTable";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -123,6 +132,7 @@ export function ShopSuppliesPage() {
   const [matQty, setMatQty] = useState("0");
   const [matLow, setMatLow] = useState("10");
   const [matUnit, setMatUnit] = useState<SupplyUnit>("ea");
+  const [matUnitCost, setMatUnitCost] = useState("");
   const [matPhoto, setMatPhoto] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const addPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -130,11 +140,13 @@ export function ShopSuppliesPage() {
   const detailSheetRef = useRef<HTMLDivElement>(null);
   const [detailMaterialId, setDetailMaterialId] = useState<string | null>(null);
   const [receiveQty, setReceiveQty] = useState("10");
+  const [receiveUnitCost, setReceiveUnitCost] = useState("");
   const [editName, setEditName] = useState("");
   const [editCategory, setEditCategory] = useState<SupplyCategory>("other");
   const [editLow, setEditLow] = useState("10");
   const [editUnit, setEditUnit] = useState<SupplyUnit>("ea");
   const [editOnHand, setEditOnHand] = useState("0");
+  const [editUnitCost, setEditUnitCost] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editReorderUrl, setEditReorderUrl] = useState("");
 
@@ -201,6 +213,7 @@ export function ShopSuppliesPage() {
     setMatQty("0");
     setMatLow("10");
     setMatUnit("ea");
+    setMatUnitCost("");
     setMatPhoto(null);
     if (addPhotoInputRef.current) addPhotoInputRef.current.value = "";
   };
@@ -222,6 +235,7 @@ export function ShopSuppliesPage() {
         qtyOnHand: Number(matQty) || 0,
         lowStockAt: Number(matLow) || 0,
         unit: matUnit,
+        unitCost: Number(matUnitCost) || 0,
         photoDataUrl: matPhoto || undefined,
       }),
     );
@@ -247,11 +261,17 @@ export function ShopSuppliesPage() {
   const openMaterialDetail = (material: SupplyMaterial) => {
     setDetailMaterialId(material.id);
     setReceiveQty("10");
+    setReceiveUnitCost(
+      materialUnitCost(material) > 0 ? String(materialUnitCost(material)) : "",
+    );
     setEditName(material.name);
     setEditCategory(material.category);
     setEditLow(String(material.lowStockAt));
     setEditUnit(material.unit);
     setEditOnHand(String(material.qtyOnHand));
+    setEditUnitCost(
+      materialUnitCost(material) > 0 ? String(materialUnitCost(material)) : "",
+    );
     setEditNotes(material.notes || "");
     setEditReorderUrl(material.reorderUrl || "");
   };
@@ -297,10 +317,28 @@ export function ShopSuppliesPage() {
       toast.error("Enter how many were added");
       return;
     }
-    const next = adjustMaterialQty(brand, detailMaterialId, n, { type: "receive" });
+    const costRaw = receiveUnitCost.trim();
+    const unitCost =
+      costRaw === "" ? undefined : Number(costRaw);
+    if (unitCost != null && (!Number.isFinite(unitCost) || unitCost < 0)) {
+      toast.error("Enter a valid unit cost");
+      return;
+    }
+    const next = adjustMaterialQty(brand, detailMaterialId, n, {
+      type: "receive",
+      unitCost,
+    });
     setData(next);
     const updated = next.materials.find((m) => m.id === detailMaterialId);
-    if (updated) setEditOnHand(String(updated.qtyOnHand));
+    if (updated) {
+      setEditOnHand(String(updated.qtyOnHand));
+      setEditUnitCost(
+        materialUnitCost(updated) > 0 ? String(materialUnitCost(updated)) : "",
+      );
+      setReceiveUnitCost(
+        materialUnitCost(updated) > 0 ? String(materialUnitCost(updated)) : "",
+      );
+    }
     toast.success(`Added ${n} to stock`);
     setReceiveQty("10");
   };
@@ -313,12 +351,17 @@ export function ShopSuppliesPage() {
     }
     const onHand = Number(editOnHand);
     const low = Number(editLow);
+    const unitCost = Number(editUnitCost);
     if (!Number.isFinite(onHand) || onHand < 0) {
       toast.error("Enter a valid on-hand quantity");
       return;
     }
     if (!Number.isFinite(low) || low < 0) {
       toast.error("Enter a valid low-stock threshold");
+      return;
+    }
+    if (!Number.isFinite(unitCost) || unitCost < 0) {
+      toast.error("Enter a valid unit cost");
       return;
     }
     setData(
@@ -328,6 +371,7 @@ export function ShopSuppliesPage() {
         qtyOnHand: onHand,
         lowStockAt: low,
         unit: editUnit,
+        unitCost,
       }),
     );
     toast.success("Settings saved");
@@ -354,6 +398,31 @@ export function ShopSuppliesPage() {
     setData(deleteMaterial(brand, material.id));
     if (detailMaterialId === material.id) setDetailMaterialId(null);
     toast.message("Material deleted");
+  };
+
+  const onSyncRecipeCost = async (recipe: SupplyRecipe) => {
+    const rolled = recipeMaterialCost(recipe, data.materials);
+    if (!rolled.complete || rolled.total <= 0) {
+      toast.error("Set a unit cost on every material in this recipe first");
+      return;
+    }
+    const existing = getCostsForBrand(brand);
+    const current = existing[recipe.productName] ?? { garmentCost: 0, laborCost: 0 };
+    const next: Record<string, ProductUnitCost> = {
+      ...existing,
+      [recipe.productName]: {
+        garmentCost: rolled.total,
+        laborCost: Number(current.laborCost) || 0,
+      },
+    };
+    const ok = await persistProductCostsForBrand(brand, next);
+    if (ok) {
+      toast.success(
+        `Garment cost set to ${formatShopifyMoney(rolled.total, "USD")} for ${recipe.productName}`,
+      );
+    } else {
+      toast.error("Could not save product cost");
+    }
   };
 
   const onSaveRecipe = () => {
@@ -449,6 +518,26 @@ export function ShopSuppliesPage() {
         </TabsList>
 
         <TabsContent value="inventory" className="space-y-4 outline-none">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs">
+              <p className="text-xs font-medium text-gray-500">Inventory value</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">
+                {formatShopifyMoney(brandInventoryValue(data), "USD")}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs">
+              <p className="text-xs font-medium text-gray-500">SKUs</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">
+                {data.materials.length}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs col-span-2 sm:col-span-1">
+              <p className="text-xs font-medium text-gray-500">Missing unit cost</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">
+                {data.materials.filter((m) => materialUnitCost(m) <= 0).length}
+              </p>
+            </div>
+          </div>
           <input
             ref={addPhotoInputRef}
             type="file"
@@ -574,6 +663,19 @@ export function ShopSuppliesPage() {
                         <SelectItem value="pack">Pack</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="grid w-24 gap-2">
+                    <Label htmlFor="add-unit-cost">Unit cost ($)</Label>
+                    <Input
+                      id="add-unit-cost"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0.00"
+                      value={matUnitCost}
+                      onChange={(e) => setMatUnitCost(e.target.value)}
+                      className="w-24"
+                    />
                   </div>
                 </div>
               </div>
@@ -733,16 +835,37 @@ export function ShopSuppliesPage() {
                           </TooltipContent>
                         </Tooltip>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Input
-                          id="receive-qty"
-                          type="number"
-                          min={1}
-                          value={receiveQty}
-                          onChange={(e) => setReceiveQty(e.target.value)}
-                          className="w-20"
-                          aria-label="Quantity to add"
-                        />
+                      <div className="flex flex-wrap items-end gap-2">
+                        <div className="grid w-20 gap-1">
+                          <Label htmlFor="receive-qty" className="text-xs text-gray-500">
+                            Qty
+                          </Label>
+                          <Input
+                            id="receive-qty"
+                            type="number"
+                            min={1}
+                            value={receiveQty}
+                            onChange={(e) => setReceiveQty(e.target.value)}
+                            className="w-20"
+                            aria-label="Quantity to add"
+                          />
+                        </div>
+                        <div className="grid w-28 gap-1">
+                          <Label htmlFor="receive-unit-cost" className="text-xs text-gray-500">
+                            Cost / unit ($)
+                          </Label>
+                          <Input
+                            id="receive-unit-cost"
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="optional"
+                            value={receiveUnitCost}
+                            onChange={(e) => setReceiveUnitCost(e.target.value)}
+                            className="w-28"
+                            aria-label="Unit cost for received stock"
+                          />
+                        </div>
                         <Button type="button" size="sm" onClick={onReceiveStock}>
                           Add to stock
                         </Button>
@@ -881,6 +1004,19 @@ export function ShopSuppliesPage() {
                                 <SelectItem value="pack">Pack</SelectItem>
                               </SelectContent>
                             </Select>
+                          </div>
+                          <div className="grid w-28 gap-2">
+                            <Label htmlFor="edit-unit-cost">Unit cost ($)</Label>
+                            <Input
+                              id="edit-unit-cost"
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              placeholder="0.00"
+                              value={editUnitCost}
+                              onChange={(e) => setEditUnitCost(e.target.value)}
+                              className="w-28"
+                            />
                           </div>
                         </div>
                         <div>
@@ -1112,7 +1248,9 @@ export function ShopSuppliesPage() {
 
           {data.recipes.length ? (
             <ul className="space-y-2">
-              {data.recipes.map((recipe) => (
+              {data.recipes.map((recipe) => {
+                const rolled = recipeMaterialCost(recipe, data.materials);
+                return (
                 <li
                   key={recipe.id}
                   className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
@@ -1123,16 +1261,45 @@ export function ShopSuppliesPage() {
                       <p className="mt-0.5 font-mono text-[11px] text-gray-400">
                         {recipe.productId}
                       </p>
+                      <p className="mt-1 text-sm font-medium tabular-nums text-gray-900">
+                        Materials {formatShopifyMoney(rolled.total, "USD")}
+                        {!rolled.complete ? (
+                          <span className="ml-2 text-xs font-normal text-amber-700">
+                            missing unit costs
+                          </span>
+                        ) : null}
+                      </p>
                       <ul className="mt-2 space-y-1 text-sm text-gray-700">
-                        {recipe.lines.map((line) => (
-                          <li key={`${recipe.id}-${line.materialId}`}>
-                            {line.qtyPerUnit}×{" "}
-                            {materialById(data, line.materialId)?.name || "Unknown material"}
+                        {rolled.lines.map((line) => (
+                          <li
+                            key={`${recipe.id}-${line.materialId}`}
+                            className="flex flex-wrap items-baseline justify-between gap-2"
+                          >
+                            <span>
+                              {line.qtyPerUnit}× {line.materialName}
+                              <span className="ml-1 text-xs text-gray-400">
+                                ({SUPPLY_CATEGORY_LABELS[line.category]})
+                              </span>
+                            </span>
+                            <span className="tabular-nums text-gray-500">
+                              {line.missingCost
+                                ? "—"
+                                : formatShopifyMoney(line.lineCost, "USD")}
+                            </span>
                           </li>
                         ))}
                       </ul>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={!rolled.complete}
+                        onClick={() => void onSyncRecipeCost(recipe)}
+                      >
+                        Sync to costs
+                      </Button>
                       <Button
                         type="button"
                         size="sm"
@@ -1156,7 +1323,8 @@ export function ShopSuppliesPage() {
                     </div>
                   </div>
                 </li>
-              ))}
+              );
+              })}
             </ul>
           ) : (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center text-sm text-gray-500">

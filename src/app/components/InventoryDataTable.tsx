@@ -17,6 +17,8 @@ import { Eye, MoreHorizontal, Package, Trash2 } from "lucide-react";
 
 import {
   isLowStock,
+  materialInventoryValue,
+  materialUnitCost,
   SUPPLY_CATEGORY_LABELS,
   type SupplyMaterial,
 } from "../lib/shop-supplies-storage";
@@ -211,6 +213,46 @@ export function InventoryDataTable({
             >
               {m.qtyOnHand}{" "}
               <span className="text-muted-foreground">{m.unit}</span>
+            </span>
+          );
+        },
+      },
+      {
+        id: "unitCost",
+        accessorFn: (row) => materialUnitCost(row),
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Unit cost" />
+        ),
+        cell: ({ row }) => {
+          const cost = materialUnitCost(row.original);
+          return (
+            <span className="tabular-nums text-foreground">
+              {cost > 0
+                ? cost.toLocaleString("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  })
+                : "—"}
+            </span>
+          );
+        },
+      },
+      {
+        id: "value",
+        accessorFn: (row) => materialInventoryValue(row),
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Value" />
+        ),
+        cell: ({ row }) => {
+          const value = materialInventoryValue(row.original);
+          return (
+            <span className="tabular-nums text-foreground">
+              {value > 0
+                ? value.toLocaleString("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  })
+                : "—"}
             </span>
           );
         },

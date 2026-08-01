@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Button } from "./ui/button";
 import { useAuth } from "../lib/use-auth";
@@ -46,6 +46,7 @@ import {
   type ShopifySoldItem,
 } from "../lib/shopify-dashboard";
 import {
+  applyRecipeGarmentCosts,
   getCostsForBrand,
   fetchProductCostsForBrand,
   persistProductCostsForBrand,
@@ -53,6 +54,7 @@ import {
   type ProductUnitCost,
   unitProductionCost,
 } from "../lib/brand-hub-product-costs";
+import { loadBrandSupplies, resolveSupplyBrand } from "../lib/shop-supplies-storage";
 
 /** Profile-page-only UI state (tasks, voice drafts, vault placeholders). Ready to swap for API later. */
 const PROFILE_UI_STORAGE_KEY = "brand-hub-profile-ui-v1";
@@ -559,8 +561,15 @@ export function BrandHubDetail() {
     });
   };
 
-  const productionToday = productionCostForUnits(dailySoldItems, productCosts);
-  const productionMonth = productionCostForUnits(monthSoldItems, productCosts);
+  const resolvedProductCosts = useMemo(() => {
+    if (!slug) return productCosts;
+    const supplyBrand = resolveSupplyBrand(slug);
+    if (!supplyBrand) return productCosts;
+    return applyRecipeGarmentCosts(productCosts, loadBrandSupplies(supplyBrand));
+  }, [slug, productCosts]);
+
+  const productionToday = productionCostForUnits(dailySoldItems, resolvedProductCosts);
+  const productionMonth = productionCostForUnits(monthSoldItems, resolvedProductCosts);
   const isMonthView = dashRange === "month";
   const productionView = isMonthView ? productionMonth : productionToday;
 

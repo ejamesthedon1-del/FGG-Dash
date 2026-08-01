@@ -14,6 +14,7 @@ import { BrandHubPage } from "./components/BrandHubPage";
 import { BrandHubDetail } from "./components/BrandHubDetail";
 import { CreativeAssetsPage } from "./components/CreativeAssetsPage";
 import { MockupsPage } from "./components/MockupsPage";
+import { CashSplitPage } from "./components/CashSplitPage";
 import { TrainingCenterPage } from "./components/TrainingCenterPage";
 import { TrainingModuleDetail } from "./components/TrainingModuleDetail";
 import { OrderFlowPage } from "./components/OrderFlowPage";
@@ -49,6 +50,7 @@ export const router = createBrowserRouter([
       { path: "sops", Component: SOPsPage },
       { path: "brand-hub", Component: ceoPage(BrandHubPage) },
       { path: "brand-hub/:slug", Component: ceoPage(BrandHubDetail) },
+      { path: "cash", Component: ceoPage(CashSplitPage) },
       { path: "mockups", Component: ceoPage(MockupsPage) },
       { path: "creative-assets", Component: ceoPage(CreativeAssetsPage) },
       { path: "training-center", Component: ceoPage(TrainingCenterPage) },

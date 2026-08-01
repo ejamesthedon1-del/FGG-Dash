@@ -87,6 +87,54 @@ function nextPayoutDateFromResponse(data: ShopifyPaymentsBalance | null): string
   return candidates[0] ?? null;
 }
 
+type PayoutRow = {
+  id: string;
+  amount: number;
+  issuedAt: string;
+  status: string;
+};
+
+function collectBrandPayouts(data: ShopifyPaymentsBalance | null): PayoutRow[] {
+  if (!data) return [];
+  const byId = new Map<string, PayoutRow>();
+  const add = (p: {
+    id?: string;
+    amount: number;
+    issuedAt?: string;
+    status?: string;
+    transactionType?: string;
+  }) => {
+    if ((p.transactionType || "").toUpperCase() === "WITHDRAWAL") return;
+    const issuedAt = p.issuedAt ? String(p.issuedAt) : "";
+    if (!issuedAt) return;
+    const id = p.id || `${issuedAt}-${p.amount}-${p.status}`;
+    if (byId.has(id)) return;
+    byId.set(id, {
+      id,
+      amount: Number(p.amount) || 0,
+      issuedAt,
+      status: (p.status || "").toUpperCase(),
+    });
+  };
+  for (const p of data.accountPayouts ?? []) add(p);
+  for (const acct of data.accounts ?? []) {
+    for (const p of acct.payouts ?? []) add(p);
+  }
+  return [...byId.values()].sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+}
+
+function brandPayoutGroups(data: ShopifyPaymentsBalance | null): {
+  upcoming: PayoutRow[];
+  previous: PayoutRow[];
+} {
+  const all = collectBrandPayouts(data);
+  const upcoming = all
+    .filter((p) => p.status === "SCHEDULED" || p.status === "IN_TRANSIT" || p.status === "PENDING")
+    .sort((a, b) => a.issuedAt.localeCompare(b.issuedAt));
+  const previous = all.filter((p) => p.status === "PAID").slice(0, 4);
+  return { upcoming, previous };
+}
+
 export function CeoCashSplitPanel({
   periodAds,
   periodFees,
@@ -296,6 +344,7 @@ export function CeoCashSplitPanel({
                 const bal = balanceFromResponse(b.data);
                 const nextDate = nextPayoutDateFromResponse(b.data);
                 const scheduleLabel = formatPayoutSchedule(b.data?.payoutSchedule ?? null);
+                const { upcoming, previous } = brandPayoutGroups(b.data);
                 return (
                   <div
                     key={b.slug}
@@ -316,15 +365,57 @@ export function CeoCashSplitPanel({
                         {money(bal)}
                       </p>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
-                      <span>Next {formatDateLabel(nextDate)}</span>
-                      {b.data?.latestPayout ? (
-                        <span>
-                          Last {money(b.data.latestPayout.amount)} ·{" "}
-                          {formatDateLabel(b.data.latestPayout.issuedAt)}
-                        </span>
-                      ) : null}
+
+                    <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+                      <div>
+                        <p className="text-xs font-medium text-gray-500">Upcoming</p>
+                        {upcoming.length > 0 ? (
+                          <ul className="mt-1.5 space-y-1.5">
+                            {upcoming.map((p) => (
+                              <li
+                                key={p.id}
+                                className="flex items-center justify-between gap-2 text-sm text-gray-700"
+                              >
+                                <span className="text-gray-500">
+                                  {formatDateLabel(p.issuedAt)}
+                                  <span className="ml-1.5 text-xs capitalize text-gray-400">
+                                    {p.status.toLowerCase().replace("_", " ")}
+                                  </span>
+                                </span>
+                                <span className="font-medium tabular-nums text-gray-950">
+                                  {money(p.amount)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-1.5 text-sm text-gray-400">No upcoming payouts</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-500">Previous</p>
+                        {previous.length > 0 ? (
+                          <ul className="mt-1.5 space-y-1.5">
+                            {previous.map((p) => (
+                              <li
+                                key={p.id}
+                                className="flex items-center justify-between gap-2 text-sm text-gray-700"
+                              >
+                                <span className="text-gray-500">
+                                  {formatDateLabel(p.issuedAt)}
+                                </span>
+                                <span className="font-medium tabular-nums text-gray-950">
+                                  {money(p.amount)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-1.5 text-sm text-gray-400">No previous payouts</p>
+                        )}
+                      </div>
                     </div>
+
                     {b.error ? (
                       <p className="mt-2 text-xs text-amber-700">{b.error}</p>
                     ) : null}

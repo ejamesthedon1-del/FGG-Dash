@@ -15,6 +15,7 @@ import {
   Shirt,
   Sparkles,
   Target,
+  Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { cn } from "./ui/utils";
@@ -54,6 +55,7 @@ const LOGO_SRC = "/fgg-logo.png?v=2";
 
 const CEO_ONLY_PREFIXES = [
   "/brand-hub",
+  "/cash",
   "/mockups",
   "/creative-assets",
   "/training-center",
@@ -92,6 +94,12 @@ const CEO_PRIMARY: NavItem[] = [
     icon: Sparkles,
     match: (pathname) =>
       pathname === "/brand-hub" || pathname.startsWith("/brand-hub/"),
+  },
+  {
+    to: "/cash",
+    label: "Cash",
+    icon: Wallet,
+    match: (pathname) => pathname === "/cash" || pathname.startsWith("/cash/"),
   },
   {
     to: "/mockups",

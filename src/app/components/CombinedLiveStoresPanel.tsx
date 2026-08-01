@@ -20,9 +20,11 @@ import {
   type ShopifyBrandKpis,
 } from "../lib/shopify-dashboard";
 import {
+  applyRecipeGarmentCosts,
   fetchProductCostsForBrand,
   productionCostForUnits,
 } from "../lib/brand-hub-product-costs";
+import { loadBrandSupplies, resolveSupplyBrand } from "../lib/shop-supplies-storage";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { cn } from "./ui/utils";
@@ -30,7 +32,6 @@ import {
   DashboardCtaCard,
   DashboardSectionHeader,
 } from "./dashboard/DashboardPrimitives";
-import { CeoCashSplitPanel } from "./CeoCashSplitPanel";
 
 type PeriodPreset = "today" | "yesterday" | "month" | "custom";
 
@@ -98,8 +99,11 @@ function formatPeriodLabel(start: string, end: string): string {
 
 async function buildSlice(slug: string, data: ShopifyBrandKpis): Promise<BrandSlice> {
   const costs = await fetchProductCostsForBrand(slug);
+  const supplyBrand = resolveSupplyBrand(slug);
+  const supplies = supplyBrand ? loadBrandSupplies(supplyBrand) : null;
+  const resolvedCosts = supplies ? applyRecipeGarmentCosts(costs, supplies) : costs;
   const periodItems = data.periodItems ?? data.monthItems ?? [];
-  const production = productionCostForUnits(periodItems, costs).total;
+  const production = productionCostForUnits(periodItems, resolvedCosts).total;
   const sales = Number(data.periodSales ?? data.monthSales) || 0;
   const fees = Number(data.periodFees ?? data.monthFees) || 0;
   const ads =
@@ -476,14 +480,6 @@ export function CombinedLiveStoresPanel() {
             </div>
           </div>
 
-          <CeoCashSplitPanel
-            periodAds={totals.ads}
-            periodFees={totals.fees}
-            periodProduction={totals.production}
-            periodStart={state.periodStart}
-            periodEnd={state.periodEnd}
-          />
-
           <div>
             <DashboardSectionHeader title="Jump into work" />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -493,9 +489,9 @@ export function CombinedLiveStoresPanel() {
                 to="/brand-hub"
               />
               <DashboardCtaCard
-                title="Order Flow"
-                description="Track blanks, production, and ship status."
-                to="/order-flow"
+                title="Cash"
+                description="Split Shopify Balance and Bluevine deposits."
+                to="/cash"
               />
               <DashboardCtaCard
                 title="Studio"
