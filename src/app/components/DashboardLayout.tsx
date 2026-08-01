@@ -244,15 +244,9 @@ function NavMenuItems({
               </NavLink>
             </SidebarMenuButton>
             {badgeCount > 0 ? (
-              showSupportEsc ? (
-                <SidebarMenuBadge className="right-1.5 top-1.5 size-4 min-w-4 rounded-full bg-destructive p-0 text-[9px] font-semibold leading-none text-white peer-hover/menu-button:text-white peer-data-[active=true]/menu-button:text-white">
-                  {badgeCount > 9 ? "9+" : badgeCount}
-                </SidebarMenuBadge>
-              ) : (
-                <SidebarMenuBadge className="bg-brand text-brand-foreground peer-hover/menu-button:text-brand-foreground peer-data-[active=true]/menu-button:text-brand-foreground">
-                  +{badgeCount > 99 ? "99" : badgeCount}
-                </SidebarMenuBadge>
-              )
+              <SidebarMenuBadge className="bg-brand text-brand-foreground peer-hover/menu-button:text-brand-foreground peer-data-[active=true]/menu-button:text-brand-foreground">
+                +{badgeCount > 99 ? "99" : badgeCount}
+              </SidebarMenuBadge>
             ) : null}
           </SidebarMenuItem>
         );

@@ -841,11 +841,8 @@ export function SupportPage() {
                   <TabsTrigger value="needs" className="flex-1 gap-1.5">
                     Needs attention
                     {needsCount > 0 ? (
-                      <span
-                        className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-destructive text-[9px] font-semibold leading-none text-white tabular-nums"
-                        aria-label={`${needsCount} need attention`}
-                      >
-                        {needsCount > 9 ? "9+" : needsCount}
+                      <span className="rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-brand-foreground">
+                        +{needsCount > 99 ? "99" : needsCount}
                       </span>
                     ) : null}
                   </TabsTrigger>
@@ -923,7 +920,7 @@ export function SupportPage() {
                             </p>
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
                               {t.escalation ? (
-                                <Badge variant="destructive" className="text-[10px]">
+                                <Badge variant="default" className="text-[10px]">
                                   Needs attention
                                 </Badge>
                               ) : t.autoReplied ? (
@@ -975,7 +972,7 @@ export function SupportPage() {
                   </h3>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {selectedListItem?.escalation ? (
-                      <Badge variant="destructive" className="text-[10px]">
+                      <Badge variant="default" className="text-[10px]">
                         Needs attention
                       </Badge>
                     ) : selectedListItem?.autoReplied ? (
@@ -1124,7 +1121,7 @@ export function SupportPage() {
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-muted-foreground">Status</span>
                     {selectedListItem?.escalation ? (
-                      <Badge variant="destructive">Needs attention</Badge>
+                      <Badge variant="default">Needs attention</Badge>
                     ) : selectedListItem?.autoReplied ? (
                       <Badge variant="secondary">Auto-replied</Badge>
                     ) : (
