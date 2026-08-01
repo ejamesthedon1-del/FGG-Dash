@@ -744,11 +744,11 @@ export function SupportPage() {
           <CircleAlert className="size-4" />
           <AlertTitle>
             {Math.max(realNeedsCount, showExample ? 1 : 0) === 1
-              ? "1 message needs a reply"
-              : `${realNeedsCount} messages need a reply`}
+              ? "1 customer needs help"
+              : `${realNeedsCount} customers need help`}
           </AlertTitle>
           <AlertDescription>
-            Auto-reply couldn&apos;t resolve this — ops should respond.
+            This one needs a personal reply.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1032,10 +1032,10 @@ export function SupportPage() {
                   {selectedId === EXAMPLE_THREAD_ID ? (
                     <Alert>
                       <CircleAlert className="size-4" />
-                      <AlertTitle>Sample escalation</AlertTitle>
+                      <AlertTitle>Here&apos;s how this works</AlertTitle>
                       <AlertDescription>
-                        Status asks auto-reply. Refunds and other requests land
-                        here for ops — then dismiss this example.
+                        Simple order updates go out automatically. Anything else
+                        shows up here for you to answer.
                       </AlertDescription>
                     </Alert>
                   ) : null}
