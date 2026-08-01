@@ -736,60 +736,22 @@ export function SupportPage() {
         </Card>
       ) : null}
 
-      {!loading && connected ? (
-        <div className="space-y-2">
-          {realNeedsCount > 0 ? (
-            <Alert>
-              <AlertTitle className="flex flex-wrap items-center gap-2">
-                {realNeedsCount}{" "}
-                {realNeedsCount === 1
-                  ? "message needs attention"
-                  : "messages need attention"}
-                <Badge variant="secondary" className="text-[10px]">
-                  +{realNeedsCount > 99 ? "99" : realNeedsCount}
-                </Badge>
-              </AlertTitle>
-              <AlertDescription>
-                Auto-reply couldn&apos;t finish these — open{" "}
-                <button
-                  type="button"
-                  className="font-medium text-foreground underline underline-offset-2"
-                  onClick={() => setFilter("needs")}
-                >
-                  Needs attention
-                </button>{" "}
-                for ops to respond.
-              </AlertDescription>
-            </Alert>
-          ) : showExample ? (
-            <Alert>
-              <AlertTitle className="flex flex-wrap items-center gap-2">
-                Example: 1 message needs attention
-                <Badge variant="outline" className="text-[10px]">
-                  Example
-                </Badge>
-                <Badge variant="secondary" className="text-[10px]">
-                  +1
-                </Badge>
-              </AlertTitle>
-              <AlertDescription>
-                Open the sample thread in{" "}
-                <button
-                  type="button"
-                  className="font-medium text-foreground underline underline-offset-2"
-                  onClick={() => {
-                    setFilter("needs");
-                    void openThread(EXAMPLE_THREAD_ID);
-                  }}
-                >
-                  Needs attention
-                </button>{" "}
-                to see how escalated support works. Status asks auto-reply;
-                refunds and other requests land here for ops.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-        </div>
+      {!loading && connected && (realNeedsCount > 0 || showExample) ? (
+        <Alert>
+          <AlertTitle>
+            {realNeedsCount > 0
+              ? `${realNeedsCount} ${
+                  realNeedsCount === 1
+                    ? "message needs attention"
+                    : "messages need attention"
+                }`
+              : "1 message needs attention"}
+          </AlertTitle>
+          <AlertDescription>
+            Auto-reply couldn&apos;t handle this — an ops manager needs to
+            respond.
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {!loading && !configured ? (
