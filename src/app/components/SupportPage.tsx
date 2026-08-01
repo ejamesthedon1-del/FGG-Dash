@@ -665,8 +665,7 @@ export function SupportPage() {
             Support
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Store contact form messages only (Shopify “New customer message”
-            emails).
+            Customer messages that need a reply.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
