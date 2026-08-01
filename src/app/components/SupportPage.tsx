@@ -741,11 +741,7 @@ export function SupportPage() {
       {!loading && connected && (realNeedsCount > 0 || showExample) ? (
         <Alert>
           <CircleAlert className="size-4" />
-          <AlertTitle>
-            {Math.max(realNeedsCount, showExample ? 1 : 0) === 1
-              ? "1 customer needs help"
-              : `${realNeedsCount} customers need help`}
-          </AlertTitle>
+          <AlertTitle>Needs attention</AlertTitle>
           <AlertDescription>
             This one needs a personal reply.
           </AlertDescription>
