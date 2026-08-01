@@ -12,6 +12,7 @@ import {
   Reply,
   Search,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -33,6 +34,86 @@ import {
 import { cn } from "./ui/utils";
 
 type InboxFilter = "needs" | "all";
+
+const EXAMPLE_THREAD_ID = "example-needs-attention";
+const EXAMPLE_DISMISS_KEY = "fgg.support.exampleEscalation.dismissed";
+
+function readExampleDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(EXAMPLE_DISMISS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeExampleDismissed(): void {
+  try {
+    window.localStorage.setItem(EXAMPLE_DISMISS_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+function buildExampleThread(): SupportThread {
+  return {
+    id: EXAMPLE_THREAD_ID,
+    subject: "New customer message on July 31, 2026 at 4:04 pm",
+    snippet: "Hi, I need a refund for order #1013 — the size is wrong.",
+    from: "LIVDON (Shopify) <mailer@shopify.com>",
+    date: new Date().toISOString(),
+    unread: true,
+    messageCount: 1,
+    gmailUrl: "",
+    autoReplied: false,
+    escalation: {
+      threadId: EXAMPLE_THREAD_ID,
+      reason: "not_status_inquiry",
+      reasonLabel: "Needs human reply",
+      customerName: "Alex Rivera",
+      customerEmail: "alex.rivera.example@email.com",
+      customerMessage:
+        "Hi, I need a refund for order #1013 — the size is wrong. Can someone help?",
+      at: new Date().toISOString(),
+    },
+  };
+}
+
+function buildExampleDetail(): SupportThreadDetail {
+  return {
+    id: EXAMPLE_THREAD_ID,
+    subject: "New customer message on July 31, 2026 at 4:04 pm",
+    gmailUrl: "",
+    email: null,
+    messages: [
+      {
+        id: "example-msg-1",
+        from: "LIVDON (Shopify) <mailer@shopify.com>",
+        to: "orders@futuregarmentgroup.com",
+        subject: "New customer message on July 31, 2026 at 4:04 pm",
+        date: new Date().toISOString(),
+        snippet: "You received a new message from your online store's contact form.",
+        bodyText: [
+          "You received a new message from your online store's contact form.",
+          "",
+          "Name",
+          "Alex Rivera",
+          "",
+          "Email",
+          "alex.rivera.example@email.com",
+          "",
+          "Phone",
+          "5551234567",
+          "",
+          "Body",
+          "Hi, I need a refund for order #1013 — the size is wrong. Can someone help?",
+        ].join("\n"),
+        bodyHtml: "",
+        unread: true,
+      },
+    ],
+  };
+}
 
 function formatThreadDate(iso: string): string {
   if (!iso) return "";
@@ -347,6 +428,13 @@ export function SupportPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("needs");
   const [activity, setActivity] = useState<SupportActivityEvent[]>([]);
+  const [showExample, setShowExample] = useState(() => !readExampleDismissed());
+
+  const displayThreads = useMemo(() => {
+    if (!showExample) return threads;
+    const without = threads.filter((t) => t.id !== EXAMPLE_THREAD_ID);
+    return [buildExampleThread(), ...without];
+  }, [threads, showExample]);
 
   const loadActivity = useCallback(async () => {
     try {
@@ -446,7 +534,7 @@ export function SupportPage() {
 
   const filteredThreads = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = threads.filter((t) => {
+    const list = displayThreads.filter((t) => {
       if (filter === "needs" && !t.escalation) return false;
       if (!q) return true;
       const esc = t.escalation;
@@ -459,16 +547,19 @@ export function SupportPage() {
         (esc?.reasonLabel || "").toLowerCase().includes(q)
       );
     });
-    // Escalations first, then newest
     return [...list].sort((a, b) => {
       const ae = a.escalation ? 1 : 0;
       const be = b.escalation ? 1 : 0;
       if (ae !== be) return be - ae;
       return (b.date || "").localeCompare(a.date || "");
     });
-  }, [threads, query, filter]);
+  }, [displayThreads, query, filter]);
 
   const needsCount = useMemo(
+    () => displayThreads.filter((t) => t.escalation).length,
+    [displayThreads],
+  );
+  const realNeedsCount = useMemo(
     () => threads.filter((t) => t.escalation).length,
     [threads],
   );
@@ -476,6 +567,11 @@ export function SupportPage() {
   const openThread = async (threadId: string) => {
     setSelectedId(threadId);
     setDetail(null);
+    if (threadId === EXAMPLE_THREAD_ID) {
+      setDetail(buildExampleDetail());
+      setDetailLoading(false);
+      return;
+    }
     setDetailLoading(true);
     try {
       const data = await fetchSupportThread(threadId);
@@ -491,8 +587,24 @@ export function SupportPage() {
     }
   };
 
+  const dismissExample = () => {
+    writeExampleDismissed();
+    setShowExample(false);
+    if (selectedId === EXAMPLE_THREAD_ID) {
+      setSelectedId(null);
+      setDetail(null);
+    }
+    toast.message("Example cleared — real escalations will still show here");
+    // Refresh sidebar badge (example no longer counts)
+    window.dispatchEvent(new Event("fgg-support-escalation-changed"));
+  };
+
   const onResolveEscalation = async () => {
     if (!selectedId) return;
+    if (selectedId === EXAMPLE_THREAD_ID) {
+      dismissExample();
+      return;
+    }
     try {
       await resolveSupportEscalation(selectedId);
       setThreads((prev) =>
@@ -521,7 +633,8 @@ export function SupportPage() {
     }
   };
 
-  const selectedListItem = threads.find((t) => t.id === selectedId) ?? null;
+  const selectedListItem =
+    displayThreads.find((t) => t.id === selectedId) ?? null;
   const latestMessage = detail?.messages?.[detail.messages.length - 1];
   const latestBody = latestMessage
     ? messageBody(
@@ -634,68 +747,59 @@ export function SupportPage() {
               : "Auto-replies are in test mode. Templates are in Settings (CEO)."}
           </p>
 
-          {/* Real escalations */}
-          {needsCount > 0 ? (
-            <div
-              className="flex flex-wrap items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5"
-              role="status"
-            >
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-amber-950">
-                    {needsCount}{" "}
-                    {needsCount === 1
-                      ? "message needs attention"
-                      : "messages need attention"}
-                  </p>
-                  <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600">
-                    +{needsCount > 99 ? "99" : needsCount}
-                  </Badge>
-                </div>
-                <p className="mt-0.5 text-xs text-amber-900/80">
-                  Auto-reply couldn&apos;t finish these — open{" "}
-                  <button
-                    type="button"
-                    className="font-medium underline underline-offset-2"
-                    onClick={() => setFilter("needs")}
-                  >
-                    Needs attention
-                  </button>{" "}
-                  for ops to respond.
-                </p>
-              </div>
-            </div>
-          ) : (
-            /* Example notification so the alert + badge design is visible */
-            <div
-              className="flex flex-wrap items-start gap-3 rounded-md border border-dashed border-amber-200/80 bg-amber-50/50 px-3 py-2.5"
-              role="note"
-            >
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600/70" />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-medium text-amber-950/80">
-                    Example: 1 message needs attention
-                  </p>
-                  <Badge
-                    variant="outline"
-                    className="border-amber-300 bg-amber-100/80 text-[10px] text-amber-900"
-                  >
-                    Example
-                  </Badge>
-                  <Badge className="bg-amber-600/80 text-[10px] text-white hover:bg-amber-600/80">
-                    +1
-                  </Badge>
-                </div>
-                <p className="mt-0.5 text-xs text-amber-900/70">
-                  When a contact form can&apos;t be auto-replied (refund, no
-                  matching order, etc.), you&apos;ll see an alert like this —
-                  and a matching +N badge on Support in the sidebar.
-                </p>
-              </div>
-            </div>
-          )}
+          {realNeedsCount > 0 ? (
+            <Alert className="border-amber-200 bg-amber-50 text-amber-950 [&>svg]:text-amber-700">
+              <AlertTriangle />
+              <AlertTitle className="flex flex-wrap items-center gap-2">
+                {realNeedsCount}{" "}
+                {realNeedsCount === 1
+                  ? "message needs attention"
+                  : "messages need attention"}
+                <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600">
+                  +{realNeedsCount > 99 ? "99" : realNeedsCount}
+                </Badge>
+              </AlertTitle>
+              <AlertDescription className="text-amber-900/80">
+                Auto-reply couldn&apos;t finish these — open{" "}
+                <button
+                  type="button"
+                  className="font-medium text-amber-950 underline underline-offset-2"
+                  onClick={() => setFilter("needs")}
+                >
+                  Needs attention
+                </button>{" "}
+                for ops to respond.
+              </AlertDescription>
+            </Alert>
+          ) : showExample ? (
+            <Alert className="border-amber-200/80 bg-amber-50/60 text-amber-950 [&>svg]:text-amber-700">
+              <AlertTriangle />
+              <AlertTitle className="flex flex-wrap items-center gap-2">
+                Example: 1 message needs attention
+                <Badge variant="outline" className="text-[10px]">
+                  Example
+                </Badge>
+                <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600">
+                  +1
+                </Badge>
+              </AlertTitle>
+              <AlertDescription className="text-amber-900/80">
+                Open the sample thread in{" "}
+                <button
+                  type="button"
+                  className="font-medium text-amber-950 underline underline-offset-2"
+                  onClick={() => {
+                    setFilter("needs");
+                    void openThread(EXAMPLE_THREAD_ID);
+                  }}
+                >
+                  Needs attention
+                </button>{" "}
+                to see how escalated support works. Status asks auto-reply;
+                refunds and other requests land here for ops.
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </div>
       ) : null}
 
@@ -876,6 +980,11 @@ export function SupportPage() {
                                   Open
                                 </Badge>
                               )}
+                              {t.id === EXAMPLE_THREAD_ID ? (
+                                <Badge variant="outline" className="text-[10px]">
+                                  Example
+                                </Badge>
+                              ) : null}
                               {t.escalation?.reasonLabel ? (
                                 <Badge variant="outline" className="text-[10px]">
                                   {t.escalation.reasonLabel}
@@ -934,6 +1043,27 @@ export function SupportPage() {
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                  {selectedId === EXAMPLE_THREAD_ID ? (
+                    <Alert>
+                      <AlertTriangle />
+                      <AlertTitle>How Needs attention works</AlertTitle>
+                      <AlertDescription>
+                        <p>
+                          Status questions (“where’s my order?”) are answered
+                          automatically from Order Flow. Anything else — refunds,
+                          size issues, no matching order — shows up here for an
+                          ops manager.
+                        </p>
+                        <p className="mt-2">
+                          Open the sample message below, then tap{" "}
+                          <span className="font-medium text-foreground">
+                            Got it — dismiss example
+                          </span>{" "}
+                          when you’re ready. Real escalations keep the same layout.
+                        </p>
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
                   {detailLoading ? (
                     <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
                       <Loader2 className="size-4 animate-spin" />
@@ -1087,7 +1217,9 @@ export function SupportPage() {
                     className="w-full"
                     onClick={() => void onResolveEscalation()}
                   >
-                    Mark handled
+                    {selectedId === EXAMPLE_THREAD_ID
+                      ? "Got it — dismiss example"
+                      : "Mark handled"}
                   </Button>
                 ) : null}
 

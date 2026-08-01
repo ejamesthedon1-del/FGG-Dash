@@ -24,6 +24,7 @@ export async function fetchSupportEscalationCount(): Promise<SupportEscalationCo
 
 /**
  * Ops/CEO sidebar badge for Support threads that need human attention.
+ * Includes +1 while the first-time example escalation is still showing.
  */
 export function useSupportEscalationCount(enabled: boolean) {
   const { pathname } = useLocation();
@@ -35,11 +36,19 @@ export function useSupportEscalationCount(enabled: boolean) {
       setCount(0);
       return;
     }
+    let exampleExtra = 0;
+    try {
+      if (window.localStorage.getItem("fgg.support.exampleEscalation.dismissed") !== "1") {
+        exampleExtra = 1;
+      }
+    } catch {
+      exampleExtra = 1;
+    }
     try {
       const data = await fetchSupportEscalationCount();
-      setCount(Math.max(0, Number(data.count) || 0));
+      setCount(Math.max(0, Number(data.count) || 0) + exampleExtra);
     } catch {
-      /* keep prior */
+      setCount(exampleExtra);
     }
   }, [enabled]);
 
@@ -56,10 +65,12 @@ export function useSupportEscalationCount(enabled: boolean) {
     };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("fgg-support-escalation-changed", onFocus);
     return () => {
       window.clearInterval(id);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("fgg-support-escalation-changed", onFocus);
     };
   }, [enabled, refresh]);
 
