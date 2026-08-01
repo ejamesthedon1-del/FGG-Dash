@@ -919,33 +919,53 @@ export function SupportPage() {
                               {listSnippet}
                             </p>
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                              {t.escalation ? (
-                                <Badge variant="default" className="text-[10px]">
-                                  Needs attention
-                                </Badge>
-                              ) : t.autoReplied ? (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  Auto-replied
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-[10px]">
-                                  Open
-                                </Badge>
-                              )}
                               {t.id === EXAMPLE_THREAD_ID ? (
-                                <Badge variant="outline" className="text-[10px]">
-                                  Example
-                                </Badge>
-                              ) : null}
-                              {t.escalation?.reasonLabel ? (
-                                <Badge variant="outline" className="text-[10px]">
-                                  {t.escalation.reasonLabel}
-                                </Badge>
-                              ) : null}
-                              <Badge variant="outline" className="gap-1 text-[10px]">
-                                <Mail className="size-2.5" />
-                                Form
-                              </Badge>
+                                t.escalation?.reasonLabel ? (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {t.escalation.reasonLabel}
+                                  </Badge>
+                                ) : null
+                              ) : (
+                                <>
+                                  {t.escalation ? (
+                                    <Badge
+                                      variant="default"
+                                      className="text-[10px]"
+                                    >
+                                      Needs attention
+                                    </Badge>
+                                  ) : t.autoReplied ? (
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px]"
+                                    >
+                                      Auto-replied
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px]"
+                                    >
+                                      Open
+                                    </Badge>
+                                  )}
+                                  {t.escalation?.reasonLabel ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px]"
+                                    >
+                                      {t.escalation.reasonLabel}
+                                    </Badge>
+                                  ) : null}
+                                  <Badge
+                                    variant="outline"
+                                    className="gap-1 text-[10px]"
+                                  >
+                                    <Mail className="size-2.5" />
+                                    Form
+                                  </Badge>
+                                </>
+                              )}
                             </div>
                           </div>
                         </button>
@@ -971,27 +991,37 @@ export function SupportPage() {
                     {detail?.subject || selectedListItem?.subject || "Thread"}
                   </h3>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {selectedListItem?.escalation ? (
-                      <Badge variant="default" className="text-[10px]">
-                        Needs attention
-                      </Badge>
-                    ) : selectedListItem?.autoReplied ? (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Auto-replied
-                      </Badge>
+                    {selectedId === EXAMPLE_THREAD_ID ? (
+                      selectedListItem?.escalation?.reasonLabel ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          {selectedListItem.escalation.reasonLabel}
+                        </Badge>
+                      ) : null
                     ) : (
-                      <Badge variant="outline" className="text-[10px]">
-                        Open
-                      </Badge>
+                      <>
+                        {selectedListItem?.escalation ? (
+                          <Badge variant="default" className="text-[10px]">
+                            Needs attention
+                          </Badge>
+                        ) : selectedListItem?.autoReplied ? (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Auto-replied
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px]">
+                            Open
+                          </Badge>
+                        )}
+                        {selectedListItem?.escalation?.reasonLabel ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            {selectedListItem.escalation.reasonLabel}
+                          </Badge>
+                        ) : null}
+                        <Badge variant="outline" className="text-[10px]">
+                          #support
+                        </Badge>
+                      </>
                     )}
-                    {selectedListItem?.escalation?.reasonLabel ? (
-                      <Badge variant="outline" className="text-[10px]">
-                        {selectedListItem.escalation.reasonLabel}
-                      </Badge>
-                    ) : null}
-                    <Badge variant="outline" className="text-[10px]">
-                      #support
-                    </Badge>
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
@@ -1120,7 +1150,12 @@ export function SupportPage() {
                   </p>
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-muted-foreground">Status</span>
-                    {selectedListItem?.escalation ? (
+                    {selectedId === EXAMPLE_THREAD_ID ? (
+                      <Badge variant="outline">
+                        {selectedListItem?.escalation?.reasonLabel ||
+                          "Needs human reply"}
+                      </Badge>
+                    ) : selectedListItem?.escalation ? (
                       <Badge variant="default">Needs attention</Badge>
                     ) : selectedListItem?.autoReplied ? (
                       <Badge variant="secondary">Auto-replied</Badge>
@@ -1128,7 +1163,8 @@ export function SupportPage() {
                       <Badge variant="outline">Open</Badge>
                     )}
                   </div>
-                  {selectedListItem?.escalation?.reasonLabel ? (
+                  {selectedId !== EXAMPLE_THREAD_ID &&
+                  selectedListItem?.escalation?.reasonLabel ? (
                     <div className="flex items-center justify-between gap-2 text-sm">
                       <span className="text-muted-foreground">Why</span>
                       <span className="text-right text-xs font-medium">
