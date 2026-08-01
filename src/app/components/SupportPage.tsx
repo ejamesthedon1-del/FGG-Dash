@@ -743,17 +743,12 @@ export function SupportPage() {
         <Alert>
           <CircleAlert className="size-4" />
           <AlertTitle>
-            {realNeedsCount > 0
-              ? `${realNeedsCount} ${
-                  realNeedsCount === 1
-                    ? "message needs attention"
-                    : "messages need attention"
-                }`
-              : "1 message needs attention"}
+            {Math.max(realNeedsCount, showExample ? 1 : 0) === 1
+              ? "1 message needs a reply"
+              : `${realNeedsCount} messages need a reply`}
           </AlertTitle>
           <AlertDescription>
-            Auto-reply couldn&apos;t handle this — an ops manager needs to
-            respond.
+            Auto-reply couldn&apos;t resolve this — ops should respond.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1036,21 +1031,11 @@ export function SupportPage() {
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
                   {selectedId === EXAMPLE_THREAD_ID ? (
                     <Alert>
-                      <AlertTitle>How Needs attention works</AlertTitle>
+                      <CircleAlert className="size-4" />
+                      <AlertTitle>Sample escalation</AlertTitle>
                       <AlertDescription>
-                        <p>
-                          Status questions (“where’s my order?”) are answered
-                          automatically from Order Flow. Anything else — refunds,
-                          size issues, no matching order — shows up here for an
-                          ops manager.
-                        </p>
-                        <p>
-                          Open the sample message below, then tap{" "}
-                          <span className="font-medium text-foreground">
-                            Got it — dismiss example
-                          </span>{" "}
-                          when you’re ready. Real escalations keep the same layout.
-                        </p>
+                        Status asks auto-reply. Refunds and other requests land
+                        here for ops — then dismiss this example.
                       </AlertDescription>
                     </Alert>
                   ) : null}
