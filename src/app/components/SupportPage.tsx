@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
+  CircleAlert,
   ExternalLink,
   Inbox,
   LifeBuoy,
@@ -738,6 +739,7 @@ export function SupportPage() {
 
       {!loading && connected && (realNeedsCount > 0 || showExample) ? (
         <Alert>
+          <CircleAlert className="size-4" />
           <AlertTitle>
             {realNeedsCount > 0
               ? `${realNeedsCount} ${
