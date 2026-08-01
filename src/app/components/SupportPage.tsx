@@ -841,7 +841,7 @@ export function SupportPage() {
                   <TabsTrigger value="needs" className="flex-1 gap-1">
                     Needs attention
                     {needsCount > 0 ? (
-                      <span className="rounded bg-foreground/10 px-1 text-[10px] tabular-nums">
+                      <span className="rounded bg-destructive px-1 text-[10px] tabular-nums text-white">
                         {needsCount}
                       </span>
                     ) : null}
@@ -920,7 +920,7 @@ export function SupportPage() {
                             </p>
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
                               {t.escalation ? (
-                                <Badge variant="default" className="text-[10px]">
+                                <Badge variant="destructive" className="text-[10px]">
                                   Needs attention
                                 </Badge>
                               ) : t.autoReplied ? (
@@ -972,7 +972,7 @@ export function SupportPage() {
                   </h3>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {selectedListItem?.escalation ? (
-                      <Badge variant="default" className="text-[10px]">
+                      <Badge variant="destructive" className="text-[10px]">
                         Needs attention
                       </Badge>
                     ) : selectedListItem?.autoReplied ? (
@@ -1121,7 +1121,7 @@ export function SupportPage() {
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-muted-foreground">Status</span>
                     {selectedListItem?.escalation ? (
-                      <Badge variant="default">Needs attention</Badge>
+                      <Badge variant="destructive">Needs attention</Badge>
                     ) : selectedListItem?.autoReplied ? (
                       <Badge variant="secondary">Auto-replied</Badge>
                     ) : (
