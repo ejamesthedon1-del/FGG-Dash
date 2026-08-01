@@ -4,18 +4,18 @@ import { toast } from "sonner";
 import {
   BookOpen,
   Boxes,
-  CheckSquare,
   ChevronDown,
-  ClipboardList,
-  Clock,
+  Inbox,
   LayoutDashboard,
-  LifeBuoy,
+  Library,
+  ListTodo,
   LogOut,
   Package,
   Settings,
   Shirt,
   Sparkles,
   Target,
+  Timer,
   Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
@@ -41,12 +41,10 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
-  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from "./ui/sidebar";
@@ -74,147 +72,150 @@ function isCeoOnlyPath(pathname: string): boolean {
 type NavItem = {
   to: string;
   label: string;
-  icon: ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   end?: boolean;
   match: (pathname: string) => boolean;
 };
 
-const DASHBOARD_ITEM: NavItem = {
-  to: "/",
-  label: "Dashboard",
-  icon: LayoutDashboard,
-  end: true,
-  match: (pathname) =>
-    pathname === "/" ||
-    pathname === "/create" ||
-    pathname.startsWith("/system/"),
+type NavSection = {
+  label?: string;
+  /** Collapsible group header — same pattern as CEO Operations/Resources. */
+  collapsible?: boolean;
+  items: NavItem[];
 };
 
-const CEO_PRIMARY: NavItem[] = [
-  {
+const NAV = {
+  dashboard: {
+    to: "/",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    end: true,
+    match: (pathname: string) =>
+      pathname === "/" ||
+      pathname === "/create" ||
+      pathname.startsWith("/system/"),
+  },
+  brandHub: {
     to: "/brand-hub",
     label: "Brand Hub",
     icon: Sparkles,
-    match: (pathname) =>
+    match: (pathname: string) =>
       pathname === "/brand-hub" || pathname.startsWith("/brand-hub/"),
   },
-  {
+  cash: {
     to: "/cash",
     label: "Cash",
     icon: Wallet,
-    match: (pathname) => pathname === "/cash" || pathname.startsWith("/cash/"),
+    match: (pathname: string) =>
+      pathname === "/cash" || pathname.startsWith("/cash/"),
   },
-  {
+  studio: {
     to: "/mockups",
     label: "Studio",
     icon: Shirt,
-    match: (pathname) =>
+    match: (pathname: string) =>
       pathname === "/mockups" ||
       pathname.startsWith("/mockups") ||
       pathname.startsWith("/creative-assets"),
   },
-  {
+  myTasks: {
     to: "/my-tasks",
-    label: "My Tasks",
-    icon: CheckSquare,
-    match: (pathname) =>
+    label: "Tasks",
+    icon: ListTodo,
+    match: (pathname: string) =>
       pathname === "/my-tasks" || pathname.startsWith("/my-tasks"),
   },
-];
-
-const CEO_OPS: NavItem[] = [
-  {
+  orderFlow: {
     to: "/order-flow",
-    label: "Order Flow",
+    label: "Orders",
     icon: Package,
-    match: (pathname) =>
+    match: (pathname: string) =>
       pathname === "/order-flow" || pathname.startsWith("/order-flow"),
   },
-  {
+  inventory: {
     to: "/shop-supplies",
     label: "Inventory",
     icon: Boxes,
-    match: (pathname) =>
+    match: (pathname: string) =>
       pathname === "/shop-supplies" || pathname.startsWith("/shop-supplies"),
   },
-  {
+  support: {
     to: "/support",
-    label: "Support",
-    icon: LifeBuoy,
-    match: (pathname) =>
+    label: "Inbox",
+    icon: Inbox,
+    match: (pathname: string) =>
       pathname === "/support" || pathname.startsWith("/support"),
   },
-  {
+  clock: {
     to: "/clock",
-    label: "Clock",
-    icon: Clock,
-    match: (pathname) => pathname === "/clock" || pathname.startsWith("/clock/"),
+    label: "Time",
+    icon: Timer,
+    match: (pathname: string) =>
+      pathname === "/clock" || pathname.startsWith("/clock/"),
   },
-  {
+  knowledgeBase: {
     to: "/sops",
-    label: "Knowledge Base",
-    icon: ClipboardList,
-    match: (pathname) => pathname === "/sops" || pathname.startsWith("/sops/"),
+    label: "Library",
+    icon: Library,
+    match: (pathname: string) =>
+      pathname === "/sops" || pathname.startsWith("/sops/"),
   },
-  {
+  trainingCenter: {
     to: "/training-center",
     label: "Training Center",
     icon: BookOpen,
-    match: (pathname) =>
+    match: (pathname: string) =>
       pathname === "/training-center" ||
       pathname.startsWith("/training-center/"),
   },
-  {
+  ourMission: {
     to: "/our-mission",
     label: "Our Mission",
     icon: Target,
-    match: (pathname) =>
+    match: (pathname: string) =>
       pathname === "/our-mission" || pathname.startsWith("/our-mission/"),
+  },
+} as const satisfies Record<string, NavItem>;
+
+/** CEO: strategy → creative → personal day → floor → resources */
+const CEO_SECTIONS: NavSection[] = [
+  { label: "Overview", items: [NAV.dashboard] },
+  { label: "Business", items: [NAV.brandHub, NAV.cash] },
+  { label: "Creative", items: [NAV.studio] },
+  { label: "My day", items: [NAV.myTasks, NAV.clock] },
+  { label: "Floor", items: [NAV.orderFlow, NAV.inventory, NAV.support] },
+  {
+    label: "Resources",
+    collapsible: true,
+    items: [NAV.knowledgeBase, NAV.trainingCenter, NAV.ourMission],
   },
 ];
 
-const OPS_NAV: NavItem[] = [
+const OPS_OVERVIEW: NavItem = { ...NAV.dashboard, label: "Overview" };
+
+const OPS_SECTIONS: NavSection[] = [
   {
-    to: "/order-flow",
-    label: "Order Flow",
-    icon: Package,
-    match: (pathname) =>
-      pathname === "/order-flow" || pathname.startsWith("/order-flow"),
+    label: "Menu",
+    items: [
+      OPS_OVERVIEW,
+      NAV.orderFlow,
+      NAV.inventory,
+      NAV.support,
+      NAV.clock,
+      NAV.myTasks,
+    ],
   },
   {
-    to: "/shop-supplies",
-    label: "Inventory",
-    icon: Boxes,
-    match: (pathname) =>
-      pathname === "/shop-supplies" || pathname.startsWith("/shop-supplies"),
-  },
-  {
-    to: "/support",
-    label: "Support",
-    icon: LifeBuoy,
-    match: (pathname) =>
-      pathname === "/support" || pathname.startsWith("/support"),
-  },
-  {
-    to: "/clock",
-    label: "Clock",
-    icon: Clock,
-    match: (pathname) => pathname === "/clock" || pathname.startsWith("/clock/"),
-  },
-  {
-    to: "/my-tasks",
-    label: "My Tasks",
-    icon: CheckSquare,
-    match: (pathname) =>
-      pathname === "/my-tasks" || pathname.startsWith("/my-tasks"),
-  },
-  {
-    to: "/sops",
-    label: "Knowledge Base",
-    icon: ClipboardList,
-    match: (pathname) => pathname === "/sops" || pathname.startsWith("/sops/"),
+    label: "Resources",
+    collapsible: true,
+    items: [NAV.knowledgeBase],
   },
 ];
+
+const NAV_ICON_PROPS = {
+  strokeWidth: 1.75,
+  className: "size-4 shrink-0",
+} as const;
 
 function NavMenuItems({
   items,
@@ -252,12 +253,13 @@ function NavMenuItems({
               asChild
               tooltip={
                 showClockLive
-                  ? "Clock · live"
+                  ? "Time · live"
                   : badgeCount > 0
                     ? `${item.label} (+${badgeCount})`
                     : item.label
               }
               isActive={item.match(pathname)}
+              className="h-[38px] rounded-md border-0 text-[length:var(--text-utility)] font-normal leading-[var(--leading-utility)] tracking-[var(--tracking-utility)] text-sidebar-foreground/80 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-normal data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-brand [&_svg]:text-muted-foreground [&>span:last-child]:overflow-visible [&>span:last-child]:whitespace-nowrap"
             >
               <NavLink
                 to={item.to}
@@ -267,19 +269,19 @@ function NavMenuItems({
                   if (isMobile) setOpenMobile(false);
                 }}
               >
-                <Icon />
-                <span>{item.label}</span>
+                <Icon {...NAV_ICON_PROPS} />
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                {badgeCount > 0 ? (
+                  <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center overflow-visible rounded-md bg-brand px-1 text-xs font-medium tabular-nums text-brand-foreground">
+                    +{badgeCount > 99 ? "99" : badgeCount}
+                  </span>
+                ) : showClockLive ? (
+                  <span className="ml-auto flex h-5 shrink-0 items-center justify-center overflow-visible rounded-md bg-brand px-1.5 text-xs font-medium text-brand-foreground">
+                    Live
+                  </span>
+                ) : null}
               </NavLink>
             </SidebarMenuButton>
-            {badgeCount > 0 ? (
-              <SidebarMenuBadge className="bg-brand text-brand-foreground peer-hover/menu-button:text-brand-foreground peer-data-[active=true]/menu-button:text-brand-foreground">
-                +{badgeCount > 99 ? "99" : badgeCount}
-              </SidebarMenuBadge>
-            ) : showClockLive ? (
-              <SidebarMenuBadge className="bg-emerald-600 text-white peer-hover/menu-button:text-white peer-data-[active=true]/menu-button:text-white">
-                Live
-              </SidebarMenuBadge>
-            ) : null}
           </SidebarMenuItem>
         );
       })}
@@ -329,7 +331,9 @@ function AppSidebar({
                   className="size-8 object-contain"
                   decoding="async"
                 />
-                <span className="truncate font-semibold">FGG Dash</span>
+                <span className="truncate font-semibold text-sidebar-foreground">
+                  FGG Dash
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -337,60 +341,17 @@ function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <NavMenuItems items={[DASHBOARD_ITEM]} />
-              {isCeo ? <NavMenuItems items={CEO_PRIMARY} /> : null}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-
-        {isCeo ? (
-          <Collapsible
-            defaultOpen
-            className="group/collapsible"
-          >
-            <SidebarGroup>
-              <SidebarGroupLabel
-                asChild
-                className="cursor-pointer hover:text-sidebar-foreground"
-              >
-                <CollapsibleTrigger>
-                  Operations
-                  {orderFlowNewCount > 0 ? (
-                    <span className="ml-1.5 rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-brand-foreground">
-                      +{orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
-                    </span>
-                  ) : null}
-                  <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
-                </CollapsibleTrigger>
-              </SidebarGroupLabel>
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    <NavMenuItems
-                      items={CEO_OPS}
-                      orderFlowNewCount={orderFlowNewCount}
-                      supportEscalationCount={supportEscalationCount}
-                      clockActive={clockActive}
-                      onOrderFlowOpen={clearBadge}
-                    />
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </SidebarGroup>
-          </Collapsible>
-        ) : (
-          <SidebarGroup>
-            <SidebarGroupLabel>Menu</SidebarGroupLabel>
+        {(isCeo ? CEO_SECTIONS : OPS_SECTIONS).map((section, index) => {
+          const showFloorBadge =
+            section.label === "Floor" && orderFlowNewCount > 0;
+          const sectionKey = section.label ?? `section-${index}`;
+          const groupLabelClass =
+            "h-auto py-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-muted-foreground";
+          const menu = (
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="gap-0.5">
                 <NavMenuItems
-                  items={OPS_NAV}
+                  items={section.items}
                   orderFlowNewCount={orderFlowNewCount}
                   supportEscalationCount={supportEscalationCount}
                   clockActive={clockActive}
@@ -398,12 +359,60 @@ function AppSidebar({
                 />
               </SidebarMenu>
             </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+          );
+
+          if (section.collapsible && section.label) {
+            const childActive = section.items.some((entry) =>
+              entry.match(pathname),
+            );
+            return (
+              <Collapsible
+                key={sectionKey}
+                defaultOpen={childActive}
+                className="group/collapsible"
+              >
+                <SidebarGroup>
+                  <SidebarGroupLabel
+                    asChild
+                    className={cn(
+                      groupLabelClass,
+                      "cursor-pointer hover:text-muted-foreground",
+                    )}
+                  >
+                    <CollapsibleTrigger>
+                      {section.label}
+                      <ChevronDown
+                        strokeWidth={1.75}
+                        className="ml-auto size-3.5 text-muted-foreground/70 transition-transform group-data-[state=open]/collapsible:rotate-180"
+                      />
+                    </CollapsibleTrigger>
+                  </SidebarGroupLabel>
+                  <CollapsibleContent>{menu}</CollapsibleContent>
+                </SidebarGroup>
+              </Collapsible>
+            );
+          }
+
+          return (
+            <SidebarGroup key={sectionKey}>
+              {section.label ? (
+                <SidebarGroupLabel className={groupLabelClass}>
+                  {section.label}
+                  {showFloorBadge ? (
+                    <span className="ml-1.5 rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal tabular-nums text-brand-foreground">
+                      +{orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
+                    </span>
+                  ) : null}
+                </SidebarGroupLabel>
+              ) : null}
+              {menu}
+            </SidebarGroup>
+          );
+        })}
       </SidebarContent>
 
       <SidebarFooter>
-        <SidebarMenu>
+        <SidebarMenu className="gap-0.5">
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
@@ -412,9 +421,10 @@ function AppSidebar({
                 pathname.startsWith("/settings") ||
                 pathname.startsWith("/admin")
               }
+              className="h-[38px] rounded-md border-0 text-[length:var(--text-utility)] font-normal leading-[var(--leading-utility)] tracking-[var(--tracking-utility)] text-sidebar-foreground/80 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-normal data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-brand [&_svg]:text-muted-foreground"
             >
               <NavLink to="/settings" onClick={closeMobile}>
-                <Settings />
+                <Settings {...NAV_ICON_PROPS} />
                 <span>Settings</span>
               </NavLink>
             </SidebarMenuButton>
@@ -423,7 +433,7 @@ function AppSidebar({
 
         {accountIsCeo ? (
           <div
-            className="mx-2 inline-flex rounded-lg border border-sidebar-border bg-sidebar p-0.5 group-data-[collapsible=icon]:hidden"
+            className="mx-2 inline-flex rounded-md border border-sidebar-border bg-sidebar p-0.5 group-data-[collapsible=icon]:hidden"
             role="group"
             aria-label="Dashboard view"
           >
@@ -454,7 +464,7 @@ function AppSidebar({
           </div>
         ) : null}
 
-        <div className="mx-2 mb-1 rounded-lg border border-sidebar-border bg-sidebar p-3 group-data-[collapsible=icon]:hidden">
+        <div className="mx-2 mb-1 border-t border-sidebar-border pt-3 group-data-[collapsible=icon]:hidden">
           <p className="truncate text-sm font-semibold text-sidebar-foreground">
             {firstName || "Signed in"}
           </p>
@@ -475,7 +485,7 @@ function AppSidebar({
               disabled={signingOut}
               onClick={onSignOut}
             >
-              <LogOut className="size-3.5" />
+              <LogOut strokeWidth={1.75} className="size-3.5" />
               {signingOut ? "Signing out…" : "Sign out"}
             </Button>
           </div>

@@ -489,11 +489,11 @@
   }
 }
 
-/* Docs preset — Geist / 15px / leading 1.75 / flow 1.25em */
+/* Docs preset — SF Pro / system / 15px / leading 1.75 / flow 1.25em */
 .typeset-docs {
-  --typeset-font-body: var(--font-geist);
-  --typeset-font-heading: var(--font-geist);
-  --typeset-font-mono: var(--font-geist-mono);
+  --typeset-font-body: var(--font-sf);
+  --typeset-font-heading: var(--font-sf);
+  --typeset-font-mono: var(--font-sf-mono);
   --typeset-size: 15px;
   --typeset-leading: 1.75;
   --typeset-flow: 1.25em;

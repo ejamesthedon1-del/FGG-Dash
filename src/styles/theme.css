@@ -1,13 +1,14 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-size: 16px;
+  /* Apple body-primary: 17px / 400 / 25px / -0.374px (studio-display PDP) */
+  --font-size: 17px;
   --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
+  --foreground: #1d1d1f;
   --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
   /* Brand blue from FGG button kit */
   --brand: #0c5efb;
   --brand-hover: #0a54e0;
@@ -19,16 +20,17 @@
   --secondary: #f0f5ff;
   --secondary-foreground: #0c5efb;
   --muted: #ececf0;
-  --muted-foreground: #717182;
+  --muted-foreground: #6e6e73;
   --accent: #e9ebef;
-  --accent-foreground: #030213;
+  --accent-foreground: #1d1d1f;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;
   --border: #d8dee8;
   --input: transparent;
   --input-background: #f3f3f5;
   --switch-background: #cbced4;
-  --font-weight-medium: 500;
+  /* Apple uses 600 for emphasis, not 500 */
+  --font-weight-medium: 600;
   --font-weight-normal: 400;
   --ring: #0c5efb;
   --chart-1: oklch(0.646 0.222 41.116);
@@ -38,13 +40,24 @@
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #1d1d1f;
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-accent-foreground: #1d1d1f;
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Apple type ramp from apple.com/shop/buy-mac/studio-display */
+  --text-caption: 12px;
+  --leading-caption: 1.3334;
+  --tracking-caption: -0.12px;
+  --text-utility: 14px;
+  --leading-utility: 1.29;
+  --tracking-utility: -0.224px;
+  --text-body: 17px;
+  --leading-body: 1.4706;
+  --tracking-body: -0.374px;
 }
 
 .dark {
@@ -72,7 +85,7 @@
   --border: #3a465c;
   --input: oklch(0.269 0 0);
   --ring: #0c5efb;
-  --font-weight-medium: 500;
+  --font-weight-medium: 600;
   --font-weight-normal: 400;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -90,9 +103,15 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-geist);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist);
+  --font-sans: var(--font-sf);
+  --font-mono: var(--font-sf-mono);
+  --font-heading: var(--font-sf-display);
+  --text-xs: var(--text-caption);
+  --text-xs--line-height: var(--leading-caption);
+  --text-sm: var(--text-utility);
+  --text-sm--line-height: var(--leading-utility);
+  --text-base: var(--text-body);
+  --text-base--line-height: var(--leading-body);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -150,56 +169,73 @@
 
   body {
     @apply bg-background font-sans text-foreground;
+    font-size: var(--text-body);
+    font-weight: var(--font-weight-normal);
+    line-height: var(--leading-body);
+    letter-spacing: var(--tracking-body);
   }
 
   /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
+   * Apple-aligned defaults. Tailwind utilities (text-sm, etc.) still override.
+   */
 
   html {
     font-size: var(--font-size);
   }
 
   h1 {
-    font-size: var(--text-2xl);
+    font-family: var(--font-sf-display);
+    font-size: 32px;
     font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    line-height: 1.125;
+    letter-spacing: -0.2px;
   }
 
   h2 {
-    font-size: var(--text-xl);
+    font-family: var(--font-sf-display);
+    font-size: 21px;
     font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    line-height: 1.143;
+    letter-spacing: 0.231px;
   }
 
   h3 {
-    font-size: var(--text-lg);
+    font-family: var(--font-sf);
+    font-size: var(--text-body);
     font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    line-height: var(--leading-body);
+    letter-spacing: var(--tracking-body);
   }
 
   h4 {
-    font-size: var(--text-base);
+    font-family: var(--font-sf);
+    font-size: var(--text-utility);
     font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    line-height: var(--leading-utility);
+    letter-spacing: var(--tracking-utility);
   }
 
   label {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  button {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  input {
-    font-size: var(--text-base);
+    font-size: var(--text-utility);
     font-weight: var(--font-weight-normal);
-    line-height: 1.5;
+    line-height: var(--leading-utility);
+    letter-spacing: var(--tracking-utility);
+  }
+
+  /* Apple button-utility: 14px / 400 / 1.29 / -0.224px */
+  button {
+    font-size: var(--text-utility);
+    font-weight: var(--font-weight-normal);
+    line-height: var(--leading-utility);
+    letter-spacing: var(--tracking-utility);
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: var(--text-body);
+    font-weight: var(--font-weight-normal);
+    line-height: var(--leading-body);
+    letter-spacing: var(--tracking-body);
   }
 }

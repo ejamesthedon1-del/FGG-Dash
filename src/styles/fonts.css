@@ -1,7 +1,12 @@
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/geist-mono";
-
 :root {
-  --font-geist: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-geist-mono: "Geist Mono Variable", ui-monospace, monospace;
+  /* Matches apple.com (SF Pro Text / Display system stack) */
+  --font-sf:
+    "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-sf-display:
+    "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-sf-mono:
+    "SF Mono", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
 }
