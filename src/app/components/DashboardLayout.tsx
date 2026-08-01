@@ -7,6 +7,7 @@ import {
   CheckSquare,
   ChevronDown,
   ClipboardList,
+  Clock,
   LayoutDashboard,
   LifeBuoy,
   LogOut,
@@ -23,6 +24,7 @@ import { useAuth } from "../lib/use-auth";
 import { userFirstName, type AppRole } from "../lib/auth-roles";
 import { SignInPage } from "./SignInPage";
 import { ViewModePicker } from "./ViewModePicker";
+import { TimeClockStickyBar } from "./TimeClockStickyBar";
 import { Button } from "./ui/button";
 import {
   Collapsible,
@@ -50,6 +52,7 @@ import {
 } from "./ui/sidebar";
 import { useOrderFlowNewCount } from "../lib/use-order-flow-new-count";
 import { useSupportEscalationCount } from "../lib/use-support-escalation-count";
+import { useClockActive } from "../lib/use-clock-active";
 
 const LOGO_SRC = "/fgg-logo.png?v=2";
 
@@ -142,6 +145,12 @@ const CEO_OPS: NavItem[] = [
       pathname === "/support" || pathname.startsWith("/support"),
   },
   {
+    to: "/clock",
+    label: "Clock",
+    icon: Clock,
+    match: (pathname) => pathname === "/clock" || pathname.startsWith("/clock/"),
+  },
+  {
     to: "/sops",
     label: "Knowledge Base",
     icon: ClipboardList,
@@ -187,6 +196,12 @@ const OPS_NAV: NavItem[] = [
       pathname === "/support" || pathname.startsWith("/support"),
   },
   {
+    to: "/clock",
+    label: "Clock",
+    icon: Clock,
+    match: (pathname) => pathname === "/clock" || pathname.startsWith("/clock/"),
+  },
+  {
     to: "/my-tasks",
     label: "My Tasks",
     icon: CheckSquare,
@@ -205,11 +220,13 @@ function NavMenuItems({
   items,
   orderFlowNewCount = 0,
   supportEscalationCount = 0,
+  clockActive = false,
   onOrderFlowOpen,
 }: {
   items: NavItem[];
   orderFlowNewCount?: number;
   supportEscalationCount?: number;
+  clockActive?: boolean;
   onOrderFlowOpen?: () => void;
 }) {
   const { pathname } = useLocation();
@@ -223,6 +240,7 @@ function NavMenuItems({
           item.to === "/order-flow" && orderFlowNewCount > 0;
         const showSupportEsc =
           item.to === "/support" && supportEscalationCount > 0;
+        const showClockLive = item.to === "/clock" && clockActive;
         const badgeCount = showNewOrders
           ? orderFlowNewCount
           : showSupportEsc
@@ -233,9 +251,11 @@ function NavMenuItems({
             <SidebarMenuButton
               asChild
               tooltip={
-                badgeCount > 0
-                  ? `${item.label} (+${badgeCount})`
-                  : item.label
+                showClockLive
+                  ? "Clock · live"
+                  : badgeCount > 0
+                    ? `${item.label} (+${badgeCount})`
+                    : item.label
               }
               isActive={item.match(pathname)}
             >
@@ -254,6 +274,10 @@ function NavMenuItems({
             {badgeCount > 0 ? (
               <SidebarMenuBadge className="bg-brand text-brand-foreground peer-hover/menu-button:text-brand-foreground peer-data-[active=true]/menu-button:text-brand-foreground">
                 +{badgeCount > 99 ? "99" : badgeCount}
+              </SidebarMenuBadge>
+            ) : showClockLive ? (
+              <SidebarMenuBadge className="bg-emerald-600 text-white peer-hover/menu-button:text-white peer-data-[active=true]/menu-button:text-white">
+                Live
               </SidebarMenuBadge>
             ) : null}
           </SidebarMenuItem>
@@ -286,6 +310,8 @@ function AppSidebar({
   const { isMobile, setOpenMobile } = useSidebar();
   const { count: orderFlowNewCount, clearBadge } = useOrderFlowNewCount(email);
   const { count: supportEscalationCount } = useSupportEscalationCount(true);
+  const { user } = useAuth();
+  const clockActive = useClockActive(user?.id);
   const closeMobile = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -350,6 +376,7 @@ function AppSidebar({
                       items={CEO_OPS}
                       orderFlowNewCount={orderFlowNewCount}
                       supportEscalationCount={supportEscalationCount}
+                      clockActive={clockActive}
                       onOrderFlowOpen={clearBadge}
                     />
                   </SidebarMenu>
@@ -366,6 +393,7 @@ function AppSidebar({
                   items={OPS_NAV}
                   orderFlowNewCount={orderFlowNewCount}
                   supportEscalationCount={supportEscalationCount}
+                  clockActive={clockActive}
                   onOrderFlowOpen={clearBadge}
                 />
               </SidebarMenu>
@@ -539,6 +567,7 @@ export function DashboardLayout() {
             className="h-8 w-auto object-contain object-left md:hidden"
             decoding="async"
           />
+          <TimeClockStickyBar />
         </header>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">

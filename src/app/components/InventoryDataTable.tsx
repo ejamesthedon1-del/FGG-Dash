@@ -19,6 +19,7 @@ import {
   isLowStock,
   materialInventoryValue,
   materialUnitCost,
+  materialUnitsPerPack,
   SUPPLY_CATEGORY_LABELS,
   type SupplyMaterial,
 } from "../lib/shop-supplies-storage";
@@ -124,6 +125,8 @@ export type InventoryDataTableProps = {
   onOpenDetail: (material: SupplyMaterial) => void;
   onDelete: (material: SupplyMaterial) => void;
   toolbarActions?: React.ReactNode;
+  /** When false, hide unit cost / inventory value columns (ops view). */
+  showCosts?: boolean;
 };
 
 export function InventoryDataTable({
@@ -131,6 +134,7 @@ export function InventoryDataTable({
   onOpenDetail,
   onDelete,
   toolbarActions,
+  showCosts = true,
 }: InventoryDataTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -204,6 +208,7 @@ export function InventoryDataTable({
         ),
         cell: ({ row }) => {
           const m = row.original;
+          const perPack = materialUnitsPerPack(m);
           return (
             <span
               className={cn(
@@ -213,6 +218,11 @@ export function InventoryDataTable({
             >
               {m.qtyOnHand}{" "}
               <span className="text-muted-foreground">{m.unit}</span>
+              {m.unit === "pack" && perPack > 1 ? (
+                <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                  {perPack}/pack
+                </span>
+              ) : null}
             </span>
           );
         },
@@ -281,8 +291,12 @@ export function InventoryDataTable({
           />
         ),
       },
-    ],
-    [onDelete, onOpenDetail],
+    ].filter((col) => {
+      if (showCosts) return true;
+      const id = "id" in col ? col.id : "accessorKey" in col ? col.accessorKey : undefined;
+      return id !== "unitCost" && id !== "value";
+    }),
+    [onDelete, onOpenDetail, showCosts],
   );
 
   const table = useReactTable({

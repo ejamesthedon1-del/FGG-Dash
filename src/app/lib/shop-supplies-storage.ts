@@ -46,6 +46,8 @@ export type SupplyMaterial = {
   unit: SupplyUnit;
   /** Cost per unit (USD) — used for inventory value and recipe COGS. */
   unitCost: number;
+  /** How many individual pieces are in one pack/roll (1 when unit is each). */
+  unitsPerPack: number;
   /** Ops notes: SKU, vendor, how to identify this supply. */
   notes: string;
   /** Vendor / product page for reordering. */
@@ -154,6 +156,7 @@ function normalizeMaterial(raw: unknown): SupplyMaterial | null {
     lowStockAt: Math.max(0, Number(m.lowStockAt) || 0),
     unit,
     unitCost: clampMoney(Number(m.unitCost) || 0),
+    unitsPerPack: Math.max(1, Math.floor(Number(m.unitsPerPack) || 1)),
     notes: typeof m.notes === "string" ? m.notes : "",
     ...(m.reorderUrl ? { reorderUrl: String(m.reorderUrl) } : {}),
     ...(m.photoDataUrl ? { photoDataUrl: String(m.photoDataUrl) } : {}),
@@ -234,6 +237,27 @@ export function materialUnitCost(material: SupplyMaterial): number {
   return clampMoney(Number(material.unitCost) || 0);
 }
 
+export function materialUnitsPerPack(material: SupplyMaterial): number {
+  return Math.max(1, Math.floor(Number(material.unitsPerPack) || 1));
+}
+
+/**
+ * Cost of one piece used on a garment (1 bag, 1 tag, 1 blank).
+ * For pack/roll stock, unitCost is the pack/roll price — divide by unitsPerPack.
+ */
+export function materialPieceCost(material: SupplyMaterial): number {
+  const stockCost = materialUnitCost(material);
+  if (stockCost <= 0) return 0;
+  if (material.unit === "pack" || material.unit === "roll") {
+    return clampMoney(stockCost / materialUnitsPerPack(material));
+  }
+  return stockCost;
+}
+
+export function materialPieceCount(material: SupplyMaterial): number {
+  return Math.max(0, material.qtyOnHand) * materialUnitsPerPack(material);
+}
+
 export function materialInventoryValue(material: SupplyMaterial): number {
   return clampMoney(materialUnitCost(material) * Math.max(0, material.qtyOnHand));
 }
@@ -259,7 +283,7 @@ export function recipeMaterialCost(
   const byId = new Map(materials.map((m) => [m.id, m]));
   const lines: RecipeCostLine[] = recipe.lines.map((line) => {
     const material = byId.get(line.materialId);
-    const unitCost = material ? materialUnitCost(material) : 0;
+    const unitCost = material ? materialPieceCost(material) : 0;
     const qtyPerUnit = Math.max(0, Number(line.qtyPerUnit) || 0);
     const missingCost = !material || unitCost <= 0;
     return {
@@ -289,6 +313,7 @@ export function addMaterial(
     lowStockAt?: number;
     unit?: SupplyUnit;
     unitCost?: number;
+    unitsPerPack?: number;
     notes?: string;
     photoDataUrl?: string;
   },
@@ -298,14 +323,17 @@ export function addMaterial(
   const category = isCategory(input.category) ? input.category : "other";
   const now = nowIso();
   const photo = (input.photoDataUrl || "").trim();
+  const unit = input.unit ?? "ea";
   const material: SupplyMaterial = {
     id: newId("mat"),
     name,
     category,
     qtyOnHand: Math.max(0, Number(input.qtyOnHand) || 0),
     lowStockAt: Math.max(0, Number(input.lowStockAt) || 0),
-    unit: input.unit ?? "ea",
+    unit,
     unitCost: clampMoney(Number(input.unitCost) || 0),
+    unitsPerPack:
+      unit === "pack" ? Math.max(1, Math.floor(Number(input.unitsPerPack) || 1)) : 1,
     notes: (input.notes || "").trim(),
     ...(photo ? { photoDataUrl: photo } : {}),
     createdAt: now,
@@ -328,6 +356,7 @@ export function updateMaterial(
       | "lowStockAt"
       | "unit"
       | "unitCost"
+      | "unitsPerPack"
       | "notes"
       | "qtyOnHand"
       | "photoDataUrl"
@@ -339,15 +368,22 @@ export function updateMaterial(
     ...current,
     materials: current.materials.map((m) => {
       if (m.id !== materialId) return m;
+      const nextUnit = patch.unit ?? m.unit;
       const next: SupplyMaterial = {
         ...m,
         name: patch.name?.trim() || m.name,
         category: patch.category && isCategory(patch.category) ? patch.category : m.category,
         lowStockAt:
           patch.lowStockAt != null ? Math.max(0, Number(patch.lowStockAt) || 0) : m.lowStockAt,
-        unit: patch.unit ?? m.unit,
+        unit: nextUnit,
         unitCost:
           patch.unitCost != null ? clampMoney(Number(patch.unitCost) || 0) : m.unitCost,
+        unitsPerPack:
+          nextUnit === "pack"
+            ? patch.unitsPerPack != null
+              ? Math.max(1, Math.floor(Number(patch.unitsPerPack) || 1))
+              : Math.max(1, Math.floor(Number(m.unitsPerPack) || 1))
+            : 1,
         notes: patch.notes != null ? patch.notes.trim() : m.notes,
         qtyOnHand:
           patch.qtyOnHand != null ? Math.max(0, Number(patch.qtyOnHand) || 0) : m.qtyOnHand,
@@ -500,6 +536,27 @@ export function getRecipeForProduct(
   const id = productId.trim();
   if (!id) return null;
   return loadBrandSupplies(brand).recipes.find((r) => r.productId === id) ?? null;
+}
+
+/** Copy an existing recipe’s component lines onto many products (same bill of materials). */
+export function copyRecipeToProducts(
+  brand: SupplyBrand,
+  sourceProductId: string,
+  targets: Array<{ productId: string; productName: string }>,
+): BrandSupplies {
+  const source = getRecipeForProduct(brand, sourceProductId);
+  if (!source?.lines.length) return loadBrandSupplies(brand);
+  let last = loadBrandSupplies(brand);
+  for (const t of targets) {
+    const productId = t.productId.trim();
+    if (!productId || productId === sourceProductId.trim()) continue;
+    last = upsertRecipe(brand, {
+      productId,
+      productName: t.productName,
+      lines: source.lines,
+    });
+  }
+  return last;
 }
 
 export function computeMaterialNeeds(

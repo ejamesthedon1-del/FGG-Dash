@@ -182,6 +182,58 @@ type BrandKpis = {
   source: "shopify" | "mock";
 };
 
+type PeriodPreset = "today" | "yesterday" | "last7" | "month" | "custom";
+
+const PERIOD_PRESETS: Array<{ id: PeriodPreset; label: string }> = [
+  { id: "today", label: "Today" },
+  { id: "yesterday", label: "Yesterday" },
+  { id: "last7", label: "Last 7 days" },
+  { id: "month", label: "This month" },
+  { id: "custom", label: "Custom" },
+];
+
+function toLocalIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysIso(iso: string, delta: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  dt.setDate(dt.getDate() + delta);
+  return toLocalIso(dt);
+}
+
+function monthStartIso(iso: string): string {
+  const [y, m] = iso.split("-").map(Number);
+  return `${y}-${String(m).padStart(2, "0")}-01`;
+}
+
+function formatPeriodLabel(start: string, end: string): string {
+  if (start === end) {
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date(`${start}T12:00:00`));
+    } catch {
+      return start;
+    }
+  }
+  try {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    return `${fmt.format(new Date(`${start}T12:00:00`))} – ${fmt.format(new Date(`${end}T12:00:00`))}`;
+  } catch {
+    return `${start} – ${end}`;
+  }
+}
+
 /** Placeholder KPIs for brands not yet connected to Shopify. */
 function mockKpisForBrand(slug: string): BrandKpis {
   const s = slug.length + (slug.charCodeAt(0) ?? 0);
@@ -245,24 +297,50 @@ export function BrandHubDetail() {
   const [kpiStatus, setKpiStatus] = useState<"idle" | "loading" | "live" | "error">("idle");
   const [productCosts, setProductCosts] = useState<Record<string, ProductUnitCost>>({});
   const [productTitles, setProductTitles] = useState<string[]>([]);
-  const [dailySoldItems, setDailySoldItems] = useState<ShopifySoldItem[]>([]);
-  const [monthSoldItems, setMonthSoldItems] = useState<ShopifySoldItem[]>([]);
+  const [periodSoldItems, setPeriodSoldItems] = useState<ShopifySoldItem[]>([]);
   const [kpiNumbers, setKpiNumbers] = useState<{
-    dailySales: number;
-    monthSales: number;
-    dailyFees: number;
-    monthFees: number;
-    dailyShipping: number;
-    monthShipping: number;
-    dailyOrderCount: number;
-    monthOrderCount: number;
-    adsSpendToday: number;
-    adsSpendMonth: number;
-    monthItemsLabel: string;
-    monthItemUnits: number;
+    sales: number;
+    fees: number;
+    shipping: number;
+    orderCount: number;
+    adsSpend: number;
+    itemUnits: number;
+    itemsLabel: string;
   } | null>(null);
-  const [dashRange, setDashRange] = useState<"day" | "month">("day");
+  const todayIso = toLocalIso(new Date());
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("today");
+  const [customStart, setCustomStart] = useState(monthStartIso(todayIso));
+  const [customEnd, setCustomEnd] = useState(todayIso);
+  const [appliedCustom, setAppliedCustom] = useState<{ start: string; end: string } | null>(
+    null,
+  );
   const voiceSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const periodRange = useMemo(() => {
+    if (periodPreset === "today") return { start: todayIso, end: todayIso };
+    if (periodPreset === "yesterday") {
+      const y = addDaysIso(todayIso, -1);
+      return { start: y, end: y };
+    }
+    if (periodPreset === "last7") {
+      return { start: addDaysIso(todayIso, -6), end: todayIso };
+    }
+    if (periodPreset === "month") {
+      return { start: monthStartIso(todayIso), end: todayIso };
+    }
+    return appliedCustom ?? { start: customStart, end: customEnd };
+  }, [periodPreset, todayIso, appliedCustom, customStart, customEnd]);
+
+  const periodLabel = useMemo(() => {
+    const preset = PERIOD_PRESETS.find((p) => p.id === periodPreset);
+    if (periodPreset === "custom" || periodPreset === "last7") {
+      return formatPeriodLabel(periodRange.start, periodRange.end);
+    }
+    return preset?.label ?? "Period";
+  }, [periodPreset, periodRange]);
+
+  const isTodayPeriod =
+    periodRange.start === todayIso && periodRange.end === todayIso;
 
   const reloadBrand = useCallback(() => {
     const b = getBrandBySlug(slug);
@@ -428,8 +506,7 @@ export function BrandHubDetail() {
     if (!slug) {
       setKpis(null);
       setKpiStatus("idle");
-      setDailySoldItems([]);
-      setMonthSoldItems([]);
+      setPeriodSoldItems([]);
       setProductTitles([]);
       setProductCosts({});
       setKpiNumbers(null);
@@ -442,8 +519,7 @@ export function BrandHubDetail() {
     if (authLoading || !isCeo) {
       setKpis(null);
       setKpiStatus("idle");
-      setDailySoldItems([]);
-      setMonthSoldItems([]);
+      setPeriodSoldItems([]);
       setProductTitles([]);
       setKpiNumbers(null);
       return;
@@ -452,8 +528,7 @@ export function BrandHubDetail() {
     if (!SHOPIFY_LIVE_BRAND_SLUGS.has(slug)) {
       setKpis(mockKpisForBrand(slug));
       setKpiStatus("idle");
-      setDailySoldItems([]);
-      setMonthSoldItems([]);
+      setPeriodSoldItems([]);
       setProductTitles([]);
       setKpiNumbers(null);
       return;
@@ -463,67 +538,80 @@ export function BrandHubDetail() {
     setKpiStatus("loading");
     setKpis(null);
 
+    const { start, end } = periodRange;
+
     (async () => {
       try {
         const [data, products] = await Promise.all([
-          fetchShopifyBrandKpis(slug),
+          fetchShopifyBrandKpis(slug, { start, end }),
           fetchShopifyProducts(slug).catch(() => []),
         ]);
         if (cancelled) return;
+
+        const periodItems = data.periodItems ?? data.monthItems ?? [];
+        const periodItemUnits = Number(data.periodItemUnits ?? data.monthItemUnits) || 0;
+        const sales = Number(data.periodSales ?? data.monthSales) || 0;
+        const fees = Number(data.periodFees ?? data.monthFees) || 0;
+        const shipping = Number(data.periodShipping ?? data.monthShipping) || 0;
+        const orderCount = Number(data.periodOrderCount ?? data.monthOrderCount) || 0;
+        const adsSpend =
+          Number(data.adsSpendPeriod?.spend ?? data.adsSpendMonth?.spend) || 0;
 
         const titles = new Set<string>();
         for (const p of products) {
           if (p.title?.trim()) titles.add(p.title.trim());
         }
-        for (const item of data.monthItems ?? []) {
-          if (item.name?.trim()) titles.add(item.name.trim());
-        }
-        for (const item of data.dailyItems ?? []) {
+        for (const item of periodItems) {
           if (item.name?.trim()) titles.add(item.name.trim());
         }
 
         setProductTitles([...titles].sort((a, b) => a.localeCompare(b)));
-        setDailySoldItems(data.dailyItems ?? []);
-        setMonthSoldItems(data.monthItems ?? []);
+        setPeriodSoldItems(periodItems);
         setKpiNumbers({
-          dailySales: Number(data.dailySales) || 0,
-          monthSales: Number(data.monthSales) || 0,
-          dailyFees: Number(data.dailyFees) || 0,
-          monthFees: Number(data.monthFees) || 0,
-          dailyShipping: Number(data.dailyShipping) || 0,
-          monthShipping: Number(data.monthShipping) || 0,
-          dailyOrderCount: Number(data.dailyOrderCount) || 0,
-          monthOrderCount: Number(data.monthOrderCount) || 0,
-          adsSpendToday: Number(data.adsSpendToday?.spend) || 0,
-          adsSpendMonth: Number(data.adsSpendMonth?.spend) || 0,
-          monthItemsLabel: formatDailyItems(data.monthItems ?? [], data.monthItemUnits ?? 0),
-          monthItemUnits: Number(data.monthItemUnits) || 0,
+          sales,
+          fees,
+          shipping,
+          orderCount,
+          adsSpend,
+          itemUnits: periodItemUnits,
+          itemsLabel: formatDailyItems(periodItems, periodItemUnits),
         });
         setKpis({
-          todayRevenue: formatShopifyMoney(data.dailySales, data.currency),
-          monthRevenue: formatShopifyMoney(data.monthSales, data.currency),
-          ordersToday: String(data.dailyOrderCount),
-          shopifyFees: formatShopifyMoney(data.dailyFees, data.currency),
-          itemsToday: formatDailyItems(data.dailyItems ?? [], data.dailyItemUnits ?? 0),
+          todayRevenue: formatShopifyMoney(sales, data.currency),
+          monthRevenue: formatShopifyMoney(sales, data.currency),
+          ordersToday: String(orderCount),
+          shopifyFees: formatShopifyMoney(fees, data.currency),
+          itemsToday: formatDailyItems(periodItems, periodItemUnits),
           topProduct: data.topProduct
             ? data.topProduct.units > 1
               ? `${data.topProduct.name} (${data.topProduct.units})`
               : data.topProduct.name
             : "—",
-          adsSpendToday: data.adsSpendToday
-            ? formatShopifyMoney(data.adsSpendToday.spend, data.adsSpendToday.currency || "USD")
-            : "—",
-          shippingToday: formatShopifyMoney(data.dailyShipping ?? 0, data.currency),
-          shippingMonth: formatShopifyMoney(data.monthShipping ?? 0, data.currency),
-          shippingAvgToday:
-            (data.dailyOrderCount ?? 0) > 0
-              ? formatShopifyMoney((data.dailyShipping ?? 0) / data.dailyOrderCount, data.currency)
+          adsSpendToday: data.adsSpendPeriod
+            ? formatShopifyMoney(
+                data.adsSpendPeriod.spend,
+                data.adsSpendPeriod.currency || "USD",
+              )
+            : data.adsSpendMonth
+              ? formatShopifyMoney(
+                  data.adsSpendMonth.spend,
+                  data.adsSpendMonth.currency || "USD",
+                )
               : "—",
-          orderShipping: (data.dailyOrderShipping ?? []).map((o) => ({
-            name: o.name,
-            shipping: formatShopifyMoney(o.shipping, data.currency),
-            orderTotal: formatShopifyMoney(o.orderTotal, data.currency),
-          })),
+          shippingToday: formatShopifyMoney(shipping, data.currency),
+          shippingMonth: formatShopifyMoney(shipping, data.currency),
+          shippingAvgToday:
+            orderCount > 0
+              ? formatShopifyMoney(shipping / orderCount, data.currency)
+              : "—",
+          orderShipping:
+            start === end && start === toLocalIso(new Date())
+              ? (data.dailyOrderShipping ?? []).map((o) => ({
+                  name: o.name,
+                  shipping: formatShopifyMoney(o.shipping, data.currency),
+                  orderTotal: formatShopifyMoney(o.orderTotal, data.currency),
+                }))
+              : [],
           source: "shopify",
         });
         setKpiStatus("live");
@@ -531,8 +619,7 @@ export function BrandHubDetail() {
         if (cancelled) return;
         console.error(err);
         setKpis(mockKpisForBrand(slug));
-        setDailySoldItems([]);
-        setMonthSoldItems([]);
+        setPeriodSoldItems([]);
         setKpiNumbers(null);
         setKpiStatus("error");
         toast.error("Could not load Shopify sales — showing placeholders.");
@@ -542,7 +629,7 @@ export function BrandHubDetail() {
     return () => {
       cancelled = true;
     };
-  }, [slug, authLoading, isCeo]);
+  }, [slug, authLoading, isCeo, periodRange.start, periodRange.end]);
 
   const persistProductCost = (title: string, field: keyof ProductUnitCost, raw: string) => {
     if (!slug) return;
@@ -568,28 +655,15 @@ export function BrandHubDetail() {
     return applyRecipeGarmentCosts(productCosts, loadBrandSupplies(supplyBrand));
   }, [slug, productCosts]);
 
-  const productionToday = productionCostForUnits(dailySoldItems, resolvedProductCosts);
-  const productionMonth = productionCostForUnits(monthSoldItems, resolvedProductCosts);
-  const isMonthView = dashRange === "month";
-  const productionView = isMonthView ? productionMonth : productionToday;
+  const productionView = productionCostForUnits(periodSoldItems, resolvedProductCosts);
 
-  const profitToday =
+  const profitView =
     kpiNumbers == null
       ? null
-      : kpiNumbers.dailySales -
-        kpiNumbers.dailyFees -
-        kpiNumbers.adsSpendToday -
-        productionToday.total;
-
-  const profitMonth =
-    kpiNumbers == null
-      ? null
-      : kpiNumbers.monthSales -
-        kpiNumbers.monthFees -
-        kpiNumbers.adsSpendMonth -
-        productionMonth.total;
-
-  const profitView = isMonthView ? profitMonth : profitToday;
+      : kpiNumbers.sales -
+        kpiNumbers.fees -
+        kpiNumbers.adsSpend -
+        productionView.total;
 
   const removeTask = (id: string) => {
     persistTasks(tasks.filter((t) => t.id !== id));
@@ -623,32 +697,15 @@ export function BrandHubDetail() {
   const showLiveProfit = displayKpis.source === "shopify" && profitView != null;
   const profitPositive = showLiveProfit && profitView >= 0;
 
-  const viewRevenue = isMonthView ? displayKpis.monthRevenue : displayKpis.todayRevenue;
-  const viewOrders = isMonthView
-    ? kpiNumbers
-      ? String(kpiNumbers.monthOrderCount)
-      : "—"
-    : displayKpis.ordersToday;
-  const viewFees = isMonthView
-    ? kpiNumbers
-      ? formatShopifyMoney(kpiNumbers.monthFees)
-      : "—"
-    : displayKpis.shopifyFees;
-  const viewItems = isMonthView
-    ? kpiNumbers?.monthItemsLabel || "—"
-    : displayKpis.itemsToday;
-  const viewAds = isMonthView
-    ? kpiNumbers
-      ? formatShopifyMoney(kpiNumbers.adsSpendMonth)
-      : "—"
-    : displayKpis.adsSpendToday;
-  const viewShipping = isMonthView ? displayKpis.shippingMonth : displayKpis.shippingToday;
-  const viewShippingAvg =
-    isMonthView && kpiNumbers && kpiNumbers.monthOrderCount > 0
-      ? formatShopifyMoney(kpiNumbers.monthShipping / kpiNumbers.monthOrderCount)
-      : displayKpis.shippingAvgToday;
-  const viewLabel = isMonthView ? "This month" : "Today";
-  const viewSub = isMonthView ? "Shopify · MTD" : "Shopify · today";
+  const viewRevenue = displayKpis.todayRevenue;
+  const viewOrders = displayKpis.ordersToday;
+  const viewFees = displayKpis.shopifyFees;
+  const viewItems = displayKpis.itemsToday;
+  const viewAds = displayKpis.adsSpendToday;
+  const viewShipping = displayKpis.shippingToday;
+  const viewShippingAvg = displayKpis.shippingAvgToday;
+  const viewLabel = periodLabel;
+  const viewSub = `Shopify · ${formatPeriodLabel(periodRange.start, periodRange.end)}`;
   const display = editing && draft ? draft : brand;
   const notes = display.brandNotes;
   const assets = display.brandAssets;
@@ -785,9 +842,7 @@ export function BrandHubDetail() {
                     {displayKpis.source === "shopify"
                       ? kpiStatus === "loading"
                         ? "Loading live Shopify metrics…"
-                        : isMonthView
-                          ? "Month view · revenue, fees, ads, production, and shipping (MTD)."
-                          : "Today view · revenue, fees, ads, production, and shipping."
+                        : `${viewLabel} · revenue, fees, ads, production, and shipping.`
                       : kpiStatus === "error"
                         ? "Shopify unavailable — showing placeholders."
                         : "Snapshot metrics (mock) — ready to connect to Shopify or your BI tool."}
@@ -795,17 +850,62 @@ export function BrandHubDetail() {
                 </div>
               </div>
               {displayKpis.source === "shopify" ? (
-                <Select value={dashRange} onValueChange={(v) => setDashRange(v as "day" | "month")}>
+                <Select
+                  value={periodPreset}
+                  onValueChange={(v) => setPeriodPreset(v as PeriodPreset)}
+                >
                   <SelectTrigger className="w-[160px] shrink-0">
-                    <SelectValue placeholder="Range" />
+                    <SelectValue placeholder="Period" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="day">Today</SelectItem>
-                    <SelectItem value="month">This month</SelectItem>
+                    {PERIOD_PRESETS.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               ) : null}
             </div>
+            {displayKpis.source === "shopify" && periodPreset === "custom" ? (
+              <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-gray-100 bg-gray-50/80 p-3">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-gray-500">Start</p>
+                  <Input
+                    type="date"
+                    className="h-9 w-auto"
+                    value={customStart}
+                    onChange={(e) => setCustomStart(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-gray-500">End</p>
+                  <Input
+                    type="date"
+                    className="h-9 w-auto"
+                    value={customEnd}
+                    onChange={(e) => setCustomEnd(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    if (!customStart || !customEnd) {
+                      toast.error("Pick a start and end date");
+                      return;
+                    }
+                    if (customEnd < customStart) {
+                      toast.error("End date must be on or after start");
+                      return;
+                    }
+                    setAppliedCustom({ start: customStart, end: customEnd });
+                  }}
+                >
+                  Apply
+                </Button>
+              </div>
+            ) : null}
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
@@ -827,7 +927,7 @@ export function BrandHubDetail() {
                       : "text-gray-500"
                   }`}
                 >
-                  Profit {isMonthView ? "this month" : "today"}
+                  Profit · {viewLabel}
                 </p>
                 <p
                   className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight sm:text-4xl ${
@@ -852,19 +952,19 @@ export function BrandHubDetail() {
                     <div className="flex justify-between gap-3">
                       <dt>Revenue</dt>
                       <dd className="tabular-nums text-gray-900">
-                        {formatShopifyMoney(isMonthView ? kpiNumbers.monthSales : kpiNumbers.dailySales)}
+                        {formatShopifyMoney(kpiNumbers.sales)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt>Shopify fees</dt>
                       <dd className="tabular-nums text-rose-700">
-                        −{formatShopifyMoney(isMonthView ? kpiNumbers.monthFees : kpiNumbers.dailyFees)}
+                        −{formatShopifyMoney(kpiNumbers.fees)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt>Ad spend</dt>
                       <dd className="tabular-nums text-rose-700">
-                        −{formatShopifyMoney(isMonthView ? kpiNumbers.adsSpendMonth : kpiNumbers.adsSpendToday)}
+                        −{formatShopifyMoney(kpiNumbers.adsSpend)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-3">
@@ -884,35 +984,33 @@ export function BrandHubDetail() {
                 sub={viewSub}
               />
               <KpiTile
-                label={isMonthView ? "Orders this month" : "Orders today"}
+                label="Orders"
                 value={viewOrders}
                 sub={viewSub}
               />
               <KpiTile
                 label="Shopify fees"
                 value={viewFees}
-                sub={isMonthView ? "Processing · MTD" : "Processing · today"}
+                sub={`Processing · ${viewLabel}`}
               />
               <KpiTile
-                label={isMonthView ? "Items this month" : "Items today"}
+                label="Items sold"
                 value={viewItems}
-                sub={isMonthView ? "Units sold · MTD" : "In today's orders"}
+                sub={`Units · ${viewLabel}`}
               />
               <KpiTile
                 label="Top product"
                 value={displayKpis.topProduct}
-                sub="Shopify · MTD units"
+                sub={viewSub}
               />
               <KpiTile
-                label={isMonthView ? "Ad spend this month" : "Ad spend today"}
+                label="Ad spend"
                 value={viewAds}
                 sub={
                   displayKpis.source === "shopify"
-                    ? viewAds === "—" && !isMonthView
+                    ? viewAds === "—"
                       ? "Meta · connect token"
-                      : isMonthView
-                        ? "Meta Ads · MTD"
-                        : "Meta Ads · today"
+                      : `Meta Ads · ${viewLabel}`
                     : "est."
                 }
               />
@@ -922,9 +1020,9 @@ export function BrandHubDetail() {
             <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <KpiTile
-                  label={isMonthView ? "Production cost MTD" : "Production cost today"}
+                  label="Production cost"
                   value={
-                    (isMonthView ? monthSoldItems : dailySoldItems).length === 0
+                    periodSoldItems.length === 0
                       ? "—"
                       : productionView.coveredUnits === 0
                         ? "Set costs ↓"
@@ -933,9 +1031,7 @@ export function BrandHubDetail() {
                   sub={
                     productionView.missingUnits > 0
                       ? `${productionView.missingUnits} units missing cost`
-                      : isMonthView
-                        ? "Garment + labor · month"
-                        : "Garment + labor"
+                      : `Garment + labor · ${viewLabel}`
                   }
                 />
                 <KpiTile
@@ -945,10 +1041,10 @@ export function BrandHubDetail() {
                       ? formatShopifyMoney(productionView.total / productionView.coveredUnits)
                       : "—"
                   }
-                  sub={isMonthView ? "Month · priced units only" : "Today · priced units only"}
+                  sub={`${viewLabel} · priced units only`}
                 />
                 <KpiTile
-                  label={isMonthView ? "Covered units MTD" : "Covered units today"}
+                  label="Covered units"
                   value={
                     productionView.coveredUnits > 0 ? String(productionView.coveredUnits) : "—"
                   }
@@ -960,9 +1056,9 @@ export function BrandHubDetail() {
             <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <KpiTile
-                  label={isMonthView ? "Shipping this month" : "Shipping today"}
+                  label="Shipping charged"
                   value={viewShipping}
-                  sub={isMonthView ? "Charged · MTD" : "Charged on today's orders"}
+                  sub={`Charged · ${viewLabel}`}
                 />
                 <KpiTile
                   label="Avg shipping / order"
@@ -970,7 +1066,7 @@ export function BrandHubDetail() {
                   sub={viewLabel}
                 />
                 <KpiTile
-                  label={isMonthView ? "Orders this month" : "Orders today"}
+                  label="Orders"
                   value={viewOrders}
                   sub={viewSub}
                 />
@@ -1018,7 +1114,7 @@ export function BrandHubDetail() {
                 </div>
               ) : null}
 
-              {!isMonthView && displayKpis.orderShipping.length > 0 ? (
+              {isTodayPeriod && displayKpis.orderShipping.length > 0 ? (
                 <div className="overflow-hidden rounded-xl border border-gray-100">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
@@ -1039,11 +1135,11 @@ export function BrandHubDetail() {
                     </tbody>
                   </table>
                 </div>
-              ) : !isMonthView && displayKpis.source === "shopify" ? (
+              ) : isTodayPeriod && displayKpis.source === "shopify" ? (
                 <p className="text-sm text-gray-500">No orders today — shipping row empty.</p>
-              ) : isMonthView ? (
+              ) : displayKpis.source === "shopify" ? (
                 <p className="text-sm text-gray-500">
-                  Per-order shipping list is available in Today view.
+                  Per-order shipping list is available when viewing Today.
                 </p>
               ) : null}
             </div>

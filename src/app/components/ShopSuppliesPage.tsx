@@ -30,12 +30,19 @@ import {
   type SupplyUnit,
 } from "../lib/shop-supplies-storage";
 import {
+  fetchProductCostsForBrand,
   getCostsForBrand,
   persistProductCostsForBrand,
   type ProductUnitCost,
 } from "../lib/brand-hub-product-costs";
-import { formatShopifyMoney } from "../lib/shopify-dashboard";
+import {
+  fetchShopifyProducts,
+  formatShopifyMoney,
+  type ShopifyProduct,
+} from "../lib/shopify-dashboard";
+import { useAuth } from "../lib/use-auth";
 import { InventoryDataTable } from "./InventoryDataTable";
+import { ProductCostSheet } from "./ProductCostSheet";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -64,7 +71,16 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { cn } from "./ui/utils";
-import { CircleHelp, ExternalLink, ImagePlus, Package, Plus, Trash2 } from "lucide-react";
+import {
+  CircleHelp,
+  ExternalLink,
+  ImagePlus,
+  Loader2,
+  Package,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 
 type CategoryFilter = "all" | SupplyCategory;
 
@@ -122,6 +138,7 @@ async function readSupplyPhoto(file: File): Promise<string> {
 }
 
 export function ShopSuppliesPage() {
+  const { isCeo } = useAuth();
   const [brand, setBrand] = useState<SupplyBrand>("live-don");
   const [data, setData] = useState<BrandSupplies>(() => loadBrandSupplies("live-don"));
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
@@ -133,6 +150,7 @@ export function ShopSuppliesPage() {
   const [matLow, setMatLow] = useState("10");
   const [matUnit, setMatUnit] = useState<SupplyUnit>("ea");
   const [matUnitCost, setMatUnitCost] = useState("");
+  const [matUnitsPerPack, setMatUnitsPerPack] = useState("1");
   const [matPhoto, setMatPhoto] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const addPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +165,7 @@ export function ShopSuppliesPage() {
   const [editUnit, setEditUnit] = useState<SupplyUnit>("ea");
   const [editOnHand, setEditOnHand] = useState("0");
   const [editUnitCost, setEditUnitCost] = useState("");
+  const [editUnitsPerPack, setEditUnitsPerPack] = useState("1");
   const [editNotes, setEditNotes] = useState("");
   const [editReorderUrl, setEditReorderUrl] = useState("");
 
@@ -160,14 +179,41 @@ export function ShopSuppliesPage() {
   const [orderProducts, setOrderProducts] = useState<
     Array<{ productId: string; productName: string }>
   >([]);
+  const [shopifyProducts, setShopifyProducts] = useState<ShopifyProduct[]>([]);
+  const [productCosts, setProductCosts] = useState<Record<string, ProductUnitCost>>({});
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [costProduct, setCostProduct] = useState<ShopifyProduct | null>(null);
 
   const refresh = (nextBrand = brand) => {
     if (nextBrand === "live-don") ensureLivdonSeedIfEmpty();
     setData(loadBrandSupplies(nextBrand));
   };
 
+  const loadShopifyProducts = async (nextBrand = brand) => {
+    setProductsLoading(true);
+    setProductsError(null);
+    try {
+      const [products, costs] = await Promise.all([
+        fetchShopifyProducts(nextBrand),
+        fetchProductCostsForBrand(nextBrand),
+      ]);
+      setShopifyProducts(
+        [...products].sort((a, b) => (a.title || "").localeCompare(b.title || "")),
+      );
+      setProductCosts(costs);
+    } catch (err) {
+      setShopifyProducts([]);
+      setProductCosts(getCostsForBrand(nextBrand));
+      setProductsError(err instanceof Error ? err.message : "Could not load Shopify products");
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
   useEffect(() => {
     refresh(brand);
+    void loadShopifyProducts(brand);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- brand-driven reload
   }, [brand]);
 
@@ -199,6 +245,20 @@ export function ShopSuppliesPage() {
     };
   }, [brand]);
 
+  const materialsCostForProduct = (product: ShopifyProduct) => {
+    const recipe = data.recipes.find((r) => r.productId === product.id);
+    if (recipe) {
+      return recipeMaterialCost(recipe, data.materials);
+    }
+    const title = product.title?.trim() || "";
+    const garment = productCosts[title]?.garmentCost ?? 0;
+    return {
+      total: garment,
+      complete: garment > 0,
+      lines: [] as ReturnType<typeof recipeMaterialCost>["lines"],
+    };
+  };
+
   const materials = useMemo(() => {
     const list =
       categoryFilter === "all"
@@ -214,6 +274,7 @@ export function ShopSuppliesPage() {
     setMatLow("10");
     setMatUnit("ea");
     setMatUnitCost("");
+    setMatUnitsPerPack("1");
     setMatPhoto(null);
     if (addPhotoInputRef.current) addPhotoInputRef.current.value = "";
   };
@@ -236,6 +297,7 @@ export function ShopSuppliesPage() {
         lowStockAt: Number(matLow) || 0,
         unit: matUnit,
         unitCost: Number(matUnitCost) || 0,
+        unitsPerPack: Number(matUnitsPerPack) || 1,
         photoDataUrl: matPhoto || undefined,
       }),
     );
@@ -272,6 +334,7 @@ export function ShopSuppliesPage() {
     setEditUnitCost(
       materialUnitCost(material) > 0 ? String(materialUnitCost(material)) : "",
     );
+    setEditUnitsPerPack(String(Math.max(1, material.unitsPerPack || 1)));
     setEditNotes(material.notes || "");
     setEditReorderUrl(material.reorderUrl || "");
   };
@@ -352,6 +415,7 @@ export function ShopSuppliesPage() {
     const onHand = Number(editOnHand);
     const low = Number(editLow);
     const unitCost = Number(editUnitCost);
+    const unitsPerPack = editUnit === "pack" ? Number(editUnitsPerPack) : 1;
     if (!Number.isFinite(onHand) || onHand < 0) {
       toast.error("Enter a valid on-hand quantity");
       return;
@@ -364,6 +428,10 @@ export function ShopSuppliesPage() {
       toast.error("Enter a valid unit cost");
       return;
     }
+    if (editUnit === "pack" && (!Number.isFinite(unitsPerPack) || unitsPerPack < 1)) {
+      toast.error("Enter how many come in a pack (at least 1)");
+      return;
+    }
     setData(
       updateMaterial(brand, detailMaterialId, {
         name: editName,
@@ -372,6 +440,7 @@ export function ShopSuppliesPage() {
         lowStockAt: low,
         unit: editUnit,
         unitCost,
+        unitsPerPack,
       }),
     );
     toast.success("Settings saved");
@@ -512,32 +581,163 @@ export function ShopSuppliesPage() {
 
       <Tabs defaultValue="inventory" className="gap-4">
         <TabsList>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
+          <TabsTrigger value="inventory">Supplies</TabsTrigger>
+          <TabsTrigger value="products">Products</TabsTrigger>
           <TabsTrigger value="recipes">Recipes</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="inventory" className="space-y-4 outline-none">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs">
-              <p className="text-xs font-medium text-gray-500">Inventory value</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">
-                {formatShopifyMoney(brandInventoryValue(data), "USD")}
-              </p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs">
-              <p className="text-xs font-medium text-gray-500">SKUs</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">
-                {data.materials.length}
-              </p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs col-span-2 sm:col-span-1">
-              <p className="text-xs font-medium text-gray-500">Missing unit cost</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">
-                {data.materials.filter((m) => materialUnitCost(m) <= 0).length}
-              </p>
-            </div>
+        <TabsContent value="products" className="space-y-4 outline-none">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-gray-500">
+              Shopify products for {SUPPLY_BRAND_LABELS[brand]} — set exact cost
+              for every component (blanks, labels, packing, shipping supplies).
+              Switch stores above to do both brands.
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="gap-1"
+              disabled={productsLoading}
+              onClick={() => void loadShopifyProducts(brand)}
+            >
+              <RefreshCw className={cn("size-3.5", productsLoading && "animate-spin")} />
+              Refresh
+            </Button>
           </div>
+
+          {productsLoading && shopifyProducts.length === 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-10 text-sm text-gray-500 shadow-xs">
+              <Loader2 className="size-4 animate-spin" />
+              Loading Shopify products…
+            </div>
+          ) : productsError && shopifyProducts.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {productsError}
+            </div>
+          ) : shopifyProducts.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center text-sm text-gray-500">
+              No Shopify products found for this brand.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-4 py-2.5 font-medium">Product</th>
+                    <th className="px-4 py-2.5 font-medium">Status</th>
+                    <th className="px-4 py-2.5 font-medium">Shopify qty</th>
+                    {isCeo ? (
+                      <>
+                        <th className="px-4 py-2.5 font-medium">Materials cost</th>
+                        <th className="px-4 py-2.5 font-medium" />
+                      </>
+                    ) : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shopifyProducts.map((product) => {
+                    const title = product.title?.trim() || "Untitled";
+                    const rolled = materialsCostForProduct(product);
+                    const hasRecipe = data.recipes.some(
+                      (r) => r.productId === product.id,
+                    );
+                    return (
+                      <tr key={product.id} className="border-t border-gray-100">
+                        <td className="px-4 py-2.5">
+                          <p className="font-medium text-gray-950">{title}</p>
+                          {product.handle ? (
+                            <p className="text-xs text-gray-400">{product.handle}</p>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-2.5 capitalize text-gray-600">
+                          {(product.status || "—").toLowerCase()}
+                        </td>
+                        <td className="px-4 py-2.5 tabular-nums text-gray-700">
+                          {product.totalInventory == null ? "—" : product.totalInventory}
+                        </td>
+                        {isCeo ? (
+                          <>
+                            <td className="px-4 py-2.5">
+                              <p className="font-medium tabular-nums text-gray-950">
+                                {rolled.total > 0
+                                  ? formatShopifyMoney(rolled.total, "USD")
+                                  : "—"}
+                              </p>
+                              {!hasRecipe ? (
+                                <p className="text-xs text-amber-700">No components yet</p>
+                              ) : !rolled.complete ? (
+                                <p className="text-xs text-amber-700">Missing costs</p>
+                              ) : (
+                                <p className="text-xs text-gray-400">
+                                  {rolled.lines.length} component
+                                  {rolled.lines.length === 1 ? "" : "s"}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => setCostProduct(product)}
+                              >
+                                Set costs
+                              </Button>
+                            </td>
+                          </>
+                        ) : null}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {isCeo ? (
+            <ProductCostSheet
+              open={costProduct != null}
+              onOpenChange={(open) => {
+                if (!open) setCostProduct(null);
+              }}
+              brand={brand}
+              product={costProduct}
+              allProducts={shopifyProducts}
+              data={data}
+              productCosts={productCosts}
+              onSaved={(next, costs) => {
+                setData(next);
+                setProductCosts(costs);
+              }}
+            />
+          ) : null}
+        </TabsContent>
+
+        <TabsContent value="inventory" className="space-y-4 outline-none">
+          {isCeo ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs">
+                <p className="text-xs font-medium text-gray-500">Inventory value</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">
+                  {formatShopifyMoney(brandInventoryValue(data), "USD")}
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs">
+                <p className="text-xs font-medium text-gray-500">SKUs</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">
+                  {data.materials.length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs col-span-2 sm:col-span-1">
+                <p className="text-xs font-medium text-gray-500">Missing unit cost</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">
+                  {data.materials.filter((m) => materialUnitCost(m) <= 0).length}
+                </p>
+              </div>
+            </div>
+          ) : null}
           <input
             ref={addPhotoInputRef}
             type="file"
@@ -677,6 +877,21 @@ export function ShopSuppliesPage() {
                       className="w-24"
                     />
                   </div>
+                  {matUnit === "pack" ? (
+                    <div className="grid w-28 gap-2">
+                      <Label htmlFor="add-units-per-pack">Per pack</Label>
+                      <Input
+                        id="add-units-per-pack"
+                        type="number"
+                        min={1}
+                        step={1}
+                        placeholder="e.g. 100"
+                        value={matUnitsPerPack}
+                        onChange={(e) => setMatUnitsPerPack(e.target.value)}
+                        className="w-28"
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <SheetFooter>
@@ -710,6 +925,7 @@ export function ShopSuppliesPage() {
                 data={materials}
                 onOpenDetail={openMaterialDetail}
                 onDelete={onDeleteMaterial}
+                showCosts={isCeo}
                 toolbarActions={
                   <>
                     <Select
@@ -1018,6 +1234,43 @@ export function ShopSuppliesPage() {
                               className="w-28"
                             />
                           </div>
+                          {editUnit === "pack" ? (
+                            <div className="grid w-32 gap-2">
+                              <div className="flex items-center gap-0.5">
+                                <Label htmlFor="edit-units-per-pack">Per pack</Label>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      className="-ml-0.5 size-5"
+                                      aria-label="About per pack"
+                                    >
+                                      <CircleHelp />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent sideOffset={4} className="max-w-[12.5rem] text-pretty">
+                                    <p>
+                                      How many pieces come
+                                      <br />
+                                      in one pack
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                              <Input
+                                id="edit-units-per-pack"
+                                type="number"
+                                min={1}
+                                step={1}
+                                placeholder="e.g. 100"
+                                value={editUnitsPerPack}
+                                onChange={(e) => setEditUnitsPerPack(e.target.value)}
+                                className="w-32"
+                              />
+                            </div>
+                          ) : null}
                         </div>
                         <div>
                           <Button
