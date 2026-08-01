@@ -452,7 +452,6 @@ export function SupportPage() {
       setConfigured(status.configured);
       setConnected(status.connected);
       setCanSend(Boolean(status.canSend));
-      setAutoReplyLive(Boolean(status.autoReplyLive));
       setEmail(status.email ?? null);
       setClientId(status.clientId ?? null);
       setRedirectUri(status.redirectUri ?? null);
