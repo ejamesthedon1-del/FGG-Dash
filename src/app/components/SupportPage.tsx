@@ -415,7 +415,6 @@ export function SupportPage() {
   const [configured, setConfigured] = useState(false);
   const [connected, setConnected] = useState(false);
   const [canSend, setCanSend] = useState(false);
-  const [autoReplyLive, setAutoReplyLive] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
   const [redirectUri, setRedirectUri] = useState<string | null>(null);
