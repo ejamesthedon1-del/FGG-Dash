@@ -19,6 +19,29 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+function costTotal(c: ProductUnitCost | undefined): number {
+  if (!c) return 0;
+  return (Number(c.garmentCost) || 0) + (Number(c.laborCost) || 0);
+}
+
+/** Prefer non-zero / higher totals so empty server never wipes local entry. */
+export function mergeProductCostMaps(
+  local: Record<string, ProductUnitCost>,
+  remote: Record<string, ProductUnitCost>,
+): Record<string, ProductUnitCost> {
+  const out: Record<string, ProductUnitCost> = { ...local };
+  for (const [title, remoteCost] of Object.entries(remote)) {
+    const localCost = out[title];
+    if (!localCost || costTotal(remoteCost) >= costTotal(localCost)) {
+      out[title] = {
+        garmentCost: Number(remoteCost.garmentCost) || 0,
+        laborCost: Number(remoteCost.laborCost) || 0,
+      };
+    }
+  }
+  return out;
+}
+
 export function unitProductionCost(c: ProductUnitCost | undefined): number {
   if (!c) return 0;
   return (Number(c.garmentCost) || 0) + (Number(c.laborCost) || 0);
@@ -61,10 +84,11 @@ export function getCostsForBrand(brandSlug: string): Record<string, ProductUnitC
   return { ...(loadProductCosts()[brandSlug] ?? {}) };
 }
 
-/** Load costs from Railway (source of truth), fall back to local cache. */
+/** Load costs from Railway (source of truth), merge with local — never wipe richer local data. */
 export async function fetchProductCostsForBrand(
   brandSlug: string,
 ): Promise<Record<string, ProductUnitCost>> {
+  const local = getCostsForBrand(brandSlug);
   try {
     const res = await fetch(
       apiUrl(`/api/product-costs?brand=${encodeURIComponent(brandSlug)}`),
@@ -73,18 +97,27 @@ export async function fetchProductCostsForBrand(
     const body = (await res.json()) as {
       costs?: Record<string, { garmentCost?: number; laborCost?: number }>;
     };
-    const remote = body.costs ?? {};
-    const normalized: Record<string, ProductUnitCost> = {};
-    for (const [title, cost] of Object.entries(remote)) {
-      normalized[title] = {
+    const remoteRaw = body.costs ?? {};
+    const remote: Record<string, ProductUnitCost> = {};
+    for (const [title, cost] of Object.entries(remoteRaw)) {
+      remote[title] = {
         garmentCost: Number(cost?.garmentCost) || 0,
         laborCost: Number(cost?.laborCost) || 0,
       };
     }
-    saveProductCostsForBrand(brandSlug, normalized);
-    return normalized;
+    const merged = mergeProductCostMaps(local, remote);
+    saveProductCostsForBrand(brandSlug, merged);
+
+    // If local had costs the server was missing, push them up once.
+    const localRicher = Object.keys(local).some(
+      (title) => costTotal(local[title]) > costTotal(remote[title]),
+    );
+    if (localRicher || (Object.keys(remote).length === 0 && Object.keys(local).length > 0)) {
+      void persistProductCostsForBrand(brandSlug, merged);
+    }
+    return merged;
   } catch {
-    return getCostsForBrand(brandSlug);
+    return local;
   }
 }
 

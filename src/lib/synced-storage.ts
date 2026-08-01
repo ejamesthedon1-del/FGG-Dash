@@ -123,8 +123,19 @@ export async function pullAndMergeRemoteStorage(): Promise<void> {
 
   for (const key of keysToSync) {
     if (remoteMap.has(key)) {
+      const remoteStr = remoteValueToString(remoteMap.get(key));
+      const local = localStorage.getItem(key);
+      // Never let an empty cloud snapshot wipe richer inventory/costs.
+      if (
+        (key === "fgg.shop-supplies.v1" || key === "brand-hub-product-costs-v1") &&
+        local &&
+        local.length > remoteStr.length + 50
+      ) {
+        await pushSyncedStorageValue(key, local);
+        continue;
+      }
       try {
-        localStorage.setItem(key, remoteValueToString(remoteMap.get(key)));
+        localStorage.setItem(key, remoteStr);
       } catch (e) {
         console.error("[synced-storage] local write", key, e);
       }

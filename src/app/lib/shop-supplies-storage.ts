@@ -1,4 +1,5 @@
 import { writeLocalAndSync } from "@/lib/synced-storage";
+import { apiUrl } from "./api-base";
 
 export const SHOP_SUPPLIES_KEY = "fgg.shop-supplies.v1";
 const MAX_EVENTS = 200;
@@ -195,7 +196,67 @@ function parseStore(raw: string | null): ShopSuppliesStore {
 
 function persist(store: ShopSuppliesStore): void {
   if (typeof localStorage === "undefined") return;
-  writeLocalAndSync(SHOP_SUPPLIES_KEY, JSON.stringify(store));
+  const raw = JSON.stringify(store);
+  writeLocalAndSync(SHOP_SUPPLIES_KEY, raw);
+  void pushShopSuppliesToServer(store);
+}
+
+function brandRichness(brand: BrandSupplies): number {
+  const costed = brand.materials.filter((m) => materialUnitCost(m) > 0).length;
+  return brand.materials.length * 10 + brand.recipes.length * 25 + costed * 5;
+}
+
+function mergeStores(local: ShopSuppliesStore, remote: ShopSuppliesStore): ShopSuppliesStore {
+  const out = emptyStore();
+  for (const brand of SUPPLY_BRANDS) {
+    const a = local[brand] ?? emptyBrand();
+    const b = remote[brand] ?? emptyBrand();
+    out[brand] = brandRichness(a) >= brandRichness(b) ? a : b;
+  }
+  return out;
+}
+
+async function pushShopSuppliesToServer(store: ShopSuppliesStore): Promise<void> {
+  try {
+    await fetch(apiUrl("/api/shop-supplies"), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ store }),
+    });
+  } catch (e) {
+    console.error("[shop-supplies] server push failed", e);
+  }
+}
+
+/** Pull Railway inventory/recipes and merge with local (never wipe richer local). */
+export async function syncShopSuppliesFromServer(): Promise<ShopSuppliesStore> {
+  const local = loadShopSupplies();
+  try {
+    const res = await fetch(apiUrl("/api/shop-supplies"));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = (await res.json()) as { store?: unknown };
+    const remote = parseStore(JSON.stringify(body.store ?? {}));
+    const merged = mergeStores(local, remote);
+    const raw = JSON.stringify(merged);
+    if (typeof localStorage !== "undefined") {
+      writeLocalAndSync(SHOP_SUPPLIES_KEY, raw);
+    }
+    // Upload if local was richer / server empty
+    let shouldPush = false;
+    for (const brand of SUPPLY_BRANDS) {
+      if (brandRichness(local[brand]) > brandRichness(remote[brand])) {
+        shouldPush = true;
+        break;
+      }
+    }
+    if (shouldPush) void pushShopSuppliesToServer(merged);
+    return merged;
+  } catch {
+    if (brandRichness(local["live-don"]) + brandRichness(local["sinners-testimony"]) > 0) {
+      void pushShopSuppliesToServer(local);
+    }
+    return local;
+  }
 }
 
 export function loadShopSupplies(): ShopSuppliesStore {

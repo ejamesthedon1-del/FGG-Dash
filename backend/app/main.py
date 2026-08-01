@@ -22,7 +22,7 @@ from .schemas import (
 from .shopify import ShopifyGraphQLError, cancel_order_for_fraud, get_shopify_client
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
-from . import gmail_store, gmail_support, mockups, order_flow_store, product_costs_store, support_auto_reply
+from . import gmail_store, gmail_support, mockups, order_flow_store, product_costs_store, shop_supplies_store, support_auto_reply
 from .order_flow import build_order_flow
 from .shopify_color import PRODUCT_COLOR_GRAPHQL, product_label_with_color, resolve_product_color
 
@@ -376,6 +376,22 @@ async def put_product_costs(body: ProductCostsPutRequest, brand: str = "live-don
     }
     saved = product_costs_store.save_brand(brand_key, payload)
     return {"brand": brand_key, "costs": saved}
+
+
+@app.get("/api/shop-supplies")
+async def get_shop_supplies() -> dict:
+    """Persistent inventory materials + recipes (shared across users/devices)."""
+    return {"store": shop_supplies_store.load_all()}
+
+
+@app.put("/api/shop-supplies")
+async def put_shop_supplies(body: dict) -> dict:
+    """Replace the full shop-supplies store. Body: { \"store\": { brand: BrandSupplies } }."""
+    store = body.get("store") if isinstance(body, dict) else None
+    if not isinstance(store, dict):
+        raise HTTPException(status_code=400, detail="Body must include a store object")
+    saved = shop_supplies_store.save_all(store)
+    return {"store": saved}
 
 
 @app.get("/api/order-flow")

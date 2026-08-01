@@ -15,6 +15,7 @@ import {
   loadBrandSupplies,
   materialUnitCost,
   recipeMaterialCost,
+  syncShopSuppliesFromServer,
   SUPPLY_BRAND_LABELS,
   SUPPLY_BRANDS,
   SUPPLY_CATEGORIES,
@@ -189,6 +190,18 @@ export function ShopSuppliesPage() {
     if (nextBrand === "live-don") ensureLivdonSeedIfEmpty();
     setData(loadBrandSupplies(nextBrand));
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await syncShopSuppliesFromServer();
+      if (!cancelled) refresh(brand);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time server hydrate
+  }, []);
 
   const loadShopifyProducts = async (nextBrand = brand) => {
     setProductsLoading(true);
