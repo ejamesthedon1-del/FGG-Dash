@@ -244,15 +244,15 @@ function NavMenuItems({
               </NavLink>
             </SidebarMenuButton>
             {badgeCount > 0 ? (
-              <SidebarMenuBadge
-                className={
-                  showSupportEsc
-                    ? "bg-destructive text-white"
-                    : "bg-brand text-brand-foreground"
-                }
-              >
-                +{badgeCount > 99 ? "99" : badgeCount}
-              </SidebarMenuBadge>
+              showSupportEsc ? (
+                <SidebarMenuBadge className="right-1.5 top-1.5 size-4 min-w-4 rounded-full bg-destructive p-0 text-[9px] font-semibold leading-none text-white">
+                  {badgeCount > 9 ? "9+" : badgeCount}
+                </SidebarMenuBadge>
+              ) : (
+                <SidebarMenuBadge className="bg-brand text-brand-foreground">
+                  +{badgeCount > 99 ? "99" : badgeCount}
+                </SidebarMenuBadge>
+              )
             ) : null}
           </SidebarMenuItem>
         );
