@@ -740,12 +740,6 @@ export function SupportPage() {
 
       {!loading && connected ? (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            {autoReplyLive
-              ? "Status asks auto-reply. Escalated threads need an ops manager."
-              : "Auto-replies are in test mode. Templates are in Settings (CEO)."}
-          </p>
-
           {realNeedsCount > 0 ? (
             <Alert>
               <AlertTitle className="flex flex-wrap items-center gap-2">
