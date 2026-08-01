@@ -247,7 +247,7 @@ function NavMenuItems({
               <SidebarMenuBadge
                 className={
                   showSupportEsc
-                    ? "bg-amber-600 text-white"
+                    ? "bg-secondary text-secondary-foreground"
                     : "bg-brand text-brand-foreground"
                 }
               >

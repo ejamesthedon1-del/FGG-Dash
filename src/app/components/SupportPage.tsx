@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
-  AlertTriangle,
   ExternalLink,
   Inbox,
   LifeBuoy,
@@ -748,22 +747,21 @@ export function SupportPage() {
           </p>
 
           {realNeedsCount > 0 ? (
-            <Alert className="border-amber-200 bg-amber-50 text-amber-950 [&>svg]:text-amber-700">
-              <AlertTriangle />
+            <Alert>
               <AlertTitle className="flex flex-wrap items-center gap-2">
                 {realNeedsCount}{" "}
                 {realNeedsCount === 1
                   ? "message needs attention"
                   : "messages need attention"}
-                <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600">
+                <Badge variant="secondary" className="text-[10px]">
                   +{realNeedsCount > 99 ? "99" : realNeedsCount}
                 </Badge>
               </AlertTitle>
-              <AlertDescription className="text-amber-900/80">
+              <AlertDescription>
                 Auto-reply couldn&apos;t finish these — open{" "}
                 <button
                   type="button"
-                  className="font-medium text-amber-950 underline underline-offset-2"
+                  className="font-medium text-foreground underline underline-offset-2"
                   onClick={() => setFilter("needs")}
                 >
                   Needs attention
@@ -772,22 +770,21 @@ export function SupportPage() {
               </AlertDescription>
             </Alert>
           ) : showExample ? (
-            <Alert className="border-amber-200/80 bg-amber-50/60 text-amber-950 [&>svg]:text-amber-700">
-              <AlertTriangle />
+            <Alert>
               <AlertTitle className="flex flex-wrap items-center gap-2">
                 Example: 1 message needs attention
                 <Badge variant="outline" className="text-[10px]">
                   Example
                 </Badge>
-                <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600">
+                <Badge variant="secondary" className="text-[10px]">
                   +1
                 </Badge>
               </AlertTitle>
-              <AlertDescription className="text-amber-900/80">
+              <AlertDescription>
                 Open the sample thread in{" "}
                 <button
                   type="button"
-                  className="font-medium text-amber-950 underline underline-offset-2"
+                  className="font-medium text-foreground underline underline-offset-2"
                   onClick={() => {
                     setFilter("needs");
                     void openThread(EXAMPLE_THREAD_ID);
@@ -935,7 +932,6 @@ export function SupportPage() {
                           className={cn(
                             "flex w-full gap-2.5 px-3 py-3 text-left transition-colors hover:bg-muted/50",
                             active && "bg-muted",
-                            t.escalation && !active && "bg-amber-50/80",
                           )}
                         >
                           <div
@@ -1045,7 +1041,6 @@ export function SupportPage() {
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
                   {selectedId === EXAMPLE_THREAD_ID ? (
                     <Alert>
-                      <AlertTriangle />
                       <AlertTitle>How Needs attention works</AlertTitle>
                       <AlertDescription>
                         <p>
@@ -1054,7 +1049,7 @@ export function SupportPage() {
                           size issues, no matching order — shows up here for an
                           ops manager.
                         </p>
-                        <p className="mt-2">
+                        <p>
                           Open the sample message below, then tap{" "}
                           <span className="font-medium text-foreground">
                             Got it — dismiss example
