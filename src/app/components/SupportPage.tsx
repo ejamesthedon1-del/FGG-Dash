@@ -428,12 +428,13 @@ export function SupportPage() {
   const [filter, setFilter] = useState<InboxFilter>("needs");
   const [activity, setActivity] = useState<SupportActivityEvent[]>([]);
   const [showExample, setShowExample] = useState(() => !readExampleDismissed());
+  const [exampleUnread, setExampleUnread] = useState(true);
 
   const displayThreads = useMemo(() => {
     if (!showExample) return threads;
     const without = threads.filter((t) => t.id !== EXAMPLE_THREAD_ID);
-    return [buildExampleThread(), ...without];
-  }, [threads, showExample]);
+    return [{ ...buildExampleThread(), unread: exampleUnread }, ...without];
+  }, [threads, showExample, exampleUnread]);
 
   const loadActivity = useCallback(async () => {
     try {
@@ -568,6 +569,7 @@ export function SupportPage() {
     if (threadId === EXAMPLE_THREAD_ID) {
       setDetail(buildExampleDetail());
       setDetailLoading(false);
+      setExampleUnread(false);
       return;
     }
     setDetailLoading(true);
@@ -890,6 +892,13 @@ export function SupportPage() {
                             active && "bg-muted",
                           )}
                         >
+                          <span
+                            className={cn(
+                              "mt-3 size-1.5 shrink-0 rounded-full",
+                              t.unread ? "bg-brand" : "bg-transparent",
+                            )}
+                            aria-hidden
+                          />
                           <div
                             className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground"
                             aria-hidden
