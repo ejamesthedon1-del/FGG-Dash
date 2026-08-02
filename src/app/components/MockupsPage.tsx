@@ -22,6 +22,7 @@ import {
 } from "./ui/select";
 import { cn } from "./ui/utils";
 import { MockupsAdCopySection } from "./MockupsAdCopySection";
+import { InstagramScheduleSection } from "./InstagramScheduleSection";
 import { MockupsSectionNav } from "./MockupsSectionNav";
 import {
   generateClothingMockup,
@@ -73,7 +74,13 @@ function toPreviewFiles(list: FileList | File[]): PreviewFile[] {
 
 export function MockupsPage() {
   const [searchParams] = useSearchParams();
-  const section = searchParams.get("section") === "ad-copy" ? "ad-copy" : "generate";
+  const sectionParam = searchParams.get("section");
+  const section =
+    sectionParam === "ad-copy"
+      ? "ad-copy"
+      : sectionParam === "schedule"
+        ? "schedule"
+        : "generate";
   const inputId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = useState("");
@@ -188,6 +195,8 @@ export function MockupsPage() {
 
       {section === "ad-copy" ? (
         <MockupsAdCopySection />
+      ) : section === "schedule" ? (
+        <InstagramScheduleSection />
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3">

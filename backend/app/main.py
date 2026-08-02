@@ -22,7 +22,7 @@ from .schemas import (
 from .shopify import ShopifyGraphQLError, cancel_order_for_fraud, get_shopify_client
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
-from . import gmail_store, gmail_support, mockups, order_flow_store, product_costs_store, shop_supplies_store, support_auto_reply
+from . import gmail_store, gmail_support, instagram, instagram_store, mockups, order_flow_store, product_costs_store, shop_supplies_store, support_auto_reply
 from .order_flow import build_order_flow
 from .shopify_color import PRODUCT_COLOR_GRAPHQL, product_label_with_color, resolve_product_color
 
@@ -92,6 +92,9 @@ async def health() -> dict:
             "gmailConfigured": gmail_support.gmail_configured(),
             "gmailConnected": bool(gmail_store.get_tokens()),
         },
+        "instagram": {
+            "configured": instagram.instagram_configured(),
+        },
     }
 
 
@@ -132,6 +135,73 @@ async def support_gmail_callback(code: str | None = None, state: str | None = No
 async def support_gmail_disconnect() -> dict:
     gmail_store.clear_tokens()
     return {"ok": True, "connected": False}
+
+
+@app.get("/api/instagram/status")
+async def instagram_status(brand: str = "live-don") -> dict:
+    return instagram.connection_status(brand)
+
+
+@app.get("/api/instagram/connect")
+async def instagram_connect(brand: str = "live-don", switch: int = 0):
+    url = instagram.build_authorize_url(brand)
+    return RedirectResponse(url=url, status_code=302)
+
+
+@app.get("/api/instagram/callback")
+async def instagram_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+):
+    front = instagram.frontend_origin()
+    schedule = f"{front}/mockups?section=schedule"
+    if error:
+        return RedirectResponse(
+            url=f"{schedule}&instagram=error&reason={error}",
+            status_code=302,
+        )
+    if not code or not state:
+        return RedirectResponse(
+            url=f"{schedule}&instagram=error&reason=missing_code",
+            status_code=302,
+        )
+    brand = instagram_store.consume_oauth_state(state)
+    if not brand:
+        return RedirectResponse(
+            url=f"{schedule}&instagram=error&reason=invalid_state",
+            status_code=302,
+        )
+    try:
+        await instagram.complete_oauth(brand, code)
+    except HTTPException as exc:
+        detail = str(exc.detail).replace(" ", "_")[:80]
+        return RedirectResponse(
+            url=f"{schedule}&instagram=error&reason={detail}",
+            status_code=302,
+        )
+    return RedirectResponse(
+        url=f"{schedule}&instagram=connected",
+        status_code=302,
+    )
+
+
+@app.post("/api/instagram/disconnect")
+async def instagram_disconnect(brand: str = "live-don") -> dict:
+    instagram.disconnect(brand)
+    return {"ok": True, "connected": False, "brand": instagram.normalize_brand(brand)}
+
+
+@app.post("/api/instagram/publish")
+async def instagram_publish(body: dict) -> dict:
+    brand = str(body.get("brand") or "")
+    caption = str(body.get("caption") or "")
+    image_url = str(body.get("imageUrl") or body.get("image_url") or "")
+    kind = str(body.get("kind") or "feed")
+    try:
+        return await instagram.publish_image(brand, caption, image_url, kind=kind)
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
 
 
 @app.get("/api/support/gmail/threads")

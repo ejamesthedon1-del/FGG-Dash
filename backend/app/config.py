@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     meta_sinners_access_token: Optional[str] = None
     meta_sinners_ad_account_id: Optional[str] = None
 
+    # Optional Meta App for Instagram organic publishing (CEO Studio → Schedule)
+    meta_app_id: Optional[str] = None
+    meta_app_secret: Optional[str] = None
+    meta_instagram_redirect_uri: str = "http://localhost:8000/api/instagram/callback"
+
     # Optional Slack Incoming Webhook (ops order alerts)
     slack_webhook_url: Optional[str] = None
 

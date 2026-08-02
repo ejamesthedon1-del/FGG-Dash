@@ -1,11 +1,12 @@
 import { Link } from "react-router";
 import { cn } from "./ui/utils";
 
-export type MockupsSection = "generate" | "ad-copy" | "creative-assets";
+export type MockupsSection = "generate" | "ad-copy" | "creative-assets" | "schedule";
 
 const items: { id: MockupsSection; label: string; to: string }[] = [
   { id: "generate", label: "Generate", to: "/mockups" },
   { id: "ad-copy", label: "Ad copy", to: "/mockups?section=ad-copy" },
+  { id: "schedule", label: "Schedule", to: "/mockups?section=schedule" },
   { id: "creative-assets", label: "Creative assets", to: "/creative-assets" },
 ];
 
