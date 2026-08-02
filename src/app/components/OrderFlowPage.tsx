@@ -65,7 +65,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "./ui/utils";
 import { OrderFlowRiskReviewSection } from "./OrderFlowRiskReviewSection";
 import { OrderFlowDataTable } from "./OrderFlowDataTable";
-import { NeedsBlanksBoard } from "./NeedsBlanksBoard";
 import {
   buildBlanksPrintHtml,
   printBlanksSlipHtml,
@@ -730,96 +729,79 @@ export function OrderFlowPage() {
             {STAGE_LABELS[stage]}
           </h3>
           <p className="text-sm text-gray-500">
-            {loading
-              ? "Loading…"
-              : stage === "needs_blanks"
-                ? `${visibleOrders.length} order(s) to cover`
-                : `${visibleOrders.length} order(s)`}
+            {loading ? "Loading…" : `${visibleOrders.length} order(s)`}
           </p>
         </div>
-        {stage === "needs_blanks" ? (
-          <NeedsBlanksBoard
-            orders={visibleOrders}
-            loading={loading}
-            saving={saving}
-            onMarkOrdered={(list) =>
-              void requestStageChange("blanks_ordered", list)
-            }
-            onPrintPreview={(html) => {
-              setBlanksSlipHtml(html);
-              setBlanksSlipOpen(true);
-            }}
-          />
-        ) : (
-          <OrderFlowDataTable
-            data={visibleOrders}
-            stage={stage}
-            loading={loading}
-            saving={saving}
-            selected={selected}
-            onSelectedChange={setSelected}
-            onOpenDetail={openDetail}
-            onRequestStageChange={requestStageChange}
-            toolbarActions={
-              <>
+        <OrderFlowDataTable
+          data={visibleOrders}
+          stage={stage}
+          loading={loading}
+          saving={saving}
+          selected={selected}
+          onSelectedChange={setSelected}
+          onOpenDetail={openDetail}
+          onRequestStageChange={requestStageChange}
+          toolbarActions={
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className={
+                  selectedOrders.length > 0
+                    ? "gap-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                    : "gap-2 border-gray-200 bg-gray-50 font-normal text-gray-400 disabled:opacity-100"
+                }
+                disabled={selectedOrders.length === 0}
+                onClick={() => {
+                  try {
+                    const html = buildBlanksPrintHtml(selectedOrders);
+                    setBlanksSlipHtml(html);
+                    setBlanksSlipOpen(true);
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error
+                        ? err.message
+                        : "Could not open blanks slip",
+                    );
+                  }
+                }}
+              >
+                <Printer className="h-4 w-4" />
+                Print blanks needed
+              </Button>
+              {bulkNextActions.length > 0 ? (
+                bulkNextActions.map((action) => (
+                  <Button
+                    key={`${action.stage}-${action.next}`}
+                    type="button"
+                    variant="default"
+                    disabled={saving}
+                    className="bg-brand font-medium text-white hover:bg-brand-hover disabled:opacity-70"
+                    onClick={() =>
+                      void requestStageChange(action.next, action.orders)
+                    }
+                  >
+                    {`Move ${action.orders.length} → ${STAGE_LABELS[action.next]}`}
+                  </Button>
+                ))
+              ) : (
                 <Button
                   type="button"
                   variant="outline"
-                  className="gap-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                  disabled={selectedOrders.length === 0}
-                  onClick={() => {
-                    try {
-                      const html = buildBlanksPrintHtml(selectedOrders);
-                      setBlanksSlipHtml(html);
-                      setBlanksSlipOpen(true);
-                    } catch (err) {
-                      toast.error(
-                        err instanceof Error
-                          ? err.message
-                          : "Could not open blanks slip",
-                      );
-                    }
-                  }}
+                  disabled
+                  className="border-gray-200 bg-gray-50 font-normal text-gray-400 disabled:opacity-100"
                 >
-                  <Printer className="h-4 w-4" />
-                  Print
+                  Move to next stage
                 </Button>
-                {bulkNextActions.length > 0 ? (
-                  bulkNextActions.map((action) => (
-                    <Button
-                      key={`${action.stage}-${action.next}`}
-                      type="button"
-                      variant="default"
-                      disabled={saving}
-                      className="bg-brand font-medium text-white hover:bg-brand-hover disabled:opacity-70"
-                      onClick={() =>
-                        void requestStageChange(action.next, action.orders)
-                      }
-                    >
-                      {action.next === "blanks_ordered"
-                        ? "Mark ordered"
-                        : `Move ${action.orders.length} → ${STAGE_LABELS[action.next]}`}
-                    </Button>
-                  ))
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled
-                    className="border-gray-200 bg-gray-50 font-normal text-gray-400"
-                  >
-                    Mark ordered
-                  </Button>
-                )}
-                <p className="text-sm text-muted-foreground sm:ml-1">
-                  {selectedOrders.length > 0
-                    ? `${selectedOrders.length} selected`
-                    : "Select orders to print or advance"}
-                </p>
-              </>
-            }
-          />
-        )}
+              )}
+              <p className="text-sm text-muted-foreground sm:ml-1">
+                {selectedOrders.length > 0
+                  ? `${selectedOrders.length} selected`
+                  : "Select orders to print or advance"}
+              </p>
+            </>
+          }
+        />
       </div>
         </TabsContent>
       </Tabs>

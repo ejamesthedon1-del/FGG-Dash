@@ -334,7 +334,7 @@ function SupportActivityFeed({
   maxHeightClass?: string;
 }) {
   return (
-    <div className="rounded-md border border-border p-3">
+    <div className="p-0">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Live feed
@@ -351,7 +351,7 @@ function SupportActivityFeed({
       ) : (
         <ul
           className={cn(
-            "space-y-0 overflow-y-auto divide-y divide-border",
+            "space-y-0 overflow-y-auto divide-y divide-black/[0.06]",
             maxHeightClass,
           )}
         >
@@ -811,17 +811,17 @@ export function SupportPage() {
       ) : null}
 
       {!loading && connected ? (
-        <div className="grid min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-background lg:grid-cols-[260px_minmax(0,1fr)_240px]">
+        <div className="grid min-h-0 flex-1 overflow-hidden border-t border-black/[0.06] bg-background lg:grid-cols-[260px_minmax(0,1fr)_240px]">
           {/* Inbox list */}
-          <section className="flex min-h-0 flex-col border-b border-border lg:border-b-0 lg:border-r">
-            <div className="space-y-2 border-b border-border p-3">
+          <section className="flex min-h-0 flex-col border-b border-black/[0.06] lg:border-b-0 lg:border-r lg:border-black/[0.06]">
+            <div className="space-y-2 border-b border-black/[0.06] p-3">
               <div className="relative">
                 <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search inbox…"
-                  className="pl-7"
+                  className="pl-7 shadow-none"
                   aria-label="Search inbox"
                 />
               </div>
@@ -873,12 +873,12 @@ export function SupportPage() {
                       t.snippet;
                     const active = t.id === selectedId;
                     return (
-                      <li key={t.id} className="border-b border-border">
+                      <li key={t.id} className="border-b border-black/[0.06]">
                         <button
                           type="button"
                           onClick={() => void openThread(t.id)}
                           className={cn(
-                            "flex w-full gap-2.5 px-3 py-3 text-left transition-colors hover:bg-muted/50",
+                            "flex w-full gap-2.5 px-3 py-3.5 text-left transition-colors hover:bg-muted/50",
                             active && "bg-muted",
                           )}
                         >
@@ -977,7 +977,7 @@ export function SupportPage() {
           </section>
 
           {/* Thread */}
-          <section className="flex min-h-[320px] min-w-0 flex-col border-b border-border lg:border-b-0 lg:border-r">
+          <section className="flex min-h-[320px] min-w-0 flex-col border-b border-black/[0.06] lg:border-b-0 lg:border-r lg:border-black/[0.06]">
             {!selectedId ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
                 <Mail className="size-8 opacity-40" />
@@ -985,7 +985,7 @@ export function SupportPage() {
               </div>
             ) : (
               <>
-                <div className="border-b border-border px-4 py-3">
+                <div className="border-b border-black/[0.06] px-4 py-3">
                   <h3 className="text-base font-semibold text-pretty text-foreground">
                     {detail?.subject || selectedListItem?.subject || "Thread"}
                   </h3>
@@ -1023,7 +1023,7 @@ export function SupportPage() {
                     )}
                   </div>
                 </div>
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                <div className="min-h-0 flex-1 overflow-y-auto px-4">
                   {selectedId === EXAMPLE_THREAD_ID ? (
                     <Alert>
                       <CircleAlert className="size-4" />
@@ -1050,7 +1050,7 @@ export function SupportPage() {
                         return (
                           <article
                             key={m.id || `${m.from}-${m.date}`}
-                            className="rounded-md border border-border p-4"
+                            className="border-b border-black/[0.06] py-4"
                           >
                             <div className="mb-3 flex items-start gap-2.5">
                               <div
@@ -1133,7 +1133,7 @@ export function SupportPage() {
                   ) : null}
                 </div>
 
-                <div className="space-y-2 rounded-md border border-border p-3">
+                <div className="space-y-2 border-t border-black/[0.06] pt-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Thread details
                   </p>

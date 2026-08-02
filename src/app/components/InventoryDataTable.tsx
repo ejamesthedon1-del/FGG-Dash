@@ -48,6 +48,8 @@ import { DataTableColumnHeader } from "./ui/data-table-column-header";
 import { DataTablePagination } from "./ui/data-table-pagination";
 import { DataTableViewOptions } from "./ui/data-table-view-options";
 
+const CELL_PAD = "px-2 py-3.5";
+
 function MaterialThumb({
   photoDataUrl,
   name,
@@ -340,33 +342,36 @@ export function InventoryDataTable({
   });
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-          <Input
-            placeholder="Filter inventory…"
-            value={globalFilter}
-            onChange={(event) => setGlobalFilter(event.target.value)}
-            className="h-7 max-w-sm py-0 text-sm"
-          />
-          {toolbarActions}
-          <DataTableViewOptions
-            table={table}
-            columnLabels={{
-              name: "Item",
-              category: "Category",
-              qtyOnHand: "On hand",
-              status: "Status",
-            }}
-          />
-        </div>
+        <Input
+          placeholder="Filter inventory…"
+          value={globalFilter}
+          onChange={(event) => setGlobalFilter(event.target.value)}
+          className="h-7 max-w-sm rounded-md shadow-none"
+        />
+        {toolbarActions}
+        <DataTableViewOptions
+          table={table}
+          columnLabels={{
+            name: "Item",
+            category: "Category",
+            qtyOnHand: "On hand",
+            status: "Status",
+          }}
+        />
+      </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto">
         <Table className="min-w-[720px]">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
+              <TableRow
+                key={headerGroup.id}
+                className="border-b border-black/[0.06] hover:bg-transparent"
+              >
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
+                  <TableHead key={header.id} className={CELL_PAD}>
                     {header.isPlaceholder
                       ? null
                       : flexRender(
@@ -381,9 +386,12 @@ export function InventoryDataTable({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  className="border-b border-black/[0.06]"
+                >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell key={cell.id} className={CELL_PAD}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),
@@ -396,7 +404,7 @@ export function InventoryDataTable({
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground"
+                  className="h-24 py-3.5 text-center text-muted-foreground"
                 >
                   No materials yet. Add tags, prints, bags, and shipping
                   supplies above.

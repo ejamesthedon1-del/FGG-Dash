@@ -142,14 +142,14 @@ function stageColumnVisibility(stage: OrderFlowStage): VisibilityState {
       return {
         brandLabel: true,
         orderNumber: true,
-        customer: false,
+        customer: true,
         product: true,
-        color: true,
-        size: true,
+        color: false,
+        size: false,
         quantity: true,
-        orderDate: false,
+        orderDate: true,
         shipBy: false,
-        stage: false,
+        stage: true,
       };
     case "blanks_ordered":
       return {
@@ -329,6 +329,15 @@ function buildColumns(
       enableHiding: false,
     },
     {
+      accessorKey: "brandLabel",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Brand" />
+      ),
+      cell: ({ row }) => (
+        <span className="text-foreground">{row.original.brandLabel}</span>
+      ),
+    },
+    {
       accessorKey: "orderNumber",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Order" />
@@ -353,15 +362,6 @@ function buildColumns(
           </button>
         );
       },
-    },
-    {
-      accessorKey: "brandLabel",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Brand" />
-      ),
-      cell: ({ row }) => (
-        <span className="text-foreground">{row.original.brandLabel}</span>
-      ),
     },
     {
       accessorKey: "customer",
@@ -592,7 +592,7 @@ export function OrderFlowDataTable({
     setColumnVisibility(stageColumnVisibility(stage));
   }, [stage]);
 
-  const emphasizeOrderSpecs = stage === "needs_blanks";
+  const emphasizeOrderSpecs = false;
 
   const columns = React.useMemo(
     () =>

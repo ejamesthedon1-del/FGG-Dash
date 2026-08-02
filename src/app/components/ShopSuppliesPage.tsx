@@ -65,7 +65,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "./ui/sheet";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import {
   Tooltip,
   TooltipContent,
@@ -920,63 +919,59 @@ export function ShopSuppliesPage() {
             </SheetContent>
           </Sheet>
 
-          <Card className="gap-0">
-            <CardHeader className="px-6 pb-0 pt-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="text-base">
-                  {categoryFilter === "all"
-                    ? "All materials"
-                    : SUPPLY_CATEGORY_LABELS[categoryFilter]}
-                </CardTitle>
-                <p className="text-sm text-gray-500">
-                  {materials.length} item{materials.length === 1 ? "" : "s"}
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent className="px-6 pt-1.5 pb-4">
-              <InventoryDataTable
-                data={materials}
-                onOpenDetail={openMaterialDetail}
-                onDelete={onDeleteMaterial}
-                showCosts={isCeo}
-                toolbarActions={
-                  <>
-                    <Select
-                      value={categoryFilter}
-                      onValueChange={(v) =>
-                        setCategoryFilter(v as CategoryFilter)
-                      }
+          <div className="space-y-4 pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-base font-semibold text-gray-900">
+                {categoryFilter === "all"
+                  ? "All materials"
+                  : SUPPLY_CATEGORY_LABELS[categoryFilter]}
+              </h3>
+              <p className="text-sm text-gray-500">
+                {materials.length} item{materials.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            <InventoryDataTable
+              data={materials}
+              onOpenDetail={openMaterialDetail}
+              onDelete={onDeleteMaterial}
+              showCosts={isCeo}
+              toolbarActions={
+                <>
+                  <Select
+                    value={categoryFilter}
+                    onValueChange={(v) =>
+                      setCategoryFilter(v as CategoryFilter)
+                    }
+                  >
+                    <SelectTrigger
+                      aria-label="Filter by category"
+                      className="w-fit"
                     >
-                      <SelectTrigger
-                        aria-label="Filter by category"
-                        className="w-fit"
-                      >
-                        <SelectValue placeholder="Category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All categories</SelectItem>
-                        {SUPPLY_CATEGORIES.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {SUPPLY_CATEGORY_LABELS[c]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                      onClick={openAddMaterial}
-                    >
-                      <Plus className="size-3.5 stroke-[2.25]" />
-                      Add material
-                    </Button>
-                  </>
-                }
-              />
-            </CardContent>
-          </Card>
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All categories</SelectItem>
+                      {SUPPLY_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {SUPPLY_CATEGORY_LABELS[c]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={openAddMaterial}
+                  >
+                    <Plus className="size-3.5 stroke-[2.25]" />
+                    Add material
+                  </Button>
+                </>
+              }
+            />
+          </div>
 
           <Sheet
             open={Boolean(detailMaterial)}
