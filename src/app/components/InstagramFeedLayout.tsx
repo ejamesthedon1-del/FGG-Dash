@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ImageIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageIcon, X } from "lucide-react";
 
 import {
   feedLayoutPosts,
@@ -12,9 +12,19 @@ import {
   type IgScheduleBrand,
   type IgScheduledPost,
 } from "../lib/instagram-schedule-storage";
+import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import { cn } from "./ui/utils";
 
 const MIN_SLOTS = 9;
+/** Instagram feed recommends ~1080px on the short side. */
+const IG_MIN_SHORT_SIDE = 1080;
 
 function statusBadge(status: IgPostStatus): string {
   switch (status) {
@@ -42,6 +52,136 @@ function formatWhenShort(iso: string): string {
   });
 }
 
+function gcd(a: number, b: number): number {
+  let x = Math.abs(Math.round(a));
+  let y = Math.abs(Math.round(b));
+  while (y) {
+    const t = y;
+    y = x % y;
+    x = t;
+  }
+  return x || 1;
+}
+
+function ratioLabel(width: number, height: number): string {
+  if (!width || !height) return "—";
+  const g = gcd(width, height);
+  const rw = Math.round(width / g);
+  const rh = Math.round(height / g);
+  // Prefer common IG labels when close
+  const r = width / height;
+  if (Math.abs(r - 1) < 0.03) return "1:1 (square)";
+  if (Math.abs(r - 4 / 5) < 0.04) return "4:5 (portrait)";
+  if (Math.abs(r - 5 / 4) < 0.04) return "5:4 (landscape)";
+  if (Math.abs(r - 16 / 9) < 0.05) return "16:9";
+  if (Math.abs(r - 9 / 16) < 0.05) return "9:16 (story)";
+  if (rw <= 50 && rh <= 50) return `${rw}:${rh}`;
+  return `${r.toFixed(2)} · ~${rw}:${rh}`;
+}
+
+function qualityLabel(width: number, height: number): {
+  label: string;
+  detail: string;
+  tone: "good" | "ok" | "low";
+} {
+  const short = Math.min(width, height);
+  const long = Math.max(width, height);
+  if (short >= 1440) {
+    return {
+      label: "High",
+      detail: `${width}×${height} · sharp for Feed`,
+      tone: "good",
+    };
+  }
+  if (short >= IG_MIN_SHORT_SIDE) {
+    return {
+      label: "Good",
+      detail: `${width}×${height} · meets IG ~${IG_MIN_SHORT_SIDE}px`,
+      tone: "good",
+    };
+  }
+  if (short >= 720) {
+    return {
+      label: "Soft",
+      detail: `${width}×${height} · below ${IG_MIN_SHORT_SIDE}px (may look soft)`,
+      tone: "ok",
+    };
+  }
+  return {
+    label: "Low",
+    detail: `${width}×${height} · too small for crisp Feed`,
+    tone: "low",
+  };
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+type ImageMeta = {
+  width: number;
+  height: number;
+  bytes?: number;
+};
+
+function useImageMeta(src: string | undefined): {
+  meta: ImageMeta | null;
+  loading: boolean;
+  error: string | null;
+} {
+  const [meta, setMeta] = React.useState<ImageMeta | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!src) {
+      setMeta(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setMeta(null);
+
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      const next: ImageMeta = {
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      };
+      setMeta(next);
+      setLoading(false);
+      // Best-effort file size (often blocked by CORS on CDNs).
+      void fetch(src, { method: "HEAD", mode: "cors" })
+        .then((res) => {
+          if (cancelled || !res.ok) return;
+          const len = res.headers.get("content-length");
+          if (len && Number(len) > 0) {
+            setMeta((m) => (m ? { ...m, bytes: Number(len) } : m));
+          }
+        })
+        .catch(() => undefined);
+    };
+    img.onerror = () => {
+      if (cancelled) return;
+      setLoading(false);
+      setError("Could not load image metadata");
+    };
+    img.src = src;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  return { meta, loading, error };
+}
+
 type InstagramFeedLayoutProps = {
   posts: IgScheduledPost[];
   brand: IgScheduleBrand;
@@ -63,8 +203,23 @@ export function InstagramFeedLayout({
   );
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [overIndex, setOverIndex] = React.useState<number | null>(null);
+  const [previewPost, setPreviewPost] = React.useState<IgScheduledPost | null>(
+    null,
+  );
+  const [slideIndex, setSlideIndex] = React.useState(0);
+
+  const previewUrls = previewPost ? postImageUrls(previewPost) : [];
+  const previewSrc = previewUrls[slideIndex] || previewUrls[0];
+  const { meta, loading: metaLoading, error: metaError } =
+    useImageMeta(previewSrc);
 
   const slotCount = Math.max(MIN_SLOTS, Math.ceil(layout.length / 3) * 3);
+
+  const openPreview = (post: IgScheduledPost) => {
+    setPreviewPost(post);
+    setSlideIndex(0);
+    onFocusPost?.(post.id);
+  };
 
   const handleDrop = (toIndex: number) => {
     if (dragIndex == null || dragIndex === toIndex || !onReorder) {
@@ -81,6 +236,10 @@ export function InstagramFeedLayout({
     setDragIndex(null);
     setOverIndex(null);
   };
+
+  const quality = meta
+    ? qualityLabel(meta.width, meta.height)
+    : null;
 
   return (
     <section className="space-y-3 border-t border-black/[0.06] pt-6">
@@ -139,8 +298,8 @@ export function InstagramFeedLayout({
                   e.preventDefault();
                   handleDrop(index);
                 }}
-                onClick={() => onFocusPost?.(post.id)}
-                title={`${formatWhenShort(post.scheduledAt)} · ${statusBadge(post.status)}`}
+                onClick={() => openPreview(post)}
+                title={`${formatWhenShort(post.scheduledAt)} · ${statusBadge(post.status)} · Preview`}
                 className={cn(
                   "group relative aspect-square overflow-hidden bg-gray-100 outline-none",
                   "focus-visible:ring-2 focus-visible:ring-gray-950 focus-visible:ring-offset-1",
@@ -184,9 +343,151 @@ export function InstagramFeedLayout({
           })}
         </div>
         <p className="mt-2 text-[12px] text-gray-400">
-          Drag to plan order · Stories excluded
+          Tap a tile to preview · Drag to reorder · Stories excluded
         </p>
       </div>
+
+      <Dialog
+        open={Boolean(previewPost)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewPost(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-lg gap-0 overflow-hidden p-0 sm:max-w-xl">
+          <DialogHeader className="space-y-1 border-b border-border px-4 py-3 pr-12 text-left">
+            <DialogTitle className="text-[15px] font-medium">
+              Image preview
+            </DialogTitle>
+            <DialogDescription className="text-[13px] text-muted-foreground">
+              {previewPost
+                ? `${formatWhenShort(previewPost.scheduledAt)} · ${statusBadge(previewPost.status)}`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="relative bg-black">
+            {previewSrc ? (
+              <img
+                src={previewSrc}
+                alt=""
+                className="mx-auto max-h-[min(55vh,520px)] w-full object-contain"
+              />
+            ) : (
+              <div className="flex h-48 items-center justify-center text-gray-500">
+                <ImageIcon className="size-8" />
+              </div>
+            )}
+            {previewUrls.length > 1 ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="absolute top-1/2 left-2 size-8 -translate-y-1/2 rounded-full p-0"
+                  disabled={slideIndex <= 0}
+                  onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}
+                  aria-label="Previous slide"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="absolute top-1/2 right-2 size-8 -translate-y-1/2 rounded-full p-0"
+                  disabled={slideIndex >= previewUrls.length - 1}
+                  onClick={() =>
+                    setSlideIndex((i) =>
+                      Math.min(previewUrls.length - 1, i + 1),
+                    )
+                  }
+                  aria-label="Next slide"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+                <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white">
+                  {slideIndex + 1} / {previewUrls.length}
+                </span>
+              </>
+            ) : null}
+          </div>
+
+          <div className="space-y-3 px-4 py-3">
+            {metaLoading ? (
+              <p className="text-[13px] text-muted-foreground">Reading image…</p>
+            ) : metaError ? (
+              <p className="text-[13px] text-muted-foreground">{metaError}</p>
+            ) : meta ? (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                    Ratio
+                  </dt>
+                  <dd className="mt-0.5 font-medium text-gray-950">
+                    {ratioLabel(meta.width, meta.height)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                    Quality
+                  </dt>
+                  <dd
+                    className={cn(
+                      "mt-0.5 font-medium",
+                      quality?.tone === "good" && "text-emerald-700",
+                      quality?.tone === "ok" && "text-amber-700",
+                      quality?.tone === "low" && "text-red-700",
+                    )}
+                  >
+                    {quality?.label}
+                  </dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                    Resolution
+                  </dt>
+                  <dd className="mt-0.5 text-gray-700">{quality?.detail}</dd>
+                </div>
+                {meta.bytes != null ? (
+                  <div className="col-span-2">
+                    <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                      File size
+                    </dt>
+                    <dd className="mt-0.5 text-gray-700">
+                      {formatBytes(meta.bytes)}
+                      {meta.bytes > 8 * 1024 * 1024
+                        ? " · large for upload"
+                        : null}
+                    </dd>
+                  </div>
+                ) : null}
+                <div className="col-span-2">
+                  <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                    Grid crop
+                  </dt>
+                  <dd className="mt-0.5 text-gray-700">
+                    Profile grid shows a 1:1 crop (center). Full ratio appears when
+                    the post opens.
+                  </dd>
+                </div>
+              </dl>
+            ) : null}
+
+            <div className="flex justify-end gap-2 border-t border-border pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setPreviewPost(null)}
+              >
+                <X className="size-3.5" />
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

@@ -106,7 +106,7 @@ const NAV = {
   },
   cash: {
     to: "/cash",
-    label: "Cash",
+    label: "Finance",
     icon: Wallet,
     match: (pathname: string) =>
       pathname === "/cash" || pathname.startsWith("/cash/"),
@@ -186,13 +186,17 @@ const NAV = {
   },
 } as const satisfies Record<string, NavItem>;
 
-/** CEO: strategy → creative → personal day → floor → resources */
+/** CEO: strategy → creative → personal day → operations → resources */
 const CEO_SECTIONS: NavSection[] = [
-  { label: "Overview", items: [NAV.dashboard] },
+  { label: "Overview", items: [NAV.dashboard, NAV.whiteboard] },
   { label: "Business", items: [NAV.brandHub, NAV.cash] },
   { label: "Creative", items: [NAV.studio] },
-  { label: "My day", items: [NAV.myTasks, NAV.clock, NAV.whiteboard] },
-  { label: "Floor", items: [NAV.orderFlow, NAV.inventory, NAV.support] },
+  { label: "My day", items: [NAV.myTasks, NAV.clock] },
+  {
+    label: "Operations",
+    collapsible: true,
+    items: [NAV.orderFlow, NAV.inventory, NAV.support],
+  },
   {
     label: "Resources",
     collapsible: true,
@@ -207,12 +211,12 @@ const OPS_SECTIONS: NavSection[] = [
     label: "Menu",
     items: [
       OPS_OVERVIEW,
+      NAV.whiteboard,
       NAV.orderFlow,
       NAV.inventory,
       NAV.support,
       NAV.clock,
       NAV.myTasks,
-      NAV.whiteboard,
     ],
   },
   {
@@ -269,7 +273,7 @@ function NavMenuItems({
                     : item.label
               }
               isActive={item.match(pathname)}
-              className="h-[38px] rounded-md border-0 text-[length:var(--text-utility)] font-normal leading-[var(--leading-utility)] tracking-[var(--tracking-utility)] text-sidebar-foreground/80 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-normal data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-brand [&_svg]:text-muted-foreground [&>span:last-child]:overflow-visible [&>span:last-child]:whitespace-nowrap"
+              className="h-8 rounded-md border-0 text-[length:var(--text-utility)] font-normal leading-[var(--leading-utility)] tracking-[var(--tracking-utility)] text-sidebar-foreground/80 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-normal data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-brand [&_svg]:text-muted-foreground [&>span:last-child]:overflow-visible [&>span:last-child]:whitespace-nowrap"
             >
               <NavLink
                 to={item.to}
@@ -351,16 +355,18 @@ function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="gap-0 px-1 py-1">
         {(isCeo ? CEO_SECTIONS : OPS_SECTIONS).map((section, index) => {
-          const showFloorBadge =
-            section.label === "Floor" && orderFlowNewCount > 0;
+          const showOpsBadge =
+            section.label === "Operations" && orderFlowNewCount > 0;
           const sectionKey = section.label ?? `section-${index}`;
-          const groupLabelClass =
-            "h-auto py-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-muted-foreground";
+          const groupLabelClass = cn(
+            "h-auto px-2 pt-2.5 pb-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-muted-foreground",
+            index > 0 && "mt-1.5",
+          );
           const menu = (
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">
+            <SidebarGroupContent className="px-0">
+              <SidebarMenu className="gap-0">
                 <NavMenuItems
                   items={section.items}
                   orderFlowNewCount={orderFlowNewCount}
@@ -379,10 +385,10 @@ function AppSidebar({
             return (
               <Collapsible
                 key={sectionKey}
-                defaultOpen={childActive}
+                defaultOpen={childActive || showOpsBadge}
                 className="group/collapsible"
               >
-                <SidebarGroup>
+                <SidebarGroup className="p-0">
                   <SidebarGroupLabel
                     asChild
                     className={cn(
@@ -392,6 +398,11 @@ function AppSidebar({
                   >
                     <CollapsibleTrigger>
                       {section.label}
+                      {showOpsBadge ? (
+                        <span className="ml-1 rounded bg-brand px-1 py-px text-[8px] font-semibold leading-none normal-case tracking-normal tabular-nums text-brand-foreground">
+                          +{orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
+                        </span>
+                      ) : null}
                       <ChevronDown
                         strokeWidth={1.75}
                         className="ml-auto size-3.5 text-muted-foreground/70 transition-transform group-data-[state=open]/collapsible:rotate-180"
@@ -405,12 +416,12 @@ function AppSidebar({
           }
 
           return (
-            <SidebarGroup key={sectionKey}>
+            <SidebarGroup key={sectionKey} className="p-0">
               {section.label ? (
                 <SidebarGroupLabel className={groupLabelClass}>
                   {section.label}
-                  {showFloorBadge ? (
-                    <span className="ml-1.5 rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal tabular-nums text-brand-foreground">
+                  {showOpsBadge ? (
+                    <span className="ml-1 rounded bg-brand px-1 py-px text-[8px] font-semibold leading-none normal-case tracking-normal tabular-nums text-brand-foreground">
                       +{orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
                     </span>
                   ) : null}
