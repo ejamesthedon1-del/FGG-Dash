@@ -79,7 +79,7 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
     items.push({
       id: "high-priority",
       title: "Orders past 7 days",
-      detail: "Open work older than a week — clear these first on Order Flow.",
+      detail: "Open work older than a week — clear these first on Orders.",
       tone: "critical",
       to: "/order-flow",
       count: highPriority,
@@ -160,7 +160,7 @@ function buildLiveFocus(orders: OrderFlowOrder[], stages: OrderFlowStageCount[])
     items.push({
       id: "clear",
       title: "No open blockers",
-      detail: "Live Order Flow is clear. Stand by for new orders.",
+      detail: "Orders is clear. Stand by for new work.",
       tone: "steady",
       to: "/order-flow",
     });
@@ -297,7 +297,7 @@ export function SystemsOverview() {
       setStages(data.stages);
       setOrders(data.orders);
     } catch (err) {
-      setFlowError(err instanceof Error ? err.message : "Could not load live order flow");
+      setFlowError(err instanceof Error ? err.message : "Could not load live orders");
     } finally {
       setFlowLoading(false);
     }
@@ -341,7 +341,7 @@ export function SystemsOverview() {
     return (
       <div className="space-y-6">
         <header>
-          <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">
+          <h1 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
             Dashboard
           </h1>
         </header>
@@ -354,7 +354,7 @@ export function SystemsOverview() {
     <div className="space-y-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">
+          <h1 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
             Dashboard
           </h1>
         </div>
@@ -372,7 +372,7 @@ export function SystemsOverview() {
           </Button>
           <Button size="sm" asChild className="gap-1">
             <Link to="/order-flow">
-              Order Flow
+              Orders
               <ArrowRight className="size-3.5" />
             </Link>
           </Button>
@@ -399,7 +399,7 @@ export function SystemsOverview() {
 
           <div className="grid grid-cols-1 gap-3">
             <DashboardCtaCard
-              title="Order Flow"
+              title="Orders"
               description="Move orders through blanks, production, and ship."
               to="/order-flow"
             />
@@ -670,7 +670,7 @@ export function SystemsOverview() {
                 <li key={id} className={cn(index > 0 && "border-t border-gray-100")}>
                   <DashboardListRow
                     title={STAGE_LABELS[id]}
-                    meta="Open Order Flow"
+                    meta="Open orders"
                     to={`/order-flow?stage=${id}`}
                     icon={<Icon className="h-4 w-4" strokeWidth={1.75} />}
                     trailing={flowLoading ? "—" : n}

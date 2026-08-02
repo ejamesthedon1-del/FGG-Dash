@@ -259,7 +259,7 @@ export function SOPForm({ mode, initialSOP }: SOPFormProps) {
       </Button>
 
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900">
+        <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
           {mode === "create" ? "Create procedure" : "Edit procedure"}
         </h2>
         <p className="mt-1 text-gray-600">

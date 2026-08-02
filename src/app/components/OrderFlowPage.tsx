@@ -40,13 +40,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Checkbox } from "./ui/checkbox";
 import { Textarea } from "./ui/textarea";
 import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "./ui/combobox";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 import {
   Sheet,
   SheetContent,
@@ -66,7 +65,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "./ui/utils";
 import { OrderFlowRiskReviewSection } from "./OrderFlowRiskReviewSection";
 import { OrderFlowDataTable } from "./OrderFlowDataTable";
-import { buildBlanksPrintHtml, printBlanksSlip } from "../lib/blanks-print-slip";
+import { NeedsBlanksBoard } from "./NeedsBlanksBoard";
+import {
+  buildBlanksPrintHtml,
+  printBlanksSlipHtml,
+} from "../lib/blanks-print-slip";
 import {
   Boxes,
   Calendar,
@@ -77,7 +80,6 @@ import {
   Loader2,
   Package,
   Printer,
-  RefreshCw,
   Shirt,
   Tag,
   Truck,
@@ -90,20 +92,16 @@ import { toast } from "sonner";
 type BrandFilter = "all" | "live-don" | "sinners-testimony";
 type StageFilter = OrderFlowStage;
 
-type ComboboxOption = { value: string; label: string };
-
-const BRAND_OPTIONS: ComboboxOption[] = [
-  { value: "all", label: "All Brands" },
+const BRAND_OPTIONS: { value: BrandFilter; label: string }[] = [
+  { value: "all", label: "All brands" },
   { value: "live-don", label: "Livdon" },
   { value: "sinners-testimony", label: "Sinners Testimony" },
 ];
 
-function optionByValue(
-  options: ComboboxOption[],
-  value: string,
-): ComboboxOption | null {
-  return options.find((o) => o.value === value) ?? null;
-}
+/** Shared outline control — brand select + Refresh match exactly. */
+const TOOLBAR_CONTROL =
+  "h-7 gap-1.5 rounded-md border border-border bg-background px-2.5 text-[length:var(--text-utility)] font-normal leading-[var(--leading-utility)] tracking-[var(--tracking-utility)] shadow-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+
 
 const EMPTY_RISK_QUEUE: OrderFlowRiskQueue = {
   pending: [],
@@ -113,23 +111,42 @@ const EMPTY_RISK_QUEUE: OrderFlowRiskQueue = {
 };
 
 function deadlineClass(state: OrderFlowOrder["deadlineState"]) {
+  // Date text stays neutral; urgency color lives on the indicator only.
   switch (state) {
     case "overdue":
-      return "text-rose-700 font-semibold";
     case "due_today":
-      return "text-amber-800 font-semibold";
     case "upcoming":
-      return "text-orange-700 font-medium";
+      return "text-gray-900";
     default:
       return "text-gray-700";
   }
+}
+
+function DeadlineIndicator({
+  state,
+}: {
+  state: OrderFlowOrder["deadlineState"];
+}) {
+  if (state === "ok" || state === "none") return null;
+  return (
+    <span
+      className={cn(
+        "inline-block size-1.5 shrink-0 rounded-full bg-amber-500",
+        state === "upcoming" && "bg-amber-400",
+      )}
+      aria-hidden
+    />
+  );
 }
 
 function agePriorityBadge(order: OrderFlowOrder) {
   if (order.stage === "shipped") return null;
   if (order.highPriority) {
     return (
-      <Badge variant="outline" className="w-fit border-rose-400 bg-rose-100 text-rose-900 font-semibold">
+      <Badge
+        variant="outline"
+        className="w-fit border-amber-200 bg-amber-50 font-semibold text-amber-900"
+      >
         High priority · {order.orderAgeDays ?? 7}+ days
       </Badge>
     );
@@ -137,7 +154,10 @@ function agePriorityBadge(order: OrderFlowOrder) {
   if (order.earlyWarning) {
     const daysLeft = Math.max(0, 7 - (order.orderAgeDays ?? 3));
     return (
-      <Badge variant="outline" className="w-fit border-amber-400 bg-amber-50 text-amber-950 font-semibold">
+      <Badge
+        variant="outline"
+        className="w-fit border-amber-200 bg-amber-50 font-semibold text-amber-900"
+      >
         Early warning · {daysLeft}d to late
       </Badge>
     );
@@ -151,21 +171,30 @@ function deadlineBadge(order: OrderFlowOrder) {
   if (!order.expectedShipDate) return null;
   if (order.deadlineState === "overdue") {
     return (
-      <Badge variant="outline" className="border-rose-300 bg-rose-50 text-rose-800">
+      <Badge
+        variant="outline"
+        className="border-amber-200 bg-amber-50 text-amber-900"
+      >
         Overdue
       </Badge>
     );
   }
   if (order.deadlineState === "due_today") {
     return (
-      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">
+      <Badge
+        variant="outline"
+        className="border-amber-200 bg-amber-50 text-amber-900"
+      >
         Due today
       </Badge>
     );
   }
   if (order.deadlineState === "upcoming") {
     return (
-      <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-800">
+      <Badge
+        variant="outline"
+        className="border-amber-200 bg-amber-50 text-amber-900"
+      >
         Ships soon
       </Badge>
     );
@@ -175,18 +204,14 @@ function deadlineBadge(order: OrderFlowOrder) {
 
 function stageBadgeClass(stage: OrderFlowStage) {
   switch (stage) {
-    case "needs_blanks":
-      return "border-amber-200 bg-amber-50 text-amber-900";
-    case "blanks_ordered":
-      return "border-orange-200 bg-orange-50 text-orange-900";
-    case "in_production":
-      return "border-blue-200 bg-blue-50 text-blue-800";
-    case "ready_to_ship":
-      return "border-violet-200 bg-violet-50 text-violet-900";
     case "shipped":
-      return "border-emerald-200 bg-emerald-50 text-emerald-900";
+      return "border-transparent bg-emerald-50 text-emerald-800";
+    case "needs_blanks":
+    case "blanks_ordered":
+    case "in_production":
+    case "ready_to_ship":
     default:
-      return "border-gray-200 bg-gray-50 text-gray-700";
+      return "border-transparent bg-gray-200/90 text-gray-900";
   }
 }
 
@@ -237,6 +262,12 @@ export function OrderFlowPage() {
   const [blanksReceiptFile, setBlanksReceiptFile] = useState<File | null>(null);
   const [blanksReceiptBusy, setBlanksReceiptBusy] = useState(false);
   const [suppliesBusy, setSuppliesBusy] = useState(false);
+
+  useEffect(() => {
+    const showProduction = () => setBoardTab("production");
+    window.addEventListener("fgg-spotlight-orders", showProduction);
+    return () => window.removeEventListener("fgg-spotlight-orders", showProduction);
+  }, []);
 
   const load = useCallback(async (opts?: { preserveSelection?: boolean }) => {
     setLoading(true);
@@ -574,32 +605,43 @@ export function OrderFlowPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Order Flow</h2>
+          <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
+            Orders
+          </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Combobox
-            items={BRAND_OPTIONS}
-            value={optionByValue(BRAND_OPTIONS, brand)}
-            onValueChange={(item) => {
-              if (item) setBrand(item.value as BrandFilter);
+          <Select
+            value={brand}
+            onValueChange={(v) => {
+              if (v === "all" || v === "live-don" || v === "sinners-testimony") {
+                setBrand(v);
+              }
             }}
-            isItemEqualToValue={(a, b) => a.value === b.value}
           >
-            <ComboboxInput placeholder="Select a brand" />
-            <ComboboxContent>
-              <ComboboxEmpty>No brands found.</ComboboxEmpty>
-              <ComboboxList>
-                {(item) => (
-                  <ComboboxItem key={item.value} value={item}>
-                    {item.label}
-                  </ComboboxItem>
-                )}
-              </ComboboxList>
-            </ComboboxContent>
-          </Combobox>
-          <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
-            Refresh
+            <SelectTrigger
+              size="default"
+              className={cn(TOOLBAR_CONTROL, "w-auto min-w-[8.5rem]")}
+              aria-label="Filter by brand"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {BRAND_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={TOOLBAR_CONTROL}
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            {loading ? "Refreshing…" : "Refresh"}
           </Button>
         </div>
       </div>
@@ -621,12 +663,14 @@ export function OrderFlowPage() {
         onValueChange={(v) => setBoardTab(v === "risk" ? "risk" : "production")}
         className="gap-4"
       >
-        <TabsList>
-          <TabsTrigger value="production">Production</TabsTrigger>
-          <TabsTrigger value="risk">
+        <TabsList data-tour="orders-tabs" className="h-9 rounded-xl p-1">
+          <TabsTrigger value="production" className="rounded-xl">
+            Production
+          </TabsTrigger>
+          <TabsTrigger value="risk" className="rounded-xl">
             Risk review
             {riskQueue.pendingCount > 0 ? (
-              <span className="rounded-md bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              <span className="rounded-md bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                 {riskQueue.pendingCount}
               </span>
             ) : null}
@@ -642,7 +686,10 @@ export function OrderFlowPage() {
         </TabsContent>
 
         <TabsContent value="production" className="space-y-6 outline-none">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div
+        data-tour="orders-stages"
+        className="grid w-full [grid-template-columns:repeat(5,minmax(0,1fr))]"
+      >
         {(stages.length
           ? stages.filter((s) => s.id !== "all")
           : ORDER_FLOW_STAGES.map((id) => ({
@@ -650,7 +697,7 @@ export function OrderFlowPage() {
               label: STAGE_LABELS[id],
               count: 0,
             }))
-        ).map((s) => {
+        ).map((s, index) => {
           const active = stage === s.id;
           return (
             <button
@@ -658,35 +705,55 @@ export function OrderFlowPage() {
               type="button"
               onClick={() => setStageAndUrl(s.id as StageFilter)}
               className={cn(
-                "rounded-xl border px-3 py-3 text-left transition-colors",
+                "relative w-full min-w-0 px-3 py-3 text-left transition-colors sm:px-4",
+                index > 0 &&
+                  "before:absolute before:top-2.5 before:bottom-2.5 before:left-0 before:w-px before:bg-black/[0.08]",
                 active
-                  ? "border-blue-300 bg-blue-50 shadow-sm"
-                  : "border-gray-200 bg-white hover:bg-gray-50",
+                  ? "rounded-xl bg-gray-100"
+                  : "rounded-xl bg-transparent hover:bg-gray-50",
               )}
             >
-              <p className="text-sm text-muted-foreground">
+              <p className="truncate text-sm text-muted-foreground">
                 {s.label}
               </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{s.count}</p>
+              <p className="mt-1.5 text-xl font-semibold tabular-nums text-gray-900">
+                {s.count}
+              </p>
             </button>
           );
         })}
       </div>
 
-      <Card className="gap-2">
-        <CardHeader className="pb-0">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-base">
-              {STAGE_LABELS[stage]}
-            </CardTitle>
-            <p className="text-sm text-gray-500">
-              {loading ? "Loading…" : `${visibleOrders.length} order(s)`}
-            </p>
-          </div>
-        </CardHeader>
-        <CardContent>
+      <div data-tour="orders-table" className="space-y-4 pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-gray-900">
+            {STAGE_LABELS[stage]}
+          </h3>
+          <p className="text-sm text-gray-500">
+            {loading
+              ? "Loading…"
+              : stage === "needs_blanks"
+                ? `${visibleOrders.length} order(s) to cover`
+                : `${visibleOrders.length} order(s)`}
+          </p>
+        </div>
+        {stage === "needs_blanks" ? (
+          <NeedsBlanksBoard
+            orders={visibleOrders}
+            loading={loading}
+            saving={saving}
+            onMarkOrdered={(list) =>
+              void requestStageChange("blanks_ordered", list)
+            }
+            onPrintPreview={(html) => {
+              setBlanksSlipHtml(html);
+              setBlanksSlipOpen(true);
+            }}
+          />
+        ) : (
           <OrderFlowDataTable
             data={visibleOrders}
+            stage={stage}
             loading={loading}
             saving={saving}
             selected={selected}
@@ -697,8 +764,8 @@ export function OrderFlowPage() {
               <>
                 <Button
                   type="button"
-                  variant={selectedOrders.length > 0 ? "default" : "outline"}
-                  className="gap-2"
+                  variant="outline"
+                  className="gap-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                   disabled={selectedOrders.length === 0}
                   onClick={() => {
                     try {
@@ -715,24 +782,33 @@ export function OrderFlowPage() {
                   }}
                 >
                   <Printer className="h-4 w-4" />
-                  Print blanks needed
+                  Print
                 </Button>
                 {bulkNextActions.length > 0 ? (
                   bulkNextActions.map((action) => (
                     <Button
                       key={`${action.stage}-${action.next}`}
                       type="button"
+                      variant="default"
                       disabled={saving}
+                      className="bg-brand font-medium text-white hover:bg-brand-hover disabled:opacity-70"
                       onClick={() =>
                         void requestStageChange(action.next, action.orders)
                       }
                     >
-                      Move {action.orders.length} → {STAGE_LABELS[action.next]}
+                      {action.next === "blanks_ordered"
+                        ? "Mark ordered"
+                        : `Move ${action.orders.length} → ${STAGE_LABELS[action.next]}`}
                     </Button>
                   ))
                 ) : (
-                  <Button type="button" disabled>
-                    Move to next stage
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled
+                    className="border-gray-200 bg-gray-50 font-normal text-gray-400"
+                  >
+                    Mark ordered
                   </Button>
                 )}
                 <p className="text-sm text-muted-foreground sm:ml-1">
@@ -743,8 +819,8 @@ export function OrderFlowPage() {
               </>
             }
           />
-        </CardContent>
-      </Card>
+        )}
+      </div>
         </TabsContent>
       </Tabs>
 
@@ -776,16 +852,17 @@ export function OrderFlowPage() {
               <Button
                 type="button"
                 className="gap-2"
+                disabled={!blanksSlipHtml}
                 onClick={() => {
                   try {
-                    printBlanksSlip(selectedOrders);
+                    printBlanksSlipHtml(blanksSlipHtml);
                   } catch (err) {
                     toast.error(err instanceof Error ? err.message : "Could not print");
                   }
                 }}
               >
                 <Printer className="h-4 w-4" />
-                Print / Save PDF
+                Print / save PDF
               </Button>
             </div>
           </DialogFooter>
@@ -800,7 +877,7 @@ export function OrderFlowPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Move to Ordered?</DialogTitle>
+            <DialogTitle>Move to ordered?</DialogTitle>
             <DialogDescription>
               {blanksOrderedConfirm
                 ? blanksOrderedConfirm.orders.length === 1
@@ -884,7 +961,7 @@ export function OrderFlowPage() {
                   Preparing…
                 </>
               ) : (
-                "Move to Ordered"
+                "Move to ordered"
               )}
             </Button>
           </DialogFooter>
@@ -945,27 +1022,37 @@ export function OrderFlowPage() {
                   </DetailMetaRow>
                   <DetailMetaRow icon={Calendar} label="Ordered">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          detail.highPriority
-                            ? "font-semibold text-rose-800"
-                            : detail.earlyWarning
-                              ? "font-semibold text-amber-900"
-                              : "",
-                        )}
-                      >
-                        {detail.orderDate}
-                        {detail.orderAgeDays != null ? ` · ${detail.orderAgeDays}d` : ""}
+                      <span className="inline-flex items-center gap-1.5 text-gray-900">
+                        {detail.highPriority || detail.earlyWarning ? (
+                          <span
+                            className="size-1.5 shrink-0 rounded-full bg-amber-500"
+                            aria-hidden
+                          />
+                        ) : null}
+                        <span>
+                          {detail.orderDate}
+                          {detail.orderAgeDays != null
+                            ? ` · ${detail.orderAgeDays}d`
+                            : ""}
+                        </span>
                       </span>
                       {agePriorityBadge(detail)}
                     </div>
                   </DetailMetaRow>
                   <DetailMetaRow icon={Truck} label="Ship by">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={deadlineClass(detail.deadlineState)}>
-                        {detail.expectedShipDate || "—"}
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5",
+                          deadlineClass(detail.deadlineState),
+                        )}
+                      >
+                        <DeadlineIndicator state={detail.deadlineState} />
+                        <span>{detail.expectedShipDate || "—"}</span>
                       </span>
-                      {!detail.highPriority && !detail.earlyWarning ? deadlineBadge(detail) : null}
+                      {!detail.highPriority && !detail.earlyWarning
+                        ? deadlineBadge(detail)
+                        : null}
                     </div>
                   </DetailMetaRow>
                   <DetailMetaRow icon={CreditCard} label="Payment">

@@ -80,26 +80,26 @@ function addressesMismatch(order: OrderFlowOrder): boolean {
 function riskLevelClass(level?: RiskLevel) {
   switch ((level || "").toUpperCase()) {
     case "HIGH":
-      return "border-rose-300 bg-rose-50 text-rose-900";
+      return "border-transparent bg-amber-50 text-amber-900";
     case "MEDIUM":
-      return "border-amber-300 bg-amber-50 text-amber-950";
+      return "border-transparent bg-amber-50 text-amber-800";
     case "LOW":
-      return "border-emerald-200 bg-emerald-50 text-emerald-900";
+      return "border-transparent bg-gray-100 text-gray-700";
     default:
-      return "border-gray-200 bg-gray-50 text-gray-700";
+      return "border-transparent bg-gray-100 text-gray-700";
   }
 }
 
 function riskRecClass(rec?: RiskRecommendation) {
   switch ((rec || "").toUpperCase()) {
     case "CANCEL":
-      return "border-rose-400 bg-rose-100 text-rose-950";
+      return "border-transparent bg-amber-50 text-amber-900";
     case "INVESTIGATE":
-      return "border-amber-400 bg-amber-100 text-amber-950";
+      return "border-transparent bg-amber-50 text-amber-800";
     case "ACCEPT":
-      return "border-emerald-300 bg-emerald-50 text-emerald-900";
+      return "border-transparent bg-gray-100 text-gray-700";
     default:
-      return "border-gray-200 bg-gray-50 text-gray-700";
+      return "border-transparent bg-gray-100 text-gray-700";
   }
 }
 
@@ -248,7 +248,7 @@ export function OrderFlowRiskReviewSection({ riskQueue, busy, onChanged }: Props
                             <Button
                               type="button"
                               size="sm"
-                              className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                              className="gap-1"
                               disabled={acting}
                               onClick={() => void onApprove(order)}
                             >
@@ -258,8 +258,8 @@ export function OrderFlowRiskReviewSection({ riskQueue, busy, onChanged }: Props
                             <Button
                               type="button"
                               size="sm"
-                              variant="tertiary"
-                              className="gap-1 text-rose-700 hover:text-rose-800"
+                              variant="outline"
+                              className="gap-1 border-gray-200 text-gray-700"
                               disabled={acting}
                               onClick={() => {
                                 setActive(order);
@@ -274,10 +274,10 @@ export function OrderFlowRiskReviewSection({ riskQueue, busy, onChanged }: Props
                           <Badge
                             variant="outline"
                             className={cn(
-                              "text-xs",
+                              "text-xs border-transparent",
                               filter === "approved"
-                                ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                                : "border-rose-300 bg-rose-50 text-rose-900",
+                                ? "bg-emerald-50 text-emerald-800"
+                                : "bg-gray-100 text-gray-700",
                             )}
                           >
                             {filter === "approved" ? "Approved" : "Denied"}
@@ -385,7 +385,7 @@ export function OrderFlowRiskReviewSection({ riskQueue, busy, onChanged }: Props
                     <div className="flex gap-2">
                       <Button
                         type="button"
-                        className="flex-1 gap-1 bg-emerald-600 hover:bg-emerald-700"
+                        className="flex-1 gap-1"
                         disabled={acting}
                         onClick={() => void onApprove(active)}
                       >
@@ -394,8 +394,8 @@ export function OrderFlowRiskReviewSection({ riskQueue, busy, onChanged }: Props
                       </Button>
                       <Button
                         type="button"
-                        variant="tertiary"
-                        className="flex-1 gap-1 text-rose-700"
+                        variant="outline"
+                        className="flex-1 gap-1 border-gray-200 text-gray-700"
                         disabled={acting}
                         onClick={() => setDenyTarget(active)}
                       >
@@ -461,7 +461,7 @@ export function OrderFlowRiskReviewSection({ riskQueue, busy, onChanged }: Props
             </Button>
             <Button
               type="button"
-              className="bg-rose-600 hover:bg-rose-700"
+              className="bg-amber-600 text-white hover:bg-amber-700"
               disabled={acting}
               onClick={() => void onDenyConfirm()}
             >

@@ -112,7 +112,7 @@ export function SettingsPage() {
         aria-label="Settings sections"
       >
         <div className="border-b border-gray-100 px-4 py-5">
-          <h1 className="text-lg font-semibold tracking-tight text-gray-950">
+          <h1 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
             Account Settings
           </h1>
           <p className="mt-0.5 text-xs text-gray-500">
@@ -292,7 +292,7 @@ export function SettingsPage() {
                 Notifications
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Alert preferences for Order Flow and floor updates.
+                Alert preferences for Orders and floor updates.
               </p>
               <div className="mt-6 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center">
                 <Bell className="mx-auto h-5 w-5 text-gray-400" />
@@ -360,7 +360,7 @@ export function SettingsPage() {
 
               <section>
                 <h3 className="text-sm font-semibold text-gray-950">
-                  Reply templates by Order Flow stage
+                  Reply templates by Orders stage
                 </h3>
                 <p className="mt-1 text-sm text-gray-500">
                   These are the bodies customers get (plus greeting / order

@@ -77,16 +77,33 @@ function orderedTitle(order: OrderFlowOrder): string | undefined {
   return undefined;
 }
 
+function stageBadgeClass(stage: OrderFlowStage) {
+  if (stage === "shipped") {
+    return "border-transparent bg-emerald-50 text-emerald-800";
+  }
+  return "border-transparent bg-gray-200/90 text-gray-900";
+}
+
+const CHECKBOX_CLASS = "rounded-md";
+const CELL_PAD = "px-2 py-3.5";
+
+
+function orderLines(order: OrderFlowOrder) {
+  return order.lineItems?.length > 0
+    ? order.lineItems
+    : [
+        {
+          product: order.product,
+          variant: order.variant,
+          color: order.color,
+          size: order.size,
+          quantity: order.quantity,
+        },
+      ];
+}
+
 function productSubtitle(order: OrderFlowOrder): string {
-  const lines =
-    order.lineItems?.length > 0
-      ? order.lineItems
-      : [
-          {
-            color: order.color,
-            size: order.size,
-          },
-        ];
+  const lines = orderLines(order);
   if (lines.length > 1) return `${lines.length} lines`;
   const line = lines[0];
   return (
@@ -95,6 +112,100 @@ function productSubtitle(order: OrderFlowOrder): string {
       .map((part) => formatOrderLabel(part))
       .join(" · ") || "—"
   );
+}
+
+/** Color / size for blanks ordering — surface what to buy, not a date. */
+function lineSpecLabel(
+  order: OrderFlowOrder,
+  field: "color" | "size",
+): string {
+  const lines = orderLines(order);
+  if (lines.length > 1) {
+    const values = [
+      ...new Set(
+        lines
+          .map((l) => String(l[field] ?? "").trim())
+          .filter(Boolean)
+          .map((v) => formatOrderLabel(v)),
+      ),
+    ];
+    if (values.length === 1) return `${values[0]} · ${lines.length} lines`;
+    return `${lines.length} lines`;
+  }
+  return formatOrderLabel(lines[0]?.[field]) || "—";
+}
+
+/** Default visible columns per stage — hide noise, keep the job in focus. */
+function stageColumnVisibility(stage: OrderFlowStage): VisibilityState {
+  switch (stage) {
+    case "needs_blanks":
+      return {
+        brandLabel: true,
+        orderNumber: true,
+        customer: false,
+        product: true,
+        color: true,
+        size: true,
+        quantity: true,
+        orderDate: false,
+        shipBy: false,
+        stage: false,
+      };
+    case "blanks_ordered":
+      return {
+        brandLabel: true,
+        orderNumber: true,
+        customer: false,
+        product: true,
+        color: false,
+        size: false,
+        quantity: true,
+        orderDate: true,
+        shipBy: false,
+        stage: false,
+      };
+    case "in_production":
+      return {
+        brandLabel: true,
+        orderNumber: true,
+        customer: true,
+        product: true,
+        color: false,
+        size: false,
+        quantity: true,
+        orderDate: false,
+        shipBy: true,
+        stage: false,
+      };
+    case "ready_to_ship":
+      return {
+        brandLabel: true,
+        orderNumber: true,
+        customer: true,
+        product: true,
+        color: false,
+        size: false,
+        quantity: true,
+        orderDate: false,
+        shipBy: true,
+        stage: false,
+      };
+    case "shipped":
+      return {
+        brandLabel: true,
+        orderNumber: true,
+        customer: true,
+        product: true,
+        color: false,
+        size: false,
+        quantity: true,
+        orderDate: true,
+        shipBy: false,
+        stage: false,
+      };
+    default:
+      return {};
+  }
 }
 
 function OrderRowActions({
@@ -186,7 +297,10 @@ export type OrderFlowTableActions = {
 
 function buildColumns(
   actions: OrderFlowTableActions,
+  opts: { emphasizeOrderSpecs: boolean },
 ): ColumnDef<OrderFlowOrder>[] {
+  const { emphasizeOrderSpecs } = opts;
+
   return [
     {
       id: "select",
@@ -200,6 +314,7 @@ function buildColumns(
             table.toggleAllPageRowsSelected(!!value)
           }
           aria-label="Select all"
+          className={CHECKBOX_CLASS}
         />
       ),
       cell: ({ row }) => (
@@ -207,10 +322,37 @@ function buildColumns(
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
           aria-label={`Select ${row.original.orderNumber}`}
+          className={CHECKBOX_CLASS}
         />
       ),
       enableSorting: false,
       enableHiding: false,
+    },
+    {
+      accessorKey: "orderNumber",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Order" />
+      ),
+      cell: ({ row }) => {
+        const order = row.original;
+        const urgent = Boolean(order.highPriority || order.earlyWarning);
+        return (
+          <button
+            type="button"
+            title={orderedTitle(order)}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-brand hover:underline"
+            onClick={() => actions.onOpenDetail(order)}
+          >
+            {urgent ? (
+              <span
+                className="size-1.5 shrink-0 rounded-full bg-amber-500"
+                aria-hidden
+              />
+            ) : null}
+            {order.orderNumber}
+          </button>
+        );
+      },
     },
     {
       accessorKey: "brandLabel",
@@ -219,21 +361,6 @@ function buildColumns(
       ),
       cell: ({ row }) => (
         <span className="text-foreground">{row.original.brandLabel}</span>
-      ),
-    },
-    {
-      accessorKey: "orderNumber",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Order" />
-      ),
-      cell: ({ row }) => (
-        <button
-          type="button"
-          className="text-xs font-medium text-blue-700 hover:underline"
-          onClick={() => actions.onOpenDetail(row.original)}
-        >
-          {row.original.orderNumber}
-        </button>
       ),
     },
     {
@@ -249,32 +376,27 @@ function buildColumns(
       ),
       cell: ({ row }) => {
         const order = row.original;
-        const lines =
-          order.lineItems?.length > 0
-            ? order.lineItems
-            : [
-                {
-                  product: order.product,
-                  variant: order.variant,
-                  color: order.color,
-                  size: order.size,
-                  quantity: order.quantity,
-                },
-              ];
+        const lines = orderLines(order);
         const subtitle = productSubtitle(order);
         return (
           <HoverCard openDelay={10} closeDelay={100}>
             <HoverCardTrigger asChild>
               <button
                 type="button"
-                className="block max-w-[200px] text-left underline-offset-4 hover:underline"
+                className="block max-w-[220px] text-left underline-offset-4 hover:underline"
               >
                 <span className="block truncate font-medium text-foreground">
                   {formatOrderLabel(order.product)}
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {subtitle}
-                </span>
+                {!emphasizeOrderSpecs ? (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {subtitle}
+                  </span>
+                ) : lines.length > 1 ? (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {lines.length} lines
+                  </span>
+                ) : null}
               </button>
             </HoverCardTrigger>
             <HoverCardContent
@@ -301,7 +423,7 @@ function buildColumns(
                         .filter(Boolean)
                         .map((part) => formatOrderLabel(part))
                         .join(" · ") || "—"}
-                      {line.quantity != null ? ` · Qty ${line.quantity}` : ""}
+                      {line.quantity != null ? ` · qty ${line.quantity}` : ""}
                     </div>
                   </div>
                 ))}
@@ -312,12 +434,36 @@ function buildColumns(
       },
     },
     {
+      id: "color",
+      accessorFn: (row) => lineSpecLabel(row, "color"),
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Color" />
+      ),
+      cell: ({ row }) => (
+        <span className="font-medium text-foreground">
+          {lineSpecLabel(row.original, "color")}
+        </span>
+      ),
+    },
+    {
+      id: "size",
+      accessorFn: (row) => lineSpecLabel(row, "size"),
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Size" />
+      ),
+      cell: ({ row }) => (
+        <span className="font-medium tabular-nums text-foreground">
+          {lineSpecLabel(row.original, "size")}
+        </span>
+      ),
+    },
+    {
       accessorKey: "quantity",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Qty" />
       ),
       cell: ({ row }) => (
-        <span className="tabular-nums">{row.original.quantity}</span>
+        <span className="font-medium tabular-nums">{row.original.quantity}</span>
       ),
     },
     {
@@ -328,20 +474,52 @@ function buildColumns(
       cell: ({ row }) => {
         const order = row.original;
         const age = orderedAgeLabel(order);
+        const urgent = Boolean(order.highPriority || order.earlyWarning);
         return (
           <span
             title={orderedTitle(order)}
-            className={cn(
-              "tabular-nums whitespace-nowrap",
-              order.highPriority
-                ? "font-medium text-rose-700"
-                : order.earlyWarning
-                  ? "font-medium text-amber-800"
-                  : "text-muted-foreground",
-            )}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums text-foreground"
           >
-            {order.orderDate}
-            {age ? <span className="opacity-70"> · {age}</span> : null}
+            {urgent ? (
+              <span
+                className="size-1.5 shrink-0 rounded-full bg-amber-500"
+                aria-hidden
+              />
+            ) : null}
+            <span>
+              {order.orderDate}
+              {age ? (
+                <span className="text-muted-foreground"> · {age}</span>
+              ) : null}
+            </span>
+          </span>
+        );
+      },
+    },
+    {
+      id: "shipBy",
+      accessorFn: (row) => row.expectedShipDate || "",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Ship by" />
+      ),
+      cell: ({ row }) => {
+        const order = row.original;
+        const urgent =
+          order.deadlineState === "overdue" ||
+          order.deadlineState === "due_today" ||
+          Boolean(order.highPriority || order.earlyWarning);
+        return (
+          <span
+            title={orderedTitle(order)}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums text-foreground"
+          >
+            {urgent ? (
+              <span
+                className="size-1.5 shrink-0 rounded-full bg-amber-500"
+                aria-hidden
+              />
+            ) : null}
+            <span>{order.expectedShipDate || "—"}</span>
           </span>
         );
       },
@@ -352,7 +530,12 @@ function buildColumns(
         <DataTableColumnHeader column={column} title="Stage" />
       ),
       cell: ({ row }) => (
-        <Badge>{STAGE_LABELS[row.original.stage]}</Badge>
+        <Badge
+          variant="outline"
+          className={cn("font-medium", stageBadgeClass(row.original.stage))}
+        >
+          {STAGE_LABELS[row.original.stage]}
+        </Badge>
       ),
       enableSorting: true,
       filterFn: (row, _id, value) => {
@@ -377,6 +560,7 @@ function buildColumns(
 
 type OrderFlowDataTableProps = {
   data: OrderFlowOrder[];
+  stage: OrderFlowStage;
   loading?: boolean;
   selected: Record<string, boolean>;
   onSelectedChange: React.Dispatch<
@@ -387,6 +571,7 @@ type OrderFlowDataTableProps = {
 
 export function OrderFlowDataTable({
   data,
+  stage,
   loading,
   saving,
   selected,
@@ -400,17 +585,26 @@ export function OrderFlowDataTable({
     [],
   );
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+    React.useState<VisibilityState>(() => stageColumnVisibility(stage));
   const [globalFilter, setGlobalFilter] = React.useState("");
+
+  React.useEffect(() => {
+    setColumnVisibility(stageColumnVisibility(stage));
+  }, [stage]);
+
+  const emphasizeOrderSpecs = stage === "needs_blanks";
 
   const columns = React.useMemo(
     () =>
-      buildColumns({
-        saving,
-        onOpenDetail,
-        onRequestStageChange,
-      }),
-    [saving, onOpenDetail, onRequestStageChange],
+      buildColumns(
+        {
+          saving,
+          onOpenDetail,
+          onRequestStageChange,
+        },
+        { emphasizeOrderSpecs },
+      ),
+    [saving, onOpenDetail, onRequestStageChange, emphasizeOrderSpecs],
   );
 
   const rowSelection = React.useMemo<RowSelectionState>(() => {
@@ -481,14 +675,14 @@ export function OrderFlowDataTable({
   });
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-2">
+      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Input
             placeholder="Filter orders…"
             value={globalFilter}
             onChange={(event) => setGlobalFilter(event.target.value)}
-            className="max-w-sm"
+            className="h-7 max-w-sm rounded-md shadow-none"
           />
           <DataTableViewOptions table={table} />
         </div>
@@ -499,19 +693,26 @@ export function OrderFlowDataTable({
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto">
         {loading ? (
           <div className="flex items-center gap-2 px-4 py-10 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading Shopify orders…
           </div>
         ) : (
-          <Table className="min-w-[960px]">
+          <Table
+            className={cn(
+              emphasizeOrderSpecs ? "min-w-[720px]" : "min-w-[800px]",
+            )}
+          >
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
+                <TableRow
+                  key={headerGroup.id}
+                  className="border-b border-black/[0.06] hover:bg-transparent"
+                >
                   {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id}>
+                    <TableHead key={header.id} className={CELL_PAD}>
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -529,9 +730,10 @@ export function OrderFlowDataTable({
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && "selected"}
+                    className="border-b border-black/[0.06]"
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
+                      <TableCell key={cell.id} className={CELL_PAD}>
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext(),
@@ -544,7 +746,7 @@ export function OrderFlowDataTable({
                 <TableRow>
                   <TableCell
                     colSpan={columns.length}
-                    className="h-24 text-center text-muted-foreground"
+                    className="h-24 py-3.5 text-center text-muted-foreground"
                   >
                     No orders in this stage.
                   </TableCell>

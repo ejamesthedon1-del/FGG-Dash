@@ -241,7 +241,7 @@ export async function fetchOrderFlow(params?: {
     const msg = err instanceof Error ? err.message : "Failed to fetch";
     throw new Error(
       msg === "Failed to fetch"
-        ? "Could not reach Order Flow API (network or payload too large). Try Refresh, or redeploy the backend if this keeps happening."
+        ? "Could not reach Orders API (network or payload too large). Try Refresh, or redeploy the backend if this keeps happening."
         : msg,
     );
   }

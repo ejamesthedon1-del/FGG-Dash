@@ -142,7 +142,7 @@ export function CreateSystem() {
 
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Create New System</h2>
+        <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">Create New System</h2>
         <p className="text-gray-600 mt-1">
           Set up a new training system with resources for your team
         </p>

@@ -31,6 +31,8 @@ export const SYNCED_STORAGE_KEYS = [
   "training-center-progress-v1",
   "order-flow-stages-v1",
   "fgg.shop-supplies.v1",
+  "fgg.blanks-catalog.v1",
+  "fgg.blanks-batch-overrides.v1",
   "fgg.cash-split-targets.v1",
   "fgg.time-clock.v1",
 ] as const;

@@ -545,7 +545,7 @@ export function ShopSuppliesPage() {
     <div className="mx-auto max-w-6xl space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-0.5">
-          <h2 className="text-2xl font-semibold tracking-tight text-gray-950">
+          <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
             Inventory
           </h2>
           <Tooltip>
@@ -1385,7 +1385,7 @@ export function ShopSuppliesPage() {
             </h3>
             <p className="mt-1 text-xs text-gray-500">
               Map a Shopify product to the materials used per unit (e.g. painters hoodie → left
-              chest DTF + inside tag + bag). Pick from recent Order Flow products or paste a
+              chest DTF + inside tag + bag). Pick from recent Orders products or paste a
               product ID.
             </p>
             {orderProducts.length ? (
@@ -1403,7 +1403,7 @@ export function ShopSuppliesPage() {
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Pick from recent Order Flow products" />
+                    <SelectValue placeholder="Pick from recent Orders products" />
                   </SelectTrigger>
                   <SelectContent>
                     {orderProducts.map((p) => (

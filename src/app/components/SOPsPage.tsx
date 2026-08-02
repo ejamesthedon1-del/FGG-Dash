@@ -306,7 +306,7 @@ export function SOPsPage() {
       <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-2 text-center">
         <div className="flex w-full flex-col items-center gap-3">
           <div>
-            <h2 className="text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">
+            <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
               Knowledge Base
             </h2>
           </div>

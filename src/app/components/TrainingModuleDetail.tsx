@@ -101,7 +101,7 @@ export function TrainingModuleDetail() {
         </Button>
         <div className="flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-2xl font-semibold text-gray-900">{module.title}</h2>
+            <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">{module.title}</h2>
             <p className="mt-1 text-sm text-gray-500">{module.category}</p>
           </div>
           <div className="flex flex-wrap gap-2">

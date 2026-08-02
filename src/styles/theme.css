@@ -184,19 +184,19 @@
   }
 
   h1 {
-    font-family: var(--font-sf-display);
-    font-size: 32px;
+    font-family: var(--font-sf);
+    font-size: 26px;
     font-weight: var(--font-weight-medium);
-    line-height: 1.125;
-    letter-spacing: -0.2px;
+    line-height: 1.2;
+    letter-spacing: -0.22px;
   }
 
   h2 {
-    font-family: var(--font-sf-display);
+    font-family: var(--font-sf);
     font-size: 21px;
     font-weight: var(--font-weight-medium);
-    line-height: 1.143;
-    letter-spacing: 0.231px;
+    line-height: 1.2;
+    letter-spacing: -0.2px;
   }
 
   h3 {

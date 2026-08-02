@@ -121,7 +121,7 @@ export function CashSplitPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-gray-950 sm:text-3xl">
+          <h1 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
             Cash
           </h1>
         </div>

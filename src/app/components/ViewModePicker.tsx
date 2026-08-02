@@ -20,7 +20,7 @@ const OPTIONS: {
   {
     mode: "ops",
     title: "Ops view",
-    description: "Floor dashboard, Order Flow, and Knowledge Base for the shift.",
+    description: "Floor dashboard, Orders, and Knowledge Base for the shift.",
     icon: Package,
   },
 ];

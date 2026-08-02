@@ -103,7 +103,7 @@ export function TrainingCenterPage() {
     <div className="space-y-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Training Center</h2>
+          <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">Training Center</h2>
           <p className="mt-1 max-w-2xl text-gray-600">
             Structured onboarding and ongoing learning for Future Garment Group — start with the path below, then dive
             into modules by category.

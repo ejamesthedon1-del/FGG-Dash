@@ -25,6 +25,7 @@ import { userFirstName, type AppRole } from "../lib/auth-roles";
 import { SignInPage } from "./SignInPage";
 import { ViewModePicker } from "./ViewModePicker";
 import { TimeClockStickyBar } from "./TimeClockStickyBar";
+import { OrdersSpotlightTour } from "./OrdersSpotlightTour";
 import { Button } from "./ui/button";
 import {
   Collapsible,
@@ -264,6 +265,7 @@ function NavMenuItems({
               <NavLink
                 to={item.to}
                 end={item.end}
+                data-tour={item.to === "/order-flow" ? "nav-orders" : undefined}
                 onClick={() => {
                   if (item.to === "/order-flow") onOrderFlowOpen?.();
                   if (isMobile) setOpenMobile(false);
@@ -586,12 +588,18 @@ export function DashboardLayout() {
               <Outlet />
             </div>
           ) : (
-            <div className="mx-auto min-h-full w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-8">
-              <Outlet />
+            <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 pt-6 sm:px-6 sm:pt-8 lg:px-8 lg:pt-8">
+              <div className="min-w-0 flex-1 pb-10 sm:pb-12">
+                <Outlet />
+              </div>
+              <footer className="mt-auto shrink-0 border-t border-black/[0.06] py-8 text-center text-xs text-muted-foreground">
+                Future Garment Group
+              </footer>
             </div>
           )}
         </div>
       </SidebarInset>
+      <OrdersSpotlightTour />
     </SidebarProvider>
   );
 }

@@ -22,14 +22,25 @@ const SIZE_RANK: Record<string, number> = {
   "5xl": 9,
 };
 
+export type BlankLineOrderRef = {
+  brand: string;
+  id: string;
+  orderNumber: string;
+};
+
 export type BlankLine = {
   brand: string;
   brandLabel: string;
+  /** Shopify / sellable product title (before blank catalog rename). */
   product: string;
+  /** Shopify product GIDs contributing to this line. */
+  productIds: string[];
   color: string;
   size: string;
   quantity: number;
   orderNumbers: string[];
+  /** Orders that still need these blanks (for mark ordered). */
+  orders: BlankLineOrderRef[];
 };
 
 function sizeSortKey(size: string): [number, string] {
@@ -50,44 +61,68 @@ function lineItemsForOrder(order: OrderFlowOrder): OrderFlowLineItem[] {
   ];
 }
 
-/** Aggregate selected orders into blank lines grouped for ordering. */
+function pushOrderRef(line: BlankLine, order: OrderFlowOrder) {
+  if (!line.orderNumbers.includes(order.orderNumber)) {
+    line.orderNumbers.push(order.orderNumber);
+  }
+  if (!line.orders.some((o) => o.brand === order.brand && o.id === order.id)) {
+    line.orders.push({
+      brand: order.brand,
+      id: order.id,
+      orderNumber: order.orderNumber,
+    });
+  }
+}
+
+/** Aggregate orders into blank lines grouped by product + color + size. */
 export function buildBlankLines(orders: OrderFlowOrder[]): BlankLine[] {
   const map = new Map<string, BlankLine>();
 
   for (const order of orders) {
     for (const item of lineItemsForOrder(order)) {
       const product = (item.product || "Unknown").trim();
+      const productId = (item.productId || "").trim();
       const color = (item.color || "—").trim() || "—";
       const size = (item.size || "—").trim() || "—";
       const qty = Number(item.quantity) || 0;
       if (qty <= 0) continue;
 
-      const key = [order.brand, product.toLowerCase(), color.toLowerCase(), size.toLowerCase()].join(
-        "::",
-      );
+      // Group across brands by sellable product identity so ops order blanks once.
+      const key = [
+        productId || product.toLowerCase(),
+        color.toLowerCase(),
+        size.toLowerCase(),
+      ].join("::");
       const existing = map.get(key);
       if (existing) {
         existing.quantity += qty;
-        if (!existing.orderNumbers.includes(order.orderNumber)) {
-          existing.orderNumbers.push(order.orderNumber);
+        if (productId && !existing.productIds.includes(productId)) {
+          existing.productIds.push(productId);
         }
+        pushOrderRef(existing, order);
       } else {
         map.set(key, {
           brand: order.brand,
           brandLabel: order.brandLabel,
           product,
+          productIds: productId ? [productId] : [],
           color,
           size,
           quantity: qty,
           orderNumbers: [order.orderNumber],
+          orders: [
+            {
+              brand: order.brand,
+              id: order.id,
+              orderNumber: order.orderNumber,
+            },
+          ],
         });
       }
     }
   }
 
   return [...map.values()].sort((a, b) => {
-    const brand = a.brandLabel.localeCompare(b.brandLabel);
-    if (brand) return brand;
     const product = a.product.localeCompare(b.product);
     if (product) return product;
     const color = a.color.localeCompare(b.color);
@@ -503,9 +538,12 @@ export function buildBlanksPrintHtml(
   return html;
 }
 
-/** Print via a hidden iframe so browsers do not block a pop-up. */
-export function printBlanksSlip(orders: OrderFlowOrder[]): void {
-  const html = buildBlanksPrintHtml(orders, { showWindowActions: false });
+/** Print prebuilt slip HTML via a hidden iframe (avoids pop-up blockers). */
+export function printBlanksSlipHtml(html: string): void {
+  if (!html.trim()) {
+    throw new Error("Nothing to print yet.");
+  }
+
   const iframe = document.createElement("iframe");
   iframe.setAttribute("title", "FGG Blanks Order Slip");
   iframe.style.position = "fixed";
@@ -539,4 +577,9 @@ export function printBlanksSlip(orders: OrderFlowOrder[]): void {
 
   // Give the document a moment to layout before printing.
   window.setTimeout(triggerPrint, 250);
+}
+
+/** Print via a hidden iframe so browsers do not block a pop-up. */
+export function printBlanksSlip(orders: OrderFlowOrder[]): void {
+  printBlanksSlipHtml(buildBlanksPrintHtml(orders, { showWindowActions: false }));
 }

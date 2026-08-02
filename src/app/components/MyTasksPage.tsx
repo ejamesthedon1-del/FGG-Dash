@@ -230,7 +230,7 @@ export function MyTasksPage() {
     <div className="space-y-6">
       <header className="border-b border-gray-200 pb-5">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-[1.75rem] font-semibold tracking-tight text-gray-950">
+          <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
             My Tasks
           </h2>
           <Button type="button" size="sm" className="gap-1.5" onClick={openCreate}>

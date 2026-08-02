@@ -772,7 +772,7 @@ export function BrandHubDetail() {
                 />
               </div>
             ) : (
-              <h2 className="text-2xl font-semibold text-gray-900">{display.name}</h2>
+              <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">{display.name}</h2>
             )}
             {editing && draft ? (
               <Select value={draft.status} onValueChange={(v) => updateDraft({ status: v as BrandStatus })}>

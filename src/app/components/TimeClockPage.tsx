@@ -157,7 +157,7 @@ export function TimeClockPage() {
       <header className="space-y-1">
         <div className="flex items-center gap-2 text-gray-900">
           <Clock className="h-5 w-5" />
-          <h1 className="text-2xl font-semibold tracking-tight">Clock</h1>
+          <h1 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">Clock</h1>
         </div>
         <p className="text-sm text-gray-500">
           Clock in when you start working. Switch task when you change what
