@@ -10,7 +10,12 @@ export const IG_BRAND_LABELS: Record<IgScheduleBrand, string> = {
   "sinners-testimony": "Sinners Testimony",
 };
 
-export type IgPostStatus = "draft" | "scheduled" | "posted" | "failed";
+export type IgPostStatus =
+  | "draft"
+  | "scheduled"
+  | "publishing"
+  | "posted"
+  | "failed";
 
 export type IgPostKind = "feed" | "story";
 
@@ -31,6 +36,7 @@ export type IgScheduledPost = {
   updatedAt: string;
   postedAt?: string;
   lastError?: string;
+  mediaId?: string;
 };
 
 export type IgScheduleStore = {
@@ -60,6 +66,7 @@ function parsePost(raw: unknown): IgScheduledPost | null {
   if (
     status !== "draft" &&
     status !== "scheduled" &&
+    status !== "publishing" &&
     status !== "posted" &&
     status !== "failed"
   ) {
@@ -86,7 +93,67 @@ function parsePost(raw: unknown): IgScheduledPost | null {
     updatedAt,
     postedAt: typeof o.postedAt === "string" ? o.postedAt : undefined,
     lastError: typeof o.lastError === "string" ? o.lastError : undefined,
+    mediaId: typeof o.mediaId === "string" ? o.mediaId : undefined,
   };
+}
+
+export function parseIgScheduleStore(raw: unknown): IgScheduleStore {
+  if (!raw || typeof raw !== "object") return emptyStore();
+  const postsRaw = (raw as { posts?: unknown }).posts;
+  if (!Array.isArray(postsRaw)) return emptyStore();
+  return {
+    version: 1,
+    posts: postsRaw.map(parsePost).filter((p): p is IgScheduledPost => p != null),
+  };
+}
+
+function statusRank(status: IgPostStatus): number {
+  switch (status) {
+    case "posted":
+      return 5;
+    case "failed":
+      return 4;
+    case "publishing":
+      return 3;
+    case "scheduled":
+      return 2;
+    case "draft":
+      return 1;
+  }
+}
+
+/** Merge local + remote queues; newer updatedAt wins, ties prefer terminal status. */
+export function mergeIgPosts(
+  left: IgScheduledPost[],
+  right: IgScheduledPost[],
+): IgScheduledPost[] {
+  const byId = new Map<string, IgScheduledPost>();
+  for (const post of [...left, ...right]) {
+    const existing = byId.get(post.id);
+    if (!existing) {
+      byId.set(post.id, post);
+      continue;
+    }
+    if (post.updatedAt > existing.updatedAt) {
+      byId.set(post.id, post);
+    } else if (
+      post.updatedAt === existing.updatedAt &&
+      statusRank(post.status) > statusRank(existing.status)
+    ) {
+      byId.set(post.id, post);
+    }
+  }
+  return [...byId.values()];
+}
+
+export function applyRemoteIgSchedule(store: IgScheduleStore): IgScheduleStore {
+  const local = loadIgSchedule();
+  const merged: IgScheduleStore = {
+    version: 1,
+    posts: mergeIgPosts(local.posts, store.posts),
+  };
+  saveIgSchedule(merged);
+  return merged;
 }
 
 export function loadIgSchedule(): IgScheduleStore {
@@ -136,9 +203,13 @@ export function deleteIgPost(id: string): IgScheduleStore {
 
 export function sortIgPosts(posts: IgScheduledPost[]): IgScheduledPost[] {
   return [...posts].sort((a, b) => {
-    const statusRank = (s: IgPostStatus) =>
-      s === "failed" ? 0 : s === "scheduled" || s === "draft" ? 1 : 2;
-    const r = statusRank(a.status) - statusRank(b.status);
+    const queueRank = (s: IgPostStatus) =>
+      s === "failed"
+        ? 0
+        : s === "scheduled" || s === "draft" || s === "publishing"
+          ? 1
+          : 2;
+    const r = queueRank(a.status) - queueRank(b.status);
     if (r) return r;
     return a.scheduledAt.localeCompare(b.scheduledAt);
   });
@@ -161,4 +232,80 @@ export function defaultScheduleAt(): string {
   const d = new Date();
   d.setHours(d.getHours() + 2, 0, 0, 0);
   return d.toISOString();
+}
+
+/** Feed posts for the IG profile grid (stories excluded). Newest / latest first. */
+export function feedLayoutPosts(
+  posts: IgScheduledPost[],
+  brand: IgScheduleBrand,
+): IgScheduledPost[] {
+  return posts
+    .filter(
+      (p) =>
+        p.brand === brand &&
+        (p.kind ?? "feed") === "feed" &&
+        Boolean(p.imageSrc),
+    )
+    .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt));
+}
+
+const FEED_REORDER_STEP_MS = 60 * 60 * 1000;
+
+/**
+ * Apply a new visual feed order (index 0 = top-left = newest).
+ * Rewrites `scheduledAt` in 1h steps so order persists.
+ */
+export function applyFeedLayoutOrder(
+  orderedPosts: IgScheduledPost[],
+): IgScheduledPost[] {
+  if (orderedPosts.length === 0) return [];
+  const now = Date.now();
+  const times = orderedPosts
+    .map((p) => new Date(p.scheduledAt).getTime())
+    .filter((t) => !Number.isNaN(t));
+  const existingMax = times.length ? Math.max(...times) : 0;
+  const top = Math.max(
+    existingMax,
+    now + orderedPosts.length * FEED_REORDER_STEP_MS,
+  );
+  const updatedAt = new Date().toISOString();
+  return orderedPosts.map((post, i) => ({
+    ...post,
+    scheduledAt: new Date(top - i * FEED_REORDER_STEP_MS).toISOString(),
+    updatedAt,
+  }));
+}
+
+/** Upsert many posts in one local write. */
+export function upsertIgPosts(posts: IgScheduledPost[]): IgScheduleStore {
+  const store = loadIgSchedule();
+  const updatedAt = new Date().toISOString();
+  for (const post of posts) {
+    const next = { ...post, updatedAt };
+    const idx = store.posts.findIndex((p) => p.id === next.id);
+    if (idx >= 0) store.posts[idx] = next;
+    else store.posts.unshift(next);
+  }
+  saveIgSchedule(store);
+  return store;
+}
+
+export function moveFeedLayoutItem(
+  ordered: IgScheduledPost[],
+  fromIndex: number,
+  toIndex: number,
+): IgScheduledPost[] {
+  if (
+    fromIndex === toIndex ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= ordered.length ||
+    toIndex >= ordered.length
+  ) {
+    return ordered;
+  }
+  const next = [...ordered];
+  const [item] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, item);
+  return applyFeedLayoutOrder(next);
 }

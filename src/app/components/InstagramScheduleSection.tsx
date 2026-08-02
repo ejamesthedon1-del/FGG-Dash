@@ -13,13 +13,18 @@ import {
 import { toast } from "sonner";
 
 import {
+  deleteInstagramSchedulePost,
   disconnectInstagram,
+  fetchInstagramSchedule,
   fetchInstagramStatus,
   instagramConnectUrl,
   publishInstagramPost,
+  pushInstagramSchedule,
+  upsertInstagramSchedulePost,
   type IgConnectionStatus,
 } from "../lib/instagram-api";
 import {
+  applyRemoteIgSchedule,
   defaultScheduleAt,
   deleteIgPost,
   fromDatetimeLocalValue,
@@ -27,9 +32,11 @@ import {
   IG_SCHEDULE_BRANDS,
   loadIgSchedule,
   newIgPostId,
+  saveIgSchedule,
   sortIgPosts,
   toDatetimeLocalValue,
   upsertIgPost,
+  upsertIgPosts,
   type IgPostKind,
   type IgPostStatus,
   type IgScheduleBrand,
@@ -41,6 +48,7 @@ import {
   loadCreativeAssets,
   type AssetItem,
 } from "../lib/creative-assets-storage";
+import { InstagramFeedLayout } from "./InstagramFeedLayout";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -71,6 +79,8 @@ function statusLabel(status: IgPostStatus): string {
       return "Draft";
     case "scheduled":
       return "Scheduled";
+    case "publishing":
+      return "Publishing…";
     case "posted":
       return "Posted";
     case "failed":
@@ -114,6 +124,8 @@ export function InstagramScheduleSection() {
   const [status, setStatus] = React.useState<IgConnectionStatus | null>(null);
   const [statusLoading, setStatusLoading] = React.useState(true);
   const [publishingId, setPublishingId] = React.useState<string | null>(null);
+  const [focusedPostId, setFocusedPostId] = React.useState<string | null>(null);
+  const queueItemRefs = React.useRef<Map<string, HTMLLIElement>>(new Map());
 
   const images = React.useMemo(
     () => flattenImages(loadCreativeAssets()),
@@ -128,6 +140,41 @@ export function InstagramScheduleSection() {
   const refresh = React.useCallback(() => {
     setPosts(sortIgPosts(loadIgSchedule().posts));
   }, []);
+
+  const syncFromBackend = React.useCallback(async () => {
+    try {
+      const remote = await fetchInstagramSchedule();
+      const merged = applyRemoteIgSchedule(remote);
+      setPosts(sortIgPosts(merged.posts));
+    } catch {
+      // Backend optional while offline; keep local queue.
+    }
+  }, []);
+
+  const pushLocalQueue = React.useCallback(async () => {
+    try {
+      const remote = await pushInstagramSchedule(loadIgSchedule());
+      const merged = applyRemoteIgSchedule(remote);
+      setPosts(sortIgPosts(merged.posts));
+    } catch {
+      // Keep local; auto-publisher needs backend sync when API is up.
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void (async () => {
+      await pushLocalQueue();
+    })();
+    const onSync = () => refresh();
+    window.addEventListener("fgg-storage-sync", onSync);
+    const poll = window.setInterval(() => {
+      void syncFromBackend();
+    }, 15_000);
+    return () => {
+      window.removeEventListener("fgg-storage-sync", onSync);
+      window.clearInterval(poll);
+    };
+  }, [pushLocalQueue, refresh, syncFromBackend]);
 
   const loadStatus = React.useCallback(async (b: IgScheduleBrand) => {
     setStatusLoading(true);
@@ -193,6 +240,12 @@ export function InstagramScheduleSection() {
       toast.error("Pick a date and time");
       return;
     }
+    if (!isPublicHttpsUrl(imageSrc)) {
+      toast.error(
+        "Auto-publish needs a public https:// image URL (Shopify Files, CDN, etc.)",
+      );
+      return;
+    }
     const scheduledAt = fromDatetimeLocalValue(scheduledLocal);
     const post: IgScheduledPost = {
       id: newIgPostId(),
@@ -213,28 +266,48 @@ export function InstagramScheduleSection() {
     setAssetId("");
     setExternalUrl("");
     setScheduledLocal(toDatetimeLocalValue(defaultScheduleAt()));
-    toast.success(kind === "story" ? "Story scheduled" : "Post scheduled");
-    if (!isPublicHttpsUrl(imageSrc)) {
-      toast.message(
-        "Auto-publish needs a public https image URL — you can still mark posted manually.",
-      );
-    }
+    toast.success(
+      kind === "story"
+        ? "Story scheduled — will auto-publish"
+        : "Post scheduled — will auto-publish",
+    );
+    void (async () => {
+      try {
+        const remote = await upsertInstagramSchedulePost(post);
+        applyRemoteIgSchedule(remote);
+        refresh();
+      } catch (err) {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Saved locally, but could not reach auto-publisher API",
+        );
+      }
+    })();
   };
 
   const onMarkPosted = (post: IgScheduledPost) => {
-    upsertIgPost({
+    const next = {
       ...post,
-      status: "posted",
+      status: "posted" as const,
       postedAt: new Date().toISOString(),
       lastError: undefined,
-    });
+    };
+    upsertIgPost(next);
     refresh();
     toast.success("Marked as posted");
+    void upsertInstagramSchedulePost(next).catch(() => undefined);
   };
 
   const onDelete = (id: string) => {
     deleteIgPost(id);
     refresh();
+    void deleteInstagramSchedulePost(id)
+      .then((remote) => {
+        saveIgSchedule(remote);
+        refresh();
+      })
+      .catch(() => undefined);
   };
 
   const onPublishNow = async (post: IgScheduledPost) => {
@@ -249,6 +322,14 @@ export function InstagramScheduleSection() {
       return;
     }
     setPublishingId(post.id);
+    const publishing = {
+      ...post,
+      status: "publishing" as const,
+      lastError: undefined,
+    };
+    upsertIgPost(publishing);
+    refresh();
+    void upsertInstagramSchedulePost(publishing).catch(() => undefined);
     try {
       const result = await publishInstagramPost({
         brand: post.brand,
@@ -257,22 +338,27 @@ export function InstagramScheduleSection() {
         kind: post.kind ?? "feed",
       });
       if (!result.ok) {
-        upsertIgPost({
+        const failed = {
           ...post,
-          status: "failed",
+          status: "failed" as const,
           lastError: result.error || "Publish failed",
-        });
+        };
+        upsertIgPost(failed);
         refresh();
+        void upsertInstagramSchedulePost(failed).catch(() => undefined);
         toast.error(result.error || "Publish failed");
         return;
       }
-      upsertIgPost({
+      const posted = {
         ...post,
-        status: "posted",
+        status: "posted" as const,
         postedAt: new Date().toISOString(),
         lastError: undefined,
-      });
+        mediaId: result.mediaId,
+      };
+      upsertIgPost(posted);
       refresh();
+      void upsertInstagramSchedulePost(posted).catch(() => undefined);
       toast.success("Published to Instagram");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Publish failed");
@@ -283,6 +369,30 @@ export function InstagramScheduleSection() {
 
   const brandPosts = posts.filter((p) => p.brand === brand);
 
+  const onFocusPost = React.useCallback((postId: string) => {
+    setFocusedPostId(postId);
+    const el = queueItemRefs.current.get(postId);
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
+
+  const onFeedReorder = React.useCallback(
+    (reordered: IgScheduledPost[]) => {
+      upsertIgPosts(reordered);
+      refresh();
+      toast.success("Feed order updated");
+      void (async () => {
+        try {
+          const remote = await pushInstagramSchedule(loadIgSchedule());
+          applyRemoteIgSchedule(remote);
+          refresh();
+        } catch {
+          toast.message("Order saved locally — sync when API is available");
+        }
+      })();
+    },
+    [refresh],
+  );
+
   return (
     <div className="mx-auto w-full max-w-3xl space-y-12 pb-10">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -291,7 +401,7 @@ export function InstagramScheduleSection() {
             Instagram
           </h2>
           <p className="mt-1 text-[15px] text-gray-500">
-            Schedule organic posts for each brand account.
+            Schedule organic posts — they auto-publish at the set time.
           </p>
         </div>
         <Select
@@ -395,6 +505,14 @@ export function InstagramScheduleSection() {
         ) : null}
       </section>
 
+      <InstagramFeedLayout
+        posts={posts}
+        brand={brand}
+        focusedId={focusedPostId}
+        onFocusPost={onFocusPost}
+        onReorder={onFeedReorder}
+      />
+
       <section className="space-y-4 border-t border-black/[0.06] pt-6">
         <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
           New post
@@ -451,7 +569,7 @@ export function InstagramScheduleSection() {
           </label>
           <label className="block space-y-1.5">
             <span className="text-[13px] text-gray-400">
-              Or public image URL (required for auto-publish)
+              Public image URL (required for auto-publish)
             </span>
             <Input
               value={externalUrl}
@@ -512,7 +630,14 @@ export function InstagramScheduleSection() {
             {brandPosts.map((post) => (
               <li
                 key={post.id}
-                className="flex gap-3 border-b border-black/[0.06] py-4"
+                ref={(node) => {
+                  if (node) queueItemRefs.current.set(post.id, node);
+                  else queueItemRefs.current.delete(post.id);
+                }}
+                className={cn(
+                  "flex gap-3 border-b border-black/[0.06] py-4 transition-colors",
+                  focusedPostId === post.id && "bg-blue-50/60",
+                )}
               >
                 {post.imageSrc ? (
                   <img
@@ -537,7 +662,7 @@ export function InstagramScheduleSection() {
                     {post.lastError ? ` · ${post.lastError}` : ""}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {post.status !== "posted" ? (
+                    {post.status !== "posted" && post.status !== "publishing" ? (
                       <>
                         <Button
                           type="button"

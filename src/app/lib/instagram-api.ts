@@ -1,5 +1,10 @@
 import { apiUrl } from "./api-base";
-import type { IgScheduleBrand } from "./instagram-schedule-storage";
+import {
+  parseIgScheduleStore,
+  type IgScheduleBrand,
+  type IgScheduleStore,
+  type IgScheduledPost,
+} from "./instagram-schedule-storage";
 
 export type IgConnectionStatus = {
   configured: boolean;
@@ -82,4 +87,57 @@ export async function publishInstagramPost(
     };
   }
   return data;
+}
+
+export async function fetchInstagramSchedule(): Promise<IgScheduleStore> {
+  const res = await fetch(apiUrl("/api/instagram/schedule"));
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Could not load Instagram schedule");
+  }
+  return parseIgScheduleStore(await res.json());
+}
+
+export async function pushInstagramSchedule(
+  store: IgScheduleStore,
+): Promise<IgScheduleStore> {
+  const res = await fetch(apiUrl("/api/instagram/schedule"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: 1, posts: store.posts }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Could not sync Instagram schedule");
+  }
+  return parseIgScheduleStore(await res.json());
+}
+
+export async function upsertInstagramSchedulePost(
+  post: IgScheduledPost,
+): Promise<IgScheduleStore> {
+  const res = await fetch(apiUrl("/api/instagram/schedule/posts"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(post),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Could not save scheduled post");
+  }
+  return parseIgScheduleStore(await res.json());
+}
+
+export async function deleteInstagramSchedulePost(
+  postId: string,
+): Promise<IgScheduleStore> {
+  const res = await fetch(
+    apiUrl(`/api/instagram/schedule/posts/${encodeURIComponent(postId)}`),
+    { method: "DELETE" },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Could not delete scheduled post");
+  }
+  return parseIgScheduleStore(await res.json());
 }

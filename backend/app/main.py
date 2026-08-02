@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -22,11 +23,39 @@ from .schemas import (
 from .shopify import ShopifyGraphQLError, cancel_order_for_fraud, get_shopify_client
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
-from . import gmail_store, gmail_support, instagram, instagram_store, mockups, order_flow_store, product_costs_store, shop_supplies_store, support_auto_reply
+from . import (
+    gmail_store,
+    gmail_support,
+    instagram,
+    instagram_publisher,
+    instagram_schedule_store,
+    instagram_store,
+    mockups,
+    order_flow_store,
+    product_costs_store,
+    shop_supplies_store,
+    support_auto_reply,
+)
 from .order_flow import build_order_flow
 from .shopify_color import PRODUCT_COLOR_GRAPHQL, product_label_with_color, resolve_product_color
 
-app = FastAPI(title="Shopify Dashboard Backend")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    stop = asyncio.Event()
+    task = asyncio.create_task(instagram_publisher.run_loop(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="Shopify Dashboard Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -94,6 +123,10 @@ async def health() -> dict:
         },
         "instagram": {
             "configured": instagram.instagram_configured(),
+            "autoPublisher": True,
+            "schedulePosts": len(
+                (instagram_schedule_store.get_store().get("posts") or [])
+            ),
         },
     }
 
@@ -202,6 +235,35 @@ async def instagram_publish(body: dict) -> dict:
         return await instagram.publish_image(brand, caption, image_url, kind=kind)
     except HTTPException as exc:
         return {"ok": False, "error": str(exc.detail)}
+
+
+@app.get("/api/instagram/schedule")
+async def instagram_schedule_get() -> dict:
+    return instagram_schedule_store.get_store()
+
+
+@app.put("/api/instagram/schedule")
+async def instagram_schedule_put(body: dict) -> dict:
+    return instagram_schedule_store.merge_and_put(body or {})
+
+
+@app.post("/api/instagram/schedule/posts")
+async def instagram_schedule_upsert_post(body: dict) -> dict:
+    try:
+        return instagram_schedule_store.upsert_post(body or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/instagram/schedule/posts/{post_id}")
+async def instagram_schedule_delete_post(post_id: str) -> dict:
+    return instagram_schedule_store.delete_post(post_id)
+
+
+@app.post("/api/instagram/schedule/process-due")
+async def instagram_schedule_process_due() -> dict:
+    """Manual tick for testing; the background worker also runs every 30s."""
+    return await instagram_publisher.process_due_once()
 
 
 @app.get("/api/support/gmail/threads")
