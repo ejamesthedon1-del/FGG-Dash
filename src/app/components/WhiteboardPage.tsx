@@ -10,6 +10,7 @@ import {
   clearWhiteboard,
   loadWhiteboard,
   saveWhiteboard,
+  type WhiteboardScene,
 } from "../lib/whiteboard-storage";
 import { Button } from "./ui/button";
 
@@ -19,13 +20,18 @@ const Excalidraw = React.lazy(async () => {
 });
 
 export function WhiteboardPage() {
-  const initial = React.useMemo(() => loadWhiteboard(), []);
-  const [ready, setReady] = React.useState(false);
+  const [initial, setInitial] = React.useState<WhiteboardScene | null>(null);
   const saveTimer = React.useRef<number | null>(null);
+  const saveErrorShown = React.useRef(false);
 
   React.useEffect(() => {
-    setReady(true);
+    let cancelled = false;
+    void (async () => {
+      const scene = await loadWhiteboard();
+      if (!cancelled) setInitial(scene);
+    })();
     return () => {
+      cancelled = true;
       if (saveTimer.current != null) window.clearTimeout(saveTimer.current);
     };
   }, []);
@@ -38,10 +44,16 @@ export function WhiteboardPage() {
     ) => {
       if (saveTimer.current != null) window.clearTimeout(saveTimer.current);
       saveTimer.current = window.setTimeout(() => {
-        const ok = saveWhiteboard({ elements, appState, files });
-        if (!ok) {
-          toast.error("Could not save whiteboard (storage may be full)");
-        }
+        void (async () => {
+          const ok = await saveWhiteboard({ elements, appState, files });
+          if (!ok && !saveErrorShown.current) {
+            saveErrorShown.current = true;
+            toast.error(
+              "Could not save whiteboard. Try removing large images or clearing the board.",
+            );
+          }
+          if (ok) saveErrorShown.current = false;
+        })();
       }, 600);
     },
     [],
@@ -49,14 +61,14 @@ export function WhiteboardPage() {
 
   const onClear = () => {
     if (
-      !window.confirm(
-        "Clear the whole whiteboard? This can’t be undone.",
-      )
+      !window.confirm("Clear the whole whiteboard? This can’t be undone.")
     ) {
       return;
     }
-    clearWhiteboard();
-    window.location.reload();
+    void (async () => {
+      await clearWhiteboard();
+      window.location.reload();
+    })();
   };
 
   return (
@@ -65,7 +77,7 @@ export function WhiteboardPage() {
         <div>
           <h1 className="text-[15px] font-medium text-foreground">Whiteboard</h1>
           <p className="text-[12px] text-muted-foreground">
-            Sketch, map ideas, plan drops — autosaves to your account
+            Sketch, map ideas, plan drops — autosaves in this browser
           </p>
         </div>
         <Button
@@ -80,7 +92,7 @@ export function WhiteboardPage() {
         </Button>
       </div>
       <div className="relative min-h-0 flex-1">
-        {!ready ? (
+        {!initial ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
             Loading board…
