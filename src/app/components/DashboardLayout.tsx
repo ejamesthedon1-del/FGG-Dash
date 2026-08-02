@@ -11,6 +11,7 @@ import {
   ListTodo,
   LogOut,
   Package,
+  PenTool,
   Settings,
   Shirt,
   Sparkles,
@@ -154,6 +155,13 @@ const NAV = {
     match: (pathname: string) =>
       pathname === "/clock" || pathname.startsWith("/clock/"),
   },
+  whiteboard: {
+    to: "/whiteboard",
+    label: "Whiteboard",
+    icon: PenTool,
+    match: (pathname: string) =>
+      pathname === "/whiteboard" || pathname.startsWith("/whiteboard/"),
+  },
   knowledgeBase: {
     to: "/sops",
     label: "Library",
@@ -183,7 +191,7 @@ const CEO_SECTIONS: NavSection[] = [
   { label: "Overview", items: [NAV.dashboard] },
   { label: "Business", items: [NAV.brandHub, NAV.cash] },
   { label: "Creative", items: [NAV.studio] },
-  { label: "My day", items: [NAV.myTasks, NAV.clock] },
+  { label: "My day", items: [NAV.myTasks, NAV.clock, NAV.whiteboard] },
   { label: "Floor", items: [NAV.orderFlow, NAV.inventory, NAV.support] },
   {
     label: "Resources",
@@ -204,6 +212,7 @@ const OPS_SECTIONS: NavSection[] = [
       NAV.support,
       NAV.clock,
       NAV.myTasks,
+      NAV.whiteboard,
     ],
   },
   {
@@ -583,8 +592,9 @@ export function DashboardLayout() {
         </header>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-          {pathname.startsWith("/settings") ? (
-            <div className="min-h-0 flex-1">
+          {pathname.startsWith("/settings") ||
+          pathname.startsWith("/whiteboard") ? (
+            <div className="min-h-0 flex-1 overflow-hidden">
               <Outlet />
             </div>
           ) : (

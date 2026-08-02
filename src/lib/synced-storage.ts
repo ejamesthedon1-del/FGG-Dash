@@ -36,6 +36,7 @@ export const SYNCED_STORAGE_KEYS = [
   "fgg.instagram-schedule.v1",
   "fgg.cash-split-targets.v1",
   "fgg.time-clock.v1",
+  "fgg.whiteboard.v1",
 ] as const;
 
 export type SyncedStorageKey = (typeof SYNCED_STORAGE_KEYS)[number];

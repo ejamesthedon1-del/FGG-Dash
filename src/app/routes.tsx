@@ -21,6 +21,7 @@ import { OrderFlowPage } from "./components/OrderFlowPage";
 import { ShopSuppliesPage } from "./components/ShopSuppliesPage";
 import { SupportPage } from "./components/SupportPage";
 import { TimeClockPage } from "./components/TimeClockPage";
+import { WhiteboardPage } from "./components/WhiteboardPage";
 import { CeoOnly } from "./components/CeoOnly";
 import { NotFoundPage, RouteErrorPage } from "./components/RouteErrorPage";
 
@@ -47,6 +48,7 @@ export const router = createBrowserRouter([
       { path: "support", Component: SupportPage },
       { path: "clock", Component: TimeClockPage },
       { path: "time", element: <Navigate to="/clock" replace /> },
+      { path: "whiteboard", Component: WhiteboardPage },
       { path: "my-tasks", Component: MyTasksPage },
       { path: "sops/create", Component: ceoPage(CreateSOP) },
       { path: "sops/edit/:id", Component: ceoPage(EditSOP) },
