@@ -43,7 +43,16 @@ from .shopify_color import PRODUCT_COLOR_GRAPHQL, product_label_with_color, reso
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     stop = asyncio.Event()
-    task = asyncio.create_task(instagram_publisher.run_loop(stop))
+    # Delay first publisher tick so boot/healthcheck aren't competing with Supabase.
+    async def _publisher() -> None:
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=15)
+            return
+        except asyncio.TimeoutError:
+            pass
+        await instagram_publisher.run_loop(stop)
+
+    task = asyncio.create_task(_publisher())
     try:
         yield
     finally:
@@ -106,27 +115,51 @@ def local_date_str(dt: datetime, tz: ZoneInfo) -> str:
 
 @app.get("/health")
 async def health() -> dict:
-    status = order_flow_store.storage_status()
+    """Liveness only — must stay fast for Railway healthchecks (no network I/O)."""
+    return {"ok": True}
+
+
+@app.get("/health/detail")
+async def health_detail() -> dict:
+    """Deeper status for debugging; may call storage backends."""
+    try:
+        status = order_flow_store.storage_status()
+    except Exception as exc:
+        status = {
+            "backend": "error",
+            "durable": False,
+            "recordCount": 0,
+            "error": str(exc)[:200],
+        }
+    try:
+        gmail_connected = bool(gmail_store.get_tokens())
+    except Exception:
+        gmail_connected = False
+    try:
+        schedule_posts = len(
+            (instagram_schedule_store.get_store().get("posts") or [])
+        )
+    except Exception:
+        schedule_posts = -1
     return {
         "ok": True,
         "orderFlow": {
-            "backend": status["backend"],
-            "durable": status["durable"],
-            "recordCount": status["recordCount"],
+            "backend": status.get("backend"),
+            "durable": status.get("durable"),
+            "recordCount": status.get("recordCount"),
+            "error": status.get("error"),
         },
         "mockups": {
             "falConfigured": bool((get_settings().fal_key or "").strip()),
         },
         "support": {
             "gmailConfigured": gmail_support.gmail_configured(),
-            "gmailConnected": bool(gmail_store.get_tokens()),
+            "gmailConnected": gmail_connected,
         },
         "instagram": {
             "configured": instagram.instagram_configured(),
             "autoPublisher": True,
-            "schedulePosts": len(
-                (instagram_schedule_store.get_store().get("posts") or [])
-            ),
+            "schedulePosts": schedule_posts,
         },
     }
 
