@@ -29,6 +29,8 @@ export type IgScheduledPost = {
   assetName?: string;
   /** Preview / publish source — https URL preferred for auto-publish */
   imageSrc?: string;
+  /** Carousel slides (2–10). Cover is imageSrc / imageSrcs[0]. */
+  imageSrcs?: string[];
   /** ISO datetime local schedule */
   scheduledAt: string;
   status: IgPostStatus;
@@ -87,6 +89,18 @@ function parsePost(raw: unknown): IgScheduledPost | null {
     assetId: typeof o.assetId === "string" ? o.assetId : undefined,
     assetName: typeof o.assetName === "string" ? o.assetName : undefined,
     imageSrc: typeof o.imageSrc === "string" ? o.imageSrc : undefined,
+    imageSrcs: (() => {
+      if (Array.isArray(o.imageSrcs)) {
+        const srcs = o.imageSrcs
+          .filter((u): u is string => typeof u === "string" && Boolean(u.trim()))
+          .map((u) => u.trim());
+        if (srcs.length) return srcs;
+      }
+      if (typeof o.imageSrc === "string" && o.imageSrc.trim()) {
+        return [o.imageSrc.trim()];
+      }
+      return undefined;
+    })(),
     scheduledAt: o.scheduledAt,
     status,
     createdAt,
@@ -234,6 +248,24 @@ export function defaultScheduleAt(): string {
   return d.toISOString();
 }
 
+export const IG_CAROUSEL_MAX = 10;
+
+/** Ordered publish URLs for a post (carousel or single). */
+export function postImageUrls(post: Pick<IgScheduledPost, "imageSrc" | "imageSrcs">): string[] {
+  const fromList = (post.imageSrcs || [])
+    .map((u) => u.trim())
+    .filter(Boolean);
+  if (fromList.length) return fromList.slice(0, IG_CAROUSEL_MAX);
+  const single = post.imageSrc?.trim();
+  return single ? [single] : [];
+}
+
+export function postCoverSrc(
+  post: Pick<IgScheduledPost, "imageSrc" | "imageSrcs">,
+): string | undefined {
+  return postImageUrls(post)[0];
+}
+
 /** Feed posts for the IG profile grid (stories excluded). Newest / latest first. */
 export function feedLayoutPosts(
   posts: IgScheduledPost[],
@@ -244,7 +276,7 @@ export function feedLayoutPosts(
       (p) =>
         p.brand === brand &&
         (p.kind ?? "feed") === "feed" &&
-        Boolean(p.imageSrc),
+        Boolean(postCoverSrc(p)),
     )
     .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt));
 }

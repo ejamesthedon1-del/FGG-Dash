@@ -29,9 +29,12 @@ import {
   deleteIgPost,
   fromDatetimeLocalValue,
   IG_BRAND_LABELS,
+  IG_CAROUSEL_MAX,
   IG_SCHEDULE_BRANDS,
   loadIgSchedule,
   newIgPostId,
+  postCoverSrc,
+  postImageUrls,
   saveIgSchedule,
   sortIgPosts,
   toDatetimeLocalValue,
@@ -88,8 +91,10 @@ function statusLabel(status: IgPostStatus): string {
   }
 }
 
-function kindLabel(kind: IgPostKind): string {
-  return kind === "story" ? "Story" : "Feed";
+function kindLabel(kind: IgPostKind, slideCount = 1): string {
+  if (kind === "story") return "Story";
+  if (slideCount > 1) return `Carousel · ${slideCount}`;
+  return "Feed";
 }
 
 function formatWhen(iso: string): string {
@@ -121,6 +126,9 @@ export function InstagramScheduleSection() {
   );
   const [assetId, setAssetId] = React.useState<string>("");
   const [externalUrl, setExternalUrl] = React.useState("");
+  const [slides, setSlides] = React.useState<
+    { src: string; name?: string; assetId?: string }[]
+  >([]);
   const [status, setStatus] = React.useState<IgConnectionStatus | null>(null);
   const [statusLoading, setStatusLoading] = React.useState(true);
   const [publishingId, setPublishingId] = React.useState<string | null>(null);
@@ -131,11 +139,6 @@ export function InstagramScheduleSection() {
     () => flattenImages(loadCreativeAssets()),
     [posts],
   );
-
-  const selectedAsset = assetId
-    ? findAsset(loadCreativeAssets(), assetId) ??
-      images.find((i) => i.id === assetId)
-    : undefined;
 
   const refresh = React.useCallback(() => {
     setPosts(sortIgPosts(loadIgSchedule().posts));
@@ -220,41 +223,71 @@ export function InstagramScheduleSection() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, brand, loadStatus]);
 
-  const imageSrc =
-    (externalUrl.trim() && /^https?:\/\//i.test(externalUrl.trim())
-      ? externalUrl.trim()
-      : null) ||
-    selectedAsset?.src ||
-    undefined;
+  const addSlide = (src: string, meta?: { name?: string; assetId?: string }) => {
+    const trimmed = src.trim();
+    if (!trimmed) return;
+    if (kind === "story" && slides.length >= 1) {
+      toast.error("Stories only support one image");
+      return;
+    }
+    if (slides.length >= IG_CAROUSEL_MAX) {
+      toast.error(`Max ${IG_CAROUSEL_MAX} images per carousel`);
+      return;
+    }
+    if (slides.some((s) => s.src === trimmed)) {
+      toast.message("Image already added");
+      return;
+    }
+    setSlides((prev) => [
+      ...prev,
+      { src: trimmed, name: meta?.name, assetId: meta?.assetId },
+    ]);
+  };
+
+  const removeSlide = (index: number) => {
+    setSlides((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  React.useEffect(() => {
+    if (kind === "story" && slides.length > 1) {
+      setSlides((prev) => prev.slice(0, 1));
+    }
+  }, [kind, slides.length]);
 
   const onSchedule = () => {
     if (kind === "feed" && !caption.trim()) {
       toast.error("Add a caption");
       return;
     }
-    if (!imageSrc) {
-      toast.error("Pick a creative asset or paste an image URL");
+    if (slides.length === 0) {
+      toast.error("Add at least one image");
       return;
     }
     if (!scheduledLocal) {
       toast.error("Pick a date and time");
       return;
     }
-    if (!isPublicHttpsUrl(imageSrc)) {
+    if (kind === "story" && slides.length > 1) {
+      toast.error("Stories only support one image");
+      return;
+    }
+    if (!slides.every((s) => isPublicHttpsUrl(s.src))) {
       toast.error(
-        "Auto-publish needs a public https:// image URL (Shopify Files, CDN, etc.)",
+        "Auto-publish needs public https:// image URLs (Shopify Files, CDN, etc.)",
       );
       return;
     }
     const scheduledAt = fromDatetimeLocalValue(scheduledLocal);
+    const srcs = slides.map((s) => s.src);
     const post: IgScheduledPost = {
       id: newIgPostId(),
       brand,
       kind,
       caption: caption.trim(),
-      assetId: selectedAsset?.id,
-      assetName: selectedAsset?.name,
-      imageSrc,
+      assetId: slides[0]?.assetId,
+      assetName: slides[0]?.name,
+      imageSrc: srcs[0],
+      imageSrcs: srcs,
       scheduledAt,
       status: "scheduled",
       createdAt: new Date().toISOString(),
@@ -265,11 +298,14 @@ export function InstagramScheduleSection() {
     setCaption("");
     setAssetId("");
     setExternalUrl("");
+    setSlides([]);
     setScheduledLocal(toDatetimeLocalValue(defaultScheduleAt()));
     toast.success(
       kind === "story"
         ? "Story scheduled — will auto-publish"
-        : "Post scheduled — will auto-publish",
+        : srcs.length > 1
+          ? `Carousel scheduled (${srcs.length} images)`
+          : "Post scheduled — will auto-publish",
     );
     void (async () => {
       try {
@@ -315,9 +351,10 @@ export function InstagramScheduleSection() {
       toast.error("Connect Instagram for this brand first");
       return;
     }
-    if (!isPublicHttpsUrl(post.imageSrc)) {
+    const urls = postImageUrls(post);
+    if (!urls.length || !urls.every((u) => isPublicHttpsUrl(u))) {
       toast.error(
-        "Instagram requires a public https:// image URL for auto-publish",
+        "Instagram requires public https:// image URL(s) for auto-publish",
       );
       return;
     }
@@ -334,7 +371,8 @@ export function InstagramScheduleSection() {
       const result = await publishInstagramPost({
         brand: post.brand,
         caption: post.caption,
-        imageUrl: post.imageSrc!,
+        imageUrl: urls[0],
+        imageUrls: urls,
         kind: post.kind ?? "feed",
       });
       if (!result.ok) {
@@ -359,7 +397,11 @@ export function InstagramScheduleSection() {
       upsertIgPost(posted);
       refresh();
       void upsertInstagramSchedulePost(posted).catch(() => undefined);
-      toast.success("Published to Instagram");
+      toast.success(
+        urls.length > 1
+          ? `Carousel published (${urls.length} images)`
+          : "Published to Instagram",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Publish failed");
     } finally {
@@ -549,16 +591,32 @@ export function InstagramScheduleSection() {
         )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block space-y-1.5">
-            <span className="text-[13px] text-gray-400">Creative asset</span>
+            <span className="text-[13px] text-gray-400">
+              Add creative asset
+              {kind === "feed" ? " (carousel)" : ""}
+            </span>
             <Select
               value={assetId || "__none__"}
-              onValueChange={(v) => setAssetId(v === "__none__" ? "" : v)}
+              onValueChange={(v) => {
+                if (v === "__none__") {
+                  setAssetId("");
+                  return;
+                }
+                setAssetId(v);
+                const asset =
+                  findAsset(loadCreativeAssets(), v) ??
+                  images.find((i) => i.id === v);
+                if (asset?.src) {
+                  addSlide(asset.src, { name: asset.name, assetId: asset.id });
+                  setAssetId("");
+                }
+              }}
             >
               <SelectTrigger aria-label="Creative asset">
                 <SelectValue placeholder="Choose image" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
+                <SelectItem value="__none__">Choose to add…</SelectItem>
                 {images.map((img) => (
                   <SelectItem key={img.id} value={img.id}>
                     {img.name}
@@ -569,14 +627,38 @@ export function InstagramScheduleSection() {
           </label>
           <label className="block space-y-1.5">
             <span className="text-[13px] text-gray-400">
-              Public image URL (required for auto-publish)
+              Add public image URL
             </span>
-            <Input
-              value={externalUrl}
-              onChange={(e) => setExternalUrl(e.target.value)}
-              placeholder="https://…"
-              className="shadow-none"
-            />
+            <div className="flex gap-2">
+              <Input
+                value={externalUrl}
+                onChange={(e) => setExternalUrl(e.target.value)}
+                placeholder="https://…"
+                className="shadow-none"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (externalUrl.trim()) {
+                      addSlide(externalUrl.trim());
+                      setExternalUrl("");
+                    }
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => {
+                  if (!externalUrl.trim()) return;
+                  addSlide(externalUrl.trim());
+                  setExternalUrl("");
+                }}
+              >
+                Add
+              </Button>
+            </div>
           </label>
           <label className="block space-y-1.5 sm:col-span-2">
             <span className="text-[13px] text-gray-400">Post at</span>
@@ -588,29 +670,57 @@ export function InstagramScheduleSection() {
             />
           </label>
         </div>
-        {imageSrc ? (
-          <div className="flex items-center gap-3">
-            <img
-              src={imageSrc}
-              alt=""
-              className="size-16 rounded-md object-cover"
-            />
+        {slides.length > 0 ? (
+          <div className="space-y-2">
             <p className="text-[13px] text-gray-400">
-              {selectedAsset?.name || "External image"}
-              {!isPublicHttpsUrl(imageSrc)
-                ? " · preview only until you use an https URL"
-                : null}
+              {kind === "story"
+                ? "Story image"
+                : slides.length > 1
+                  ? `Carousel · ${slides.length} of ${IG_CAROUSEL_MAX}`
+                  : "1 image · add more for a carousel"}
             </p>
+            <div className="flex flex-wrap gap-2">
+              {slides.map((slide, index) => (
+                <div key={`${slide.src}-${index}`} className="relative">
+                  <img
+                    src={slide.src}
+                    alt=""
+                    className="size-16 rounded-md object-cover"
+                  />
+                  <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1 text-[9px] text-white">
+                    {index + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeSlide(index)}
+                    className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-gray-950 text-[10px] text-white"
+                    aria-label={`Remove image ${index + 1}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            {!slides.every((s) => isPublicHttpsUrl(s.src)) ? (
+              <p className="text-[13px] text-amber-700">
+                Every slide needs a public https:// URL to auto-publish
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="flex items-center gap-2 text-[13px] text-gray-400">
             <ImageIcon className="size-4" />
-            No image selected
+            No images yet — add assets or URLs
+            {kind === "feed" ? " (2+ = carousel)" : ""}
           </div>
         )}
         <Button type="button" className="gap-1.5" onClick={onSchedule}>
           <CalendarPlus className="size-4" />
-          {kind === "story" ? "Schedule story" : "Schedule post"}
+          {kind === "story"
+            ? "Schedule story"
+            : slides.length > 1
+              ? "Schedule carousel"
+              : "Schedule post"}
         </Button>
       </section>
 
@@ -639,12 +749,19 @@ export function InstagramScheduleSection() {
                   focusedPostId === post.id && "bg-blue-50/60",
                 )}
               >
-                {post.imageSrc ? (
-                  <img
-                    src={post.imageSrc}
-                    alt=""
-                    className="size-14 shrink-0 rounded-md object-cover"
-                  />
+                {postCoverSrc(post) ? (
+                  <div className="relative shrink-0">
+                    <img
+                      src={postCoverSrc(post)}
+                      alt=""
+                      className="size-14 rounded-md object-cover"
+                    />
+                    {postImageUrls(post).length > 1 ? (
+                      <span className="absolute -right-1 -bottom-1 rounded bg-gray-950 px-1 text-[9px] font-medium text-white">
+                        {postImageUrls(post).length}
+                      </span>
+                    ) : null}
+                  </div>
                 ) : (
                   <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-300">
                     <ImageIcon className="size-5" />
@@ -657,8 +774,8 @@ export function InstagramScheduleSection() {
                       : post.caption || "(No caption)"}
                   </p>
                   <p className="mt-1 text-[13px] text-gray-400">
-                    {kindLabel(post.kind ?? "feed")} · {statusLabel(post.status)} ·{" "}
-                    {formatWhen(post.scheduledAt)}
+                    {kindLabel(post.kind ?? "feed", postImageUrls(post).length)}{" "}
+                    · {statusLabel(post.status)} · {formatWhen(post.scheduledAt)}
                     {post.lastError ? ` · ${post.lastError}` : ""}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">

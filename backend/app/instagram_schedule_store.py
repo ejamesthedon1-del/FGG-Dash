@@ -86,6 +86,15 @@ def _normalize_post(raw: Any) -> Optional[Dict[str, Any]]:
         val = raw.get(key)
         if isinstance(val, str) and val:
             out[key] = val
+    image_srcs_raw = raw.get("imageSrcs")
+    if isinstance(image_srcs_raw, list):
+        srcs = [str(u).strip() for u in image_srcs_raw if str(u or "").strip()]
+        if srcs:
+            out["imageSrcs"] = srcs
+            if "imageSrc" not in out:
+                out["imageSrc"] = srcs[0]
+    elif out.get("imageSrc"):
+        out["imageSrcs"] = [out["imageSrc"]]
     return out
 
 

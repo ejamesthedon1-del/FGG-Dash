@@ -56,6 +56,7 @@ export type IgPublishPayload = {
   brand: IgScheduleBrand;
   caption: string;
   imageUrl: string;
+  imageUrls?: string[];
   kind?: "feed" | "story";
 };
 

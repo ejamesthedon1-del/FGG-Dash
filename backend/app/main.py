@@ -231,8 +231,20 @@ async def instagram_publish(body: dict) -> dict:
     caption = str(body.get("caption") or "")
     image_url = str(body.get("imageUrl") or body.get("image_url") or "")
     kind = str(body.get("kind") or "feed")
+    raw_urls = body.get("imageUrls") or body.get("image_urls") or []
+    image_urls = (
+        [str(u) for u in raw_urls if str(u or "").strip()]
+        if isinstance(raw_urls, list)
+        else []
+    )
     try:
-        return await instagram.publish_image(brand, caption, image_url, kind=kind)
+        return await instagram.publish_image(
+            brand,
+            caption,
+            image_url,
+            kind=kind,
+            image_urls=image_urls or None,
+        )
     except HTTPException as exc:
         return {"ok": False, "error": str(exc.detail)}
 

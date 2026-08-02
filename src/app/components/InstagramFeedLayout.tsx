@@ -6,6 +6,8 @@ import { ImageIcon } from "lucide-react";
 import {
   feedLayoutPosts,
   moveFeedLayoutItem,
+  postCoverSrc,
+  postImageUrls,
   type IgPostStatus,
   type IgScheduleBrand,
   type IgScheduledPost,
@@ -147,9 +149,9 @@ export function InstagramFeedLayout({
                   isFocused && "ring-2 ring-inset ring-blue-500",
                 )}
               >
-                {post.imageSrc ? (
+                {postCoverSrc(post) ? (
                   <img
-                    src={post.imageSrc}
+                    src={postCoverSrc(post)}
                     alt=""
                     draggable={false}
                     className="size-full object-cover"
@@ -159,6 +161,11 @@ export function InstagramFeedLayout({
                     <ImageIcon className="size-5" />
                   </div>
                 )}
+                {postImageUrls(post).length > 1 ? (
+                  <span className="absolute top-1 right-1 rounded bg-black/55 px-1 py-0.5 text-[9px] font-medium text-white">
+                    {postImageUrls(post).length}
+                  </span>
+                ) : null}
                 <span
                   className={cn(
                     "absolute top-1 left-1 rounded px-1 py-0.5 text-[9px] font-medium tracking-wide uppercase",

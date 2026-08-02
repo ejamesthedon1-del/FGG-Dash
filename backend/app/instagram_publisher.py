@@ -68,11 +68,17 @@ async def process_due_once() -> Dict[str, Any]:
         post_id = post["id"]
         current = dict(by_id.get(post_id) or post)
         image_url = str(current.get("imageSrc") or "").strip()
+        raw_srcs = current.get("imageSrcs")
+        image_urls: list[str] = []
+        if isinstance(raw_srcs, list):
+            image_urls = [str(u).strip() for u in raw_srcs if str(u or "").strip()]
+        if image_url and image_url not in image_urls:
+            image_urls = [image_url, *[u for u in image_urls if u != image_url]]
 
-        if not _is_public_https(image_url):
+        if not image_urls or not all(_is_public_https(u) for u in image_urls):
             current["status"] = "failed"
             current["lastError"] = (
-                "Auto-publish needs a public https:// image URL"
+                "Auto-publish needs public https:// image URL(s)"
             )
             current["updatedAt"] = now.isoformat()
             by_id[post_id] = current
@@ -90,8 +96,9 @@ async def process_due_once() -> Dict[str, Any]:
             result = await instagram.publish_image(
                 str(current.get("brand") or ""),
                 str(current.get("caption") or ""),
-                image_url,
+                image_urls[0],
                 kind=str(current.get("kind") or "feed"),
+                image_urls=image_urls,
             )
             posted_at = datetime.now(timezone.utc).isoformat()
             current["status"] = "posted"

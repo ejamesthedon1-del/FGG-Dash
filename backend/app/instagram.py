@@ -207,11 +207,55 @@ def disconnect(brand: str) -> None:
     instagram_store.clear_brand(brand_key)
 
 
+async def _wait_media_ready(
+    client: httpx.AsyncClient,
+    creation_id: str,
+    token: str,
+    *,
+    label: str = "Media",
+) -> None:
+    for _ in range(18):
+        status_res = await client.get(
+            f"https://graph.facebook.com/{api_version()}/{creation_id}",
+            params={
+                "fields": "status_code",
+                "access_token": token,
+            },
+        )
+        if status_res.status_code < 400:
+            code = (status_res.json() or {}).get("status_code")
+            if code == "FINISHED":
+                return
+            if code == "ERROR":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{label} container failed: {status_res.text}",
+                )
+        await asyncio.sleep(2)
+    # Some image containers never expose status_code; proceed and let publish fail if needed.
+
+
+def _normalize_image_urls(
+    image_url: str,
+    image_urls: Optional[list] = None,
+) -> list[str]:
+    urls: list[str] = []
+    primary = str(image_url or "").strip()
+    if primary:
+        urls.append(primary)
+    for raw in list(image_urls or []):
+        u = str(raw or "").strip()
+        if u and u not in urls:
+            urls.append(u)
+    return urls
+
+
 async def publish_image(
     brand: str,
     caption: str,
-    image_url: str,
+    image_url: str = "",
     kind: str = "feed",
+    image_urls: Optional[list] = None,
 ) -> Dict[str, Any]:
     brand_key = normalize_brand(brand)
     if brand_key not in VALID_BRANDS:
@@ -220,11 +264,22 @@ async def publish_image(
     if not row or not row.get("pageAccessToken") or not row.get("igUserId"):
         raise HTTPException(status_code=400, detail="Instagram is not connected for this brand")
 
-    image_url = (image_url or "").strip()
-    if not image_url.lower().startswith("https://"):
+    urls = _normalize_image_urls(image_url, image_urls)
+    if not urls:
         raise HTTPException(
             status_code=400,
             detail="Instagram requires a public https:// image URL for publishing",
+        )
+    for u in urls:
+        if not u.lower().startswith("https://"):
+            raise HTTPException(
+                status_code=400,
+                detail="Instagram requires public https:// image URLs for publishing",
+            )
+    if len(urls) > 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Instagram carousels support at most 10 images",
         )
 
     token = row["pageAccessToken"]
@@ -233,50 +288,112 @@ async def publish_image(
     media_kind = (kind or "feed").strip().lower()
     if media_kind not in ("feed", "story"):
         raise HTTPException(status_code=400, detail="kind must be feed or story")
-
-    create_data: Dict[str, Any] = {
-        "image_url": image_url,
-        "access_token": token,
-    }
-    if media_kind == "story":
-        create_data["media_type"] = "STORIES"
-    else:
-        create_data["caption"] = caption
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        create_res = await client.post(
-            f"https://graph.facebook.com/{api_version()}/{ig_user_id}/media",
-            data=create_data,
+    if media_kind == "story" and len(urls) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Stories only support a single image (not carousels)",
         )
-        if create_res.status_code >= 400:
+
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        if len(urls) == 1:
+            create_data: Dict[str, Any] = {
+                "image_url": urls[0],
+                "access_token": token,
+            }
+            if media_kind == "story":
+                create_data["media_type"] = "STORIES"
+            else:
+                create_data["caption"] = caption
+
+            create_res = await client.post(
+                f"https://graph.facebook.com/{api_version()}/{ig_user_id}/media",
+                data=create_data,
+            )
+            if create_res.status_code >= 400:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Create media failed: {create_res.text}",
+                )
+            creation_id = (create_res.json() or {}).get("id")
+            if not creation_id:
+                raise HTTPException(status_code=400, detail="No creation_id from Instagram")
+
+            if media_kind == "story":
+                await _wait_media_ready(
+                    client, creation_id, token, label="Story"
+                )
+
+            publish_res = await client.post(
+                f"https://graph.facebook.com/{api_version()}/{ig_user_id}/media_publish",
+                data={
+                    "creation_id": creation_id,
+                    "access_token": token,
+                },
+            )
+            if publish_res.status_code >= 400:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Publish failed: {publish_res.text}",
+                )
+            media_id = (publish_res.json() or {}).get("id")
+            return {
+                "ok": True,
+                "mediaId": media_id,
+                "creationId": creation_id,
+                "kind": media_kind,
+                "carousel": False,
+                "slideCount": 1,
+            }
+
+        # Carousel: create child items, then parent container, then publish.
+        child_ids: list[str] = []
+        for i, url in enumerate(urls):
+            child_res = await client.post(
+                f"https://graph.facebook.com/{api_version()}/{ig_user_id}/media",
+                data={
+                    "image_url": url,
+                    "is_carousel_item": "true",
+                    "access_token": token,
+                },
+            )
+            if child_res.status_code >= 400:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Carousel item {i + 1} failed: {child_res.text}",
+                )
+            child_id = (child_res.json() or {}).get("id")
+            if not child_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No creation_id for carousel item {i + 1}",
+                )
+            await _wait_media_ready(
+                client, child_id, token, label=f"Carousel item {i + 1}"
+            )
+            child_ids.append(str(child_id))
+
+        parent_data: Dict[str, Any] = {
+            "media_type": "CAROUSEL",
+            "children": ",".join(child_ids),
+            "access_token": token,
+        }
+        if caption:
+            parent_data["caption"] = caption
+
+        parent_res = await client.post(
+            f"https://graph.facebook.com/{api_version()}/{ig_user_id}/media",
+            data=parent_data,
+        )
+        if parent_res.status_code >= 400:
             raise HTTPException(
                 status_code=400,
-                detail=f"Create media failed: {create_res.text}",
+                detail=f"Create carousel failed: {parent_res.text}",
             )
-        creation_id = (create_res.json() or {}).get("id")
+        creation_id = (parent_res.json() or {}).get("id")
         if not creation_id:
-            raise HTTPException(status_code=400, detail="No creation_id from Instagram")
+            raise HTTPException(status_code=400, detail="No carousel creation_id")
 
-        # Stories containers can take a moment to finish processing.
-        if media_kind == "story":
-            for _ in range(12):
-                status_res = await client.get(
-                    f"https://graph.facebook.com/{api_version()}/{creation_id}",
-                    params={
-                        "fields": "status_code",
-                        "access_token": token,
-                    },
-                )
-                if status_res.status_code < 400:
-                    code = (status_res.json() or {}).get("status_code")
-                    if code == "FINISHED":
-                        break
-                    if code == "ERROR":
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Story container failed: {status_res.text}",
-                        )
-                await asyncio.sleep(2)
+        await _wait_media_ready(client, creation_id, token, label="Carousel")
 
         publish_res = await client.post(
             f"https://graph.facebook.com/{api_version()}/{ig_user_id}/media_publish",
@@ -297,4 +414,6 @@ async def publish_image(
         "mediaId": media_id,
         "creationId": creation_id,
         "kind": media_kind,
+        "carousel": True,
+        "slideCount": len(urls),
     }
