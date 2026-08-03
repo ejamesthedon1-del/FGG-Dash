@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -289,7 +290,10 @@ async def fetch_brand_orders(brand: str, days: int = 90) -> Tuple[List[Dict[str,
     nodes: List[Dict[str, Any]] = []
 
     try:
-        for _ in range(10):  # hard cap pages
+        for page_i in range(10):  # hard cap pages
+            if page_i > 0:
+                # Small pause between pages to stay under Shopify cost limits.
+                await asyncio.sleep(0.35)
             data = await client.graphql(
                 ORDERS_QUERY,
                 {"queryString": query_string, "cursor": cursor},

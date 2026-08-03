@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -10,6 +11,22 @@ from .config import get_settings
 
 class ShopifyGraphQLError(RuntimeError):
     """Top-level GraphQL errors or missing data."""
+
+
+def _graphql_errors_are_throttled(errors: Any) -> bool:
+    if not isinstance(errors, list):
+        return False
+    for err in errors:
+        if not isinstance(err, dict):
+            continue
+        code = ((err.get("extensions") or {}) if isinstance(err.get("extensions"), dict) else {}).get(
+            "code"
+        )
+        if str(code).upper() == "THROTTLED":
+            return True
+        if "throttl" in str(err.get("message") or "").lower():
+            return True
+    return False
 
 
 class ShopifyClient:
@@ -68,27 +85,35 @@ class ShopifyClient:
         version = (api_version or self.api_version).strip()
         graphql_url = f"https://{self.store_domain}/admin/api/{version}/graphql.json"
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                graphql_url,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Shopify-Access-Token": token,
-                },
-                json={"query": query, "variables": variables or {}},
-            )
-            response.raise_for_status()
-            payload = response.json()
+        last_errors: Any = None
+        for attempt in range(5):
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    graphql_url,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Shopify-Access-Token": token,
+                    },
+                    json={"query": query, "variables": variables or {}},
+                )
+                response.raise_for_status()
+                payload = response.json()
 
-        errors = payload.get("errors")
-        if errors:
-            raise ShopifyGraphQLError(f"Shopify GraphQL errors: {errors}")
+            errors = payload.get("errors")
+            if errors and _graphql_errors_are_throttled(errors):
+                last_errors = errors
+                # Shopify restore rate is ~50 points/sec; back off and retry.
+                await asyncio.sleep(1.2 * (attempt + 1))
+                continue
+            if errors:
+                raise ShopifyGraphQLError(f"Shopify GraphQL errors: {errors}")
 
-        data = payload.get("data")
-        if data is None:
-            raise ShopifyGraphQLError("Shopify GraphQL response had no data")
+            data = payload.get("data")
+            if data is None:
+                raise ShopifyGraphQLError("Shopify GraphQL response had no data")
+            return data
 
-        return data
+        raise ShopifyGraphQLError(f"Shopify GraphQL errors: {last_errors}")
 
     async def run_shopifyql(self, shopifyql: str) -> Dict[str, Any]:
         gql = """
