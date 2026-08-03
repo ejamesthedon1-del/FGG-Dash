@@ -220,7 +220,7 @@ export function KlaviyoPage() {
               <code className="text-[12px]">
                 accounts:read, campaigns:read, campaigns:write, templates:read,
                 templates:write, flows:read, flows:write, lists:read,
-                segments:read, metrics:read
+                segments:read, segments:write, metrics:read
               </code>
             </li>
             <li>
@@ -370,7 +370,11 @@ export function KlaviyoPage() {
           </TabsContent>
 
           <TabsContent value="sms" className="mt-6">
-            <KlaviyoSmsPanel lists={lists} segments={segments} />
+            <KlaviyoSmsPanel
+              lists={lists}
+              segments={segments}
+              onSegmentsChange={setSegments}
+            />
           </TabsContent>
 
           <TabsContent value="templates" className="mt-6">

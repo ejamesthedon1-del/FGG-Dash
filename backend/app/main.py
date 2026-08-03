@@ -360,6 +360,11 @@ async def klaviyo_segments(limit: int = 50) -> dict:
     return await klaviyo.list_segments(limit)
 
 
+@app.post("/api/klaviyo/segments")
+async def klaviyo_create_segment(body: dict) -> dict:
+    return await klaviyo.create_segment(body or {})
+
+
 @app.get("/api/klaviyo/metrics")
 async def klaviyo_metrics(limit: int = 50) -> dict:
     return await klaviyo.list_metrics(limit)

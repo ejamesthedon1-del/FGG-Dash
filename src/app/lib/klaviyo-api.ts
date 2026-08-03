@@ -194,6 +194,29 @@ export async function fetchKlaviyoSegments(
   return readJson(res);
 }
 
+export type CreateSegmentInput = {
+  name: string;
+  preset: "sms_subscribers" | "sms_coupon_unused";
+  couponKey?: string;
+  listId?: string;
+};
+
+export async function createKlaviyoSegment(
+  input: CreateSegmentInput,
+): Promise<{
+  ok: boolean;
+  segment: KlaviyoSegment;
+  preset: string;
+  note?: string | null;
+}> {
+  const res = await fetch(apiUrl("/api/klaviyo/segments"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
 export async function fetchKlaviyoTemplates(
   limit = 50,
 ): Promise<{ templates: KlaviyoTemplate[] }> {

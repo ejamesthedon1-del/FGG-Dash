@@ -288,6 +288,171 @@ async def list_segments(limit: int = 50) -> Dict[str, Any]:
     return {"segments": items}
 
 
+def _sms_consent_condition() -> Dict[str, Any]:
+    return {
+        "type": "profile-marketing-consent",
+        "consent": {
+            "channel": "sms",
+            "can_receive_marketing": True,
+            "consent_status": {"subscription": "subscribed"},
+        },
+    }
+
+
+def _metric_count_condition(
+    metric_id: str,
+    *,
+    operator: str,
+    value: int,
+    metric_filters: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    cond: Dict[str, Any] = {
+        "type": "profile-metric",
+        "metric_id": metric_id,
+        "measurement": "count",
+        "measurement_filter": {
+            "type": "numeric",
+            "operator": operator,
+            "value": value,
+        },
+        "timeframe_filter": {"type": "date", "operator": "alltime"},
+    }
+    if metric_filters:
+        cond["metric_filters"] = metric_filters
+    return cond
+
+
+async def create_segment(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a Klaviyo segment from a simple preset (or raw definition)."""
+    name = str((body or {}).get("name") or "").strip()
+    preset = str((body or {}).get("preset") or "").strip().lower()
+    coupon_key = str((body or {}).get("couponKey") or "SMSentry").strip() or "SMSentry"
+    list_id = str((body or {}).get("listId") or "").strip()
+    raw_definition = (body or {}).get("definition")
+
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+
+    definition: Dict[str, Any]
+    if isinstance(raw_definition, dict) and raw_definition.get("condition_groups"):
+        definition = raw_definition
+    elif preset in ("sms_subscribers", "sms"):
+        groups: List[Dict[str, Any]] = [
+            {"conditions": [_sms_consent_condition()]},
+        ]
+        if list_id:
+            groups.append(
+                {
+                    "conditions": [
+                        {
+                            "type": "profile-group-membership",
+                            "is_member": True,
+                            "group_ids": [list_id],
+                            "timeframe_filter": None,
+                        }
+                    ]
+                }
+            )
+        definition = {"condition_groups": groups}
+    elif preset in ("sms_coupon_unused", "sms_reengage"):
+        # Proxy for unused discount: got SMSentry coupon assigned, no Placed Order.
+        # Klaviyo cannot segment on coupon *redemption* directly.
+        coupon_metric = await _find_metric_id(["Coupon Assigned"])
+        order_metric = await _find_metric_id(["Placed Order"])
+        if not coupon_metric:
+            raise HTTPException(
+                status_code=400,
+                detail="Coupon Assigned metric not found in this Klaviyo account.",
+            )
+        if not order_metric:
+            raise HTTPException(
+                status_code=400,
+                detail="Placed Order metric not found in this Klaviyo account.",
+            )
+        groups = [
+            {"conditions": [_sms_consent_condition()]},
+            {
+                "conditions": [
+                    _metric_count_condition(
+                        coupon_metric,
+                        operator="greater-than-or-equal",
+                        value=1,
+                        metric_filters=[
+                            {
+                                "property": "CouponKey",
+                                "filter": {
+                                    "type": "string",
+                                    "operator": "equals",
+                                    "value": coupon_key,
+                                },
+                            }
+                        ],
+                    )
+                ]
+            },
+            {
+                "conditions": [
+                    _metric_count_condition(
+                        order_metric,
+                        operator="equals",
+                        value=0,
+                    )
+                ]
+            },
+        ]
+        if list_id:
+            groups.append(
+                {
+                    "conditions": [
+                        {
+                            "type": "profile-group-membership",
+                            "is_member": True,
+                            "group_ids": [list_id],
+                            "timeframe_filter": None,
+                        }
+                    ]
+                }
+            )
+        definition = {"condition_groups": groups}
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="preset must be sms_subscribers or sms_coupon_unused (or pass definition)",
+        )
+
+    payload = {
+        "data": {
+            "type": "segment",
+            "attributes": {
+                "name": name,
+                "definition": definition,
+                "is_starred": False,
+            },
+        }
+    }
+    data = await _post("/segments/", payload)
+    row = data.get("data") if isinstance(data.get("data"), dict) else {}
+    attrs = row.get("attributes") or {}
+    return {
+        "ok": True,
+        "segment": {
+            "id": row.get("id"),
+            "name": attrs.get("name") or name,
+            "created": attrs.get("created"),
+            "updated": attrs.get("updated"),
+            "isActive": attrs.get("is_active"),
+            "isProcessing": attrs.get("is_processing"),
+        },
+        "preset": preset or "custom",
+        "note": (
+            "sms_coupon_unused uses Coupon Assigned + zero Placed Orders "
+            "(Klaviyo cannot filter exact coupon redemptions)."
+            if preset in ("sms_coupon_unused", "sms_reengage")
+            else None
+        ),
+    }
+
+
 async def list_campaigns(limit: int = 25, channel: str = "email") -> Dict[str, Any]:
     # Campaigns API rejects page[size]; filter+cursor only.
     channel = (channel or "email").strip().lower()

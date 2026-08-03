@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  createKlaviyoSegment,
   fetchKlaviyoCampaigns,
   sendKlaviyoSmsCampaign,
   type KlaviyoCampaign,
@@ -58,12 +59,17 @@ function statusTone(status: string | null | undefined): string {
 type Props = {
   lists: KlaviyoList[];
   segments: KlaviyoSegment[];
+  onSegmentsChange: (next: KlaviyoSegment[]) => void;
 };
 
-export function KlaviyoSmsPanel({ lists, segments }: Props) {
+export function KlaviyoSmsPanel({
+  lists,
+  segments,
+  onSegmentsChange,
+}: Props) {
   const [name, setName] = React.useState("SMS re-engage — 20% off");
   const [audienceType, setAudienceType] = React.useState<"list" | "segment">(
-    "list",
+    "segment",
   );
   const [listId, setListId] = React.useState("");
   const [segmentId, setSegmentId] = React.useState("");
@@ -79,6 +85,14 @@ export function KlaviyoSmsPanel({ lists, segments }: Props) {
   const [recent, setRecent] = React.useState<KlaviyoCampaign[]>([]);
   const [loadingRecent, setLoadingRecent] = React.useState(true);
 
+  const [segPreset, setSegPreset] = React.useState<
+    "sms_coupon_unused" | "sms_subscribers"
+  >("sms_coupon_unused");
+  const [segName, setSegName] = React.useState(
+    "SMS — got SMSentry, no order yet",
+  );
+  const [segBusy, setSegBusy] = React.useState(false);
+
   React.useEffect(() => {
     const smsList =
       lists.find((l) =>
@@ -90,6 +104,14 @@ export function KlaviyoSmsPanel({ lists, segments }: Props) {
   React.useEffect(() => {
     if (!segmentId && segments[0]?.id) setSegmentId(segments[0].id);
   }, [segments, segmentId]);
+
+  React.useEffect(() => {
+    if (segPreset === "sms_coupon_unused") {
+      setSegName("SMS — got SMSentry, no order yet");
+    } else {
+      setSegName("SMS marketing subscribers");
+    }
+  }, [segPreset]);
 
   const loadRecent = React.useCallback(async () => {
     setLoadingRecent(true);
@@ -108,6 +130,37 @@ export function KlaviyoSmsPanel({ lists, segments }: Props) {
   }, [loadRecent]);
 
   const approxSegments = Math.max(1, Math.ceil(body.length / 160));
+
+  const onCreateSegment = async () => {
+    if (!segName.trim()) {
+      toast.error("Segment name required");
+      return;
+    }
+    setSegBusy(true);
+    try {
+      const res = await createKlaviyoSegment({
+        name: segName.trim(),
+        preset: segPreset,
+        couponKey: "SMSentry",
+        listId: listId || undefined,
+      });
+      onSegmentsChange([res.segment, ...segments.filter((s) => s.id !== res.segment.id)]);
+      setSegmentId(res.segment.id || "");
+      setAudienceType("segment");
+      toast.success(
+        res.segment.isProcessing
+          ? "Segment created — Klaviyo is still processing it"
+          : "Segment created",
+      );
+      if (res.note) {
+        toast.message("Note", { description: res.note });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create segment");
+    } finally {
+      setSegBusy(false);
+    }
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,6 +209,72 @@ export function KlaviyoSmsPanel({ lists, segments }: Props) {
 
   return (
     <div className="space-y-8">
+      <section className="space-y-4 border-b border-black/[0.06] pb-6">
+        <div>
+          <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
+            Build a segment
+          </h3>
+          <p className="mt-1 text-[13px] text-gray-500">
+            Create the audience here, then send below. “Unused discount” ≈ got
+            SMSentry assigned and hasn’t placed an order yet.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={segPreset === "sms_coupon_unused" ? "default" : "outline"}
+            className="h-8"
+            onClick={() => setSegPreset("sms_coupon_unused")}
+          >
+            SMS + unused offer
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={segPreset === "sms_subscribers" ? "default" : "outline"}
+            className="h-8"
+            onClick={() => setSegPreset("sms_subscribers")}
+          >
+            All SMS subscribers
+          </Button>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="seg-name">Segment name</Label>
+            <Input
+              id="seg-name"
+              value={segName}
+              onChange={(e) => setSegName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="seg-list">Also on list (optional)</Label>
+            <select
+              id="seg-list"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              value={listId}
+              onChange={(e) => setListId(e.target.value)}
+            >
+              {lists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name || l.id}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={segBusy}
+          onClick={() => void onCreateSegment()}
+        >
+          {segBusy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          Create segment in Klaviyo
+        </Button>
+      </section>
+
       <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
         <div>
           <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
