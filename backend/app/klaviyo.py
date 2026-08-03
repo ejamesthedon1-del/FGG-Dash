@@ -926,22 +926,21 @@ async def schedule_email_campaign(body: Dict[str, Any]) -> Dict[str, Any]:
                     "method": "static",
                     "options_static": {"datetime": send_at, "is_local": False},
                 },
+                # Revision 2024-10-15 uses flat channel/content (not nested definition).
                 "campaign-messages": {
                     "data": [
                         {
                             "type": "campaign-message",
                             "attributes": {
-                                "definition": {
-                                    "channel": "email",
-                                    "label": subject,
-                                    "content": {
-                                        "subject": subject,
-                                        "preview_text": preview_text,
-                                        "from_email": from_email,
-                                        "from_label": from_label,
-                                        "reply_to_email": reply_to,
-                                    },
-                                }
+                                "channel": "email",
+                                "label": subject,
+                                "content": {
+                                    "subject": subject,
+                                    "preview_text": preview_text,
+                                    "from_email": from_email,
+                                    "from_label": from_label,
+                                    "reply_to_email": reply_to,
+                                },
                             },
                         }
                     ]
@@ -1063,27 +1062,27 @@ async def send_sms_campaign(body: Dict[str, Any]) -> Dict[str, Any]:
                 },
                 "send_strategy": send_strategy,
                 "send_options": {"use_smart_sending": True},
+                # Revision 2024-10-15 uses flat channel/content (not nested definition).
                 "campaign-messages": {
                     "data": [
                         {
                             "type": "campaign-message",
                             "attributes": {
-                                "definition": {
-                                    "channel": "sms",
-                                    "render_options": {
-                                        "shorten_links": True
-                                        if shorten_links is None
-                                        else bool(shorten_links),
-                                        "add_org_prefix": True
-                                        if add_org_prefix is None
-                                        else bool(add_org_prefix),
-                                        "add_info_link": False,
-                                        "add_opt_out_language": True
-                                        if add_opt_out is None
-                                        else bool(add_opt_out),
-                                    },
-                                    "content": {"body": message},
-                                }
+                                "channel": "sms",
+                                "label": name,
+                                "content": {"body": message},
+                                "render_options": {
+                                    "shorten_links": True
+                                    if shorten_links is None
+                                    else bool(shorten_links),
+                                    "add_org_prefix": True
+                                    if add_org_prefix is None
+                                    else bool(add_org_prefix),
+                                    "add_info_link": False,
+                                    "add_opt_out_language": True
+                                    if add_opt_out is None
+                                    else bool(add_opt_out),
+                                },
                             },
                         }
                     ]
