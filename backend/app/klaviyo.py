@@ -55,18 +55,22 @@ async def _get_pages(
     *,
     params: Optional[Dict[str, Any]] = None,
     limit: int = 20,
+    include_page_size: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Fetch up to `limit` rows, paging at Klaviyo's max page size (10)."""
+    """Fetch up to `limit` rows via cursor pagination.
+
+    Most endpoints allow page[size] 1–10. Campaigns reject page[size] entirely.
+    """
     want = max(1, min(int(limit or 1), 100))
-    page_size = min(PAGE_SIZE_MAX, want)
     query = dict(params or {})
-    query["page[size]"] = page_size
+    if include_page_size:
+        query["page[size]"] = min(PAGE_SIZE_MAX, want)
     rows: List[Dict[str, Any]] = []
     next_url: Optional[str] = None
     first = True
     while len(rows) < want:
         if first:
-            data = await _get(path, query)
+            data = await _get(path, query or None)
             first = False
         else:
             if not next_url:
@@ -165,14 +169,21 @@ async def list_segments(limit: int = 50) -> Dict[str, Any]:
 
 
 async def list_campaigns(limit: int = 25) -> Dict[str, Any]:
-    rows = await _get_pages(
-        "/campaigns/",
-        params={
-            "filter": "equals(messages.channel,'email')",
-            "sort": "-scheduled_at",
-        },
-        limit=limit,
-    )
+    # Campaigns API rejects page[size]; filter+cursor only.
+    # Prefer channel filter; fall back to unfiltered if account rejects it.
+    try:
+        rows = await _get_pages(
+            "/campaigns/",
+            params={"filter": "equals(messages.channel,'email')"},
+            limit=limit,
+            include_page_size=False,
+        )
+    except HTTPException:
+        rows = await _get_pages(
+            "/campaigns/",
+            limit=limit,
+            include_page_size=False,
+        )
     items = []
     for row in rows:
         attrs = row.get("attributes") or {}
@@ -257,7 +268,10 @@ async def list_metrics(limit: int = 50) -> Dict[str, Any]:
 
 async def overview() -> Dict[str, Any]:
     account = await get_account()
-    campaigns = await list_campaigns(10)
+    try:
+        campaigns = await list_campaigns(10)
+    except HTTPException:
+        campaigns = {"campaigns": []}
     flows = await list_flows(20)
     lists = await list_lists(20)
     live_flows = [
