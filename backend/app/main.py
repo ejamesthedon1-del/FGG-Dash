@@ -339,6 +339,11 @@ async def klaviyo_flows(limit: int = 50) -> dict:
     return await klaviyo.list_flows(limit)
 
 
+@app.get("/api/klaviyo/flows/{flow_id}")
+async def klaviyo_flow_detail(flow_id: str) -> dict:
+    return await klaviyo.get_flow_detail(flow_id)
+
+
 @app.patch("/api/klaviyo/flows/{flow_id}")
 async def klaviyo_flow_status(flow_id: str, body: dict) -> dict:
     status = str((body or {}).get("status") or "")
@@ -358,6 +363,50 @@ async def klaviyo_segments(limit: int = 50) -> dict:
 @app.get("/api/klaviyo/metrics")
 async def klaviyo_metrics(limit: int = 50) -> dict:
     return await klaviyo.list_metrics(limit)
+
+
+@app.get("/api/klaviyo/templates")
+async def klaviyo_templates(limit: int = 50) -> dict:
+    return await klaviyo.list_templates(limit)
+
+
+@app.get("/api/klaviyo/templates/{template_id}")
+async def klaviyo_template(template_id: str) -> dict:
+    return await klaviyo.get_template(template_id)
+
+
+@app.post("/api/klaviyo/templates")
+async def klaviyo_create_template(body: dict) -> dict:
+    return await klaviyo.create_template(
+        name=str((body or {}).get("name") or ""),
+        html=(body or {}).get("html"),
+        text=(body or {}).get("text"),
+    )
+
+
+@app.patch("/api/klaviyo/templates/{template_id}")
+async def klaviyo_update_template(template_id: str, body: dict) -> dict:
+    return await klaviyo.update_template(
+        template_id,
+        name=(body or {}).get("name"),
+        html=(body or {}).get("html"),
+        text=(body or {}).get("text"),
+    )
+
+
+@app.delete("/api/klaviyo/templates/{template_id}")
+async def klaviyo_delete_template(template_id: str) -> dict:
+    return await klaviyo.delete_template(template_id)
+
+
+@app.post("/api/klaviyo/campaigns/schedule")
+async def klaviyo_schedule_campaign(body: dict) -> dict:
+    return await klaviyo.schedule_email_campaign(body or {})
+
+
+@app.post("/api/klaviyo/flows/simple")
+async def klaviyo_create_simple_flow(body: dict) -> dict:
+    return await klaviyo.create_simple_flow(body or {})
 
 
 @app.get("/api/support/gmail/threads")

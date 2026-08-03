@@ -36,8 +36,8 @@ def _headers() -> Dict[str, str]:
         )
     return {
         "Authorization": f"Klaviyo-API-Key {key}",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
+        "Accept": "application/vnd.api+json",
+        "Content-Type": "application/vnd.api+json",
         "revision": KLAVIYO_REVISION,
     }
 
@@ -113,6 +113,33 @@ async def _patch(path: str, body: Dict[str, Any]) -> Dict[str, Any]:
     return data if isinstance(data, dict) else {"data": data}
 
 
+async def _post(path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    url = path if path.startswith("http") else f"{KLAVIYO_BASE}{path}"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        res = await client.post(url, headers=_headers(), json=body)
+    if res.status_code >= 400:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Klaviyo error ({res.status_code}): {res.text[:800]}",
+        )
+    if not res.content:
+        return {"ok": True}
+    data = res.json()
+    return data if isinstance(data, dict) else {"data": data}
+
+
+async def _delete(path: str) -> Dict[str, Any]:
+    url = path if path.startswith("http") else f"{KLAVIYO_BASE}{path}"
+    async with httpx.AsyncClient(timeout=40.0) as client:
+        res = await client.delete(url, headers=_headers())
+    if res.status_code >= 400:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Klaviyo error ({res.status_code}): {res.text[:500]}",
+        )
+    return {"ok": True}
+
+
 def connection_status() -> Dict[str, Any]:
     return {
         "configured": klaviyo_configured(),
@@ -137,6 +164,8 @@ async def get_account() -> Dict[str, Any]:
             "timezone": attrs.get("timezone"),
             "preferredCurrency": attrs.get("preferred_currency"),
             "publicApiKey": attrs.get("public_api_key"),
+            "defaultSenderEmail": contact.get("default_sender_email"),
+            "websiteUrl": contact.get("website_url"),
         },
     }
 
@@ -337,6 +366,147 @@ async def set_flow_status(flow_id: str, status: str) -> Dict[str, Any]:
     return {"ok": True, "id": flow_id, "status": status}
 
 
+async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
+    """Flow definition + action statuses — used to diagnose silent welcome flows."""
+    flow_id = (flow_id or "").strip()
+    if not flow_id:
+        raise HTTPException(status_code=400, detail="flow_id required")
+
+    data = await _get(
+        f"/flows/{flow_id}/",
+        params={"additional-fields[flow]": "definition"},
+    )
+    row = data.get("data")
+    if not isinstance(row, dict):
+        raise HTTPException(status_code=404, detail="Flow not found")
+    attrs = row.get("attributes") or {}
+    definition = attrs.get("definition") or {}
+    triggers = definition.get("triggers") or []
+
+    resolved_triggers: List[Dict[str, Any]] = []
+    for trig in triggers:
+        if not isinstance(trig, dict):
+            continue
+        item: Dict[str, Any] = {
+            "type": trig.get("type"),
+            "id": trig.get("id"),
+            "hasFilter": bool(trig.get("trigger_filter")),
+        }
+        tid = str(trig.get("id") or "").strip()
+        ttype = str(trig.get("type") or "").lower()
+        try:
+            if tid and ttype == "metric":
+                m = await _get(f"/metrics/{tid}/")
+                mattrs = ((m.get("data") or {}) if isinstance(m.get("data"), dict) else {}).get(
+                    "attributes"
+                ) or {}
+                item["name"] = mattrs.get("name")
+                item["integration"] = (mattrs.get("integration") or {}).get("name")
+            elif tid and ttype == "list":
+                lst = await _get(f"/lists/{tid}/")
+                lattrs = (
+                    ((lst.get("data") or {}) if isinstance(lst.get("data"), dict) else {}).get(
+                        "attributes"
+                    )
+                    or {}
+                )
+                item["name"] = lattrs.get("name")
+            elif tid and ttype == "segment":
+                seg = await _get(f"/segments/{tid}/")
+                sattrs = (
+                    ((seg.get("data") or {}) if isinstance(seg.get("data"), dict) else {}).get(
+                        "attributes"
+                    )
+                    or {}
+                )
+                item["name"] = sattrs.get("name")
+        except HTTPException:
+            item["name"] = None
+        resolved_triggers.append(item)
+
+    actions_out: List[Dict[str, Any]] = []
+    for action in definition.get("actions") or []:
+        if not isinstance(action, dict):
+            continue
+        adata = action.get("data") or {}
+        msg = adata.get("message") if isinstance(adata, dict) else None
+        entry: Dict[str, Any] = {
+            "id": action.get("id"),
+            "type": action.get("type"),
+            "status": adata.get("status") if isinstance(adata, dict) else None,
+        }
+        if isinstance(msg, dict):
+            entry["subject"] = msg.get("subject_line")
+            entry["templateId"] = msg.get("template_id")
+            entry["fromEmail"] = msg.get("from_email")
+            entry["name"] = msg.get("name")
+        if action.get("type") == "time-delay" and isinstance(adata, dict):
+            entry["delayUnit"] = adata.get("unit")
+            entry["delayValue"] = adata.get("value")
+        actions_out.append(entry)
+
+    # Prefer flow-actions endpoint for authoritative per-message status.
+    try:
+        action_rows = await _get_pages(
+            f"/flows/{flow_id}/flow-actions/",
+            limit=50,
+        )
+        by_id = {str(a.get("id")): a for a in actions_out if a.get("id")}
+        for row_a in action_rows:
+            attrs_a = row_a.get("attributes") or {}
+            aid = str(row_a.get("id") or "")
+            mapped = by_id.get(aid)
+            if mapped:
+                mapped["status"] = attrs_a.get("status") or mapped.get("status")
+                mapped["actionType"] = attrs_a.get("action_type")
+            else:
+                actions_out.append(
+                    {
+                        "id": aid,
+                        "type": attrs_a.get("action_type"),
+                        "status": attrs_a.get("status"),
+                        "actionType": attrs_a.get("action_type"),
+                    }
+                )
+    except HTTPException:
+        pass
+
+    warnings: List[str] = []
+    flow_status = str(attrs.get("status") or "").lower()
+    if flow_status != "live":
+        warnings.append(f"Flow status is '{flow_status}', not live.")
+    for act in actions_out:
+        st = str(act.get("status") or "").lower()
+        atype = str(act.get("type") or act.get("actionType") or "").lower()
+        if "email" in atype or atype == "send-email":
+            if st and st != "live":
+                warnings.append(
+                    f"Email action is '{st}' — even if the flow is live, this email will not send automatically."
+                )
+    if any(t.get("type") == "metric" for t in resolved_triggers):
+        warnings.append(
+            "This flow is metric-triggered. Form/list signups only fire it if that exact metric is tracked when they submit."
+        )
+    if any(t.get("hasFilter") for t in resolved_triggers):
+        warnings.append("Trigger has filters — some signups may be excluded.")
+
+    return {
+        "flow": {
+            "id": row.get("id"),
+            "name": attrs.get("name"),
+            "status": attrs.get("status"),
+            "archived": attrs.get("archived"),
+            "triggerType": attrs.get("trigger_type"),
+            "created": attrs.get("created"),
+            "updated": attrs.get("updated"),
+            "entryActionId": definition.get("entry_action_id"),
+            "triggers": resolved_triggers,
+            "actions": actions_out,
+        },
+        "warnings": warnings,
+    }
+
+
 async def list_metrics(limit: int = 50) -> Dict[str, Any]:
     rows = await _get_pages("/metrics/", limit=limit)
     items: List[Dict[str, Any]] = []
@@ -352,6 +522,450 @@ async def list_metrics(limit: int = 50) -> Dict[str, Any]:
             }
         )
     return {"metrics": items}
+
+
+DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Email</title>
+  </head>
+  <body style="margin:0;padding:24px;background:#f4f4f4;font-family:Helvetica,Arial,sans-serif;color:#111;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;margin:0 auto;background:#ffffff;">
+      <tr>
+        <td style="padding:28px 24px;">
+          <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">
+            Hey {{ first_name|default:'there' }},
+          </p>
+          <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">
+            Write your message here.
+          </p>
+          <p style="margin:24px 0 0;">
+            <a href="https://example.com" style="display:inline-block;padding:12px 18px;background:#111;color:#fff;text-decoration:none;font-size:14px;">
+              Shop now
+            </a>
+          </p>
+          <p style="margin:28px 0 0;font-size:12px;line-height:1.4;color:#888;">
+            {% unsubscribe %}
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _map_template(row: Dict[str, Any]) -> Dict[str, Any]:
+    attrs = row.get("attributes") or {}
+    return {
+        "id": row.get("id"),
+        "name": attrs.get("name"),
+        "editorType": attrs.get("editor_type"),
+        "html": attrs.get("html"),
+        "text": attrs.get("text"),
+        "created": attrs.get("created"),
+        "updated": attrs.get("updated"),
+    }
+
+
+def _ensure_html(html: str) -> str:
+    raw = (html or "").strip()
+    if not raw:
+        return DEFAULT_TEMPLATE_HTML
+    lowered = raw.lower()
+    if "<html" in lowered or "<body" in lowered:
+        if "{% unsubscribe %}" not in lowered:
+            return raw + "\n<p style=\"font-size:12px;color:#888\">{% unsubscribe %}</p>\n"
+        return raw
+    escaped = (
+        raw.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\n", "<br />\n")
+    )
+    return (
+        "<!DOCTYPE html><html><body style=\"font-family:Helvetica,Arial,sans-serif;"
+        "padding:24px;color:#111;\">"
+        f"<div>{escaped}</div>"
+        "<p style=\"margin-top:28px;font-size:12px;color:#888\">{% unsubscribe %}</p>"
+        "</body></html>"
+    )
+
+
+async def list_templates(limit: int = 50) -> Dict[str, Any]:
+    rows = await _get_pages("/templates/", limit=limit)
+    return {"templates": [_map_template(r) for r in rows]}
+
+
+async def get_template(template_id: str) -> Dict[str, Any]:
+    template_id = (template_id or "").strip()
+    if not template_id:
+        raise HTTPException(status_code=400, detail="template_id required")
+    data = await _get(f"/templates/{template_id}/")
+    row = data.get("data")
+    if not isinstance(row, dict):
+        raise HTTPException(status_code=404, detail="Template not found")
+    return {"template": _map_template(row)}
+
+
+async def create_template(
+    *,
+    name: str,
+    html: Optional[str] = None,
+    text: Optional[str] = None,
+) -> Dict[str, Any]:
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    body: Dict[str, Any] = {
+        "data": {
+            "type": "template",
+            "attributes": {
+                "name": name,
+                "editor_type": "CODE",
+                "html": _ensure_html(html or DEFAULT_TEMPLATE_HTML),
+            },
+        }
+    }
+    if text and str(text).strip():
+        body["data"]["attributes"]["text"] = str(text).strip()
+    data = await _post("/templates/", body)
+    row = data.get("data")
+    if not isinstance(row, dict):
+        raise HTTPException(status_code=400, detail="Klaviyo did not return a template")
+    return {"template": _map_template(row)}
+
+
+async def update_template(
+    template_id: str,
+    *,
+    name: Optional[str] = None,
+    html: Optional[str] = None,
+    text: Optional[str] = None,
+) -> Dict[str, Any]:
+    template_id = (template_id or "").strip()
+    if not template_id:
+        raise HTTPException(status_code=400, detail="template_id required")
+    attrs: Dict[str, Any] = {}
+    if name is not None and str(name).strip():
+        attrs["name"] = str(name).strip()
+    if html is not None:
+        attrs["html"] = _ensure_html(html)
+    if text is not None:
+        attrs["text"] = str(text)
+    if not attrs:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    data = await _patch(
+        f"/templates/{template_id}/",
+        {"data": {"type": "template", "id": template_id, "attributes": attrs}},
+    )
+    row = data.get("data")
+    if isinstance(row, dict):
+        return {"template": _map_template(row)}
+    return await get_template(template_id)
+
+
+async def delete_template(template_id: str) -> Dict[str, Any]:
+    template_id = (template_id or "").strip()
+    if not template_id:
+        raise HTTPException(status_code=400, detail="template_id required")
+    await _delete(f"/templates/{template_id}/")
+    return {"ok": True, "id": template_id}
+
+
+async def _resolve_sender(
+    from_email: Optional[str],
+    from_label: Optional[str],
+) -> Tuple[str, str]:
+    email = (from_email or "").strip()
+    label = (from_label or "").strip()
+    if email and label:
+        return email, label
+    account = await get_account()
+    info = account.get("account") or {}
+    if not email:
+        email = str(info.get("defaultSenderEmail") or "").strip()
+    if not label:
+        name = info.get("name")
+        label = str(name).strip() if isinstance(name, str) and name.strip() else "FGG"
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="fromEmail is required (Klaviyo account has no default sender).",
+        )
+    return email, label
+
+
+async def schedule_email_campaign(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Create campaign + assign template + queue send job for a future send."""
+    name = str((body or {}).get("name") or "").strip()
+    template_id = str((body or {}).get("templateId") or "").strip()
+    list_id = str((body or {}).get("listId") or "").strip()
+    segment_id = str((body or {}).get("segmentId") or "").strip()
+    subject = str((body or {}).get("subject") or "").strip()
+    preview_text = str((body or {}).get("previewText") or "").strip()
+    send_at = str((body or {}).get("sendAt") or "").strip()
+    from_email, from_label = await _resolve_sender(
+        (body or {}).get("fromEmail"),
+        (body or {}).get("fromLabel"),
+    )
+    reply_to = str((body or {}).get("replyToEmail") or from_email).strip()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    if not template_id:
+        raise HTTPException(status_code=400, detail="templateId required")
+    if not list_id and not segment_id:
+        raise HTTPException(status_code=400, detail="listId or segmentId required")
+    if not subject:
+        raise HTTPException(status_code=400, detail="subject required")
+    if not send_at:
+        raise HTTPException(status_code=400, detail="sendAt required (ISO datetime)")
+
+    included = [list_id or segment_id]
+    create_payload = {
+        "data": {
+            "type": "campaign",
+            "attributes": {
+                "name": name,
+                "audiences": {"included": included, "excluded": []},
+                "send_strategy": {
+                    "method": "static",
+                    "options_static": {"datetime": send_at, "is_local": False},
+                },
+                "campaign-messages": {
+                    "data": [
+                        {
+                            "type": "campaign-message",
+                            "attributes": {
+                                "definition": {
+                                    "channel": "email",
+                                    "label": subject,
+                                    "content": {
+                                        "subject": subject,
+                                        "preview_text": preview_text,
+                                        "from_email": from_email,
+                                        "from_label": from_label,
+                                        "reply_to_email": reply_to,
+                                    },
+                                }
+                            },
+                        }
+                    ]
+                },
+            },
+        }
+    }
+    created = await _post("/campaigns/", create_payload)
+    campaign = created.get("data") if isinstance(created.get("data"), dict) else {}
+    campaign_id = str(campaign.get("id") or "")
+    if not campaign_id:
+        raise HTTPException(status_code=400, detail="Campaign create failed")
+
+    message_id = ""
+    rel = (campaign.get("relationships") or {}).get("campaign-messages") or {}
+    rel_data = rel.get("data")
+    if isinstance(rel_data, list) and rel_data:
+        message_id = str(rel_data[0].get("id") or "")
+    elif isinstance(rel_data, dict):
+        message_id = str(rel_data.get("id") or "")
+    if not message_id:
+        # Fallback: fetch messages for the campaign.
+        msgs = await _get(f"/campaigns/{campaign_id}/campaign-messages/")
+        rows = msgs.get("data") or []
+        if rows and isinstance(rows[0], dict):
+            message_id = str(rows[0].get("id") or "")
+    if not message_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Campaign created but no message id returned; open it in Klaviyo.",
+        )
+
+    await _post(
+        "/campaign-message-assign-template/",
+        {
+            "data": {
+                "type": "campaign-message",
+                "id": message_id,
+                "relationships": {
+                    "template": {
+                        "data": {"type": "template", "id": template_id},
+                    }
+                },
+            }
+        },
+    )
+
+    send_job = await _post(
+        "/campaign-send-jobs/",
+        {"data": {"type": "campaign-send-job", "id": campaign_id}},
+    )
+
+    return {
+        "ok": True,
+        "campaignId": campaign_id,
+        "messageId": message_id,
+        "templateId": template_id,
+        "sendAt": send_at,
+        "sendJob": send_job.get("data") if isinstance(send_job, dict) else None,
+    }
+
+
+async def _find_metric_id(candidates: List[str]) -> Optional[str]:
+    metrics = await list_metrics(100)
+    rows = metrics.get("metrics") or []
+    lowered = [(str(m.get("name") or ""), str(m.get("id") or "")) for m in rows]
+    for want in candidates:
+        w = want.lower()
+        for name, mid in lowered:
+            if name.lower() == w and mid:
+                return mid
+    for want in candidates:
+        w = want.lower()
+        for name, mid in lowered:
+            if w in name.lower() and mid:
+                return mid
+    return None
+
+
+async def create_simple_flow(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a draft list- or metric-triggered flow with one delayed email."""
+    preset = str((body or {}).get("preset") or "welcome").strip().lower()
+    name = str((body or {}).get("name") or "").strip()
+    template_id = str((body or {}).get("templateId") or "").strip()
+    subject = str((body or {}).get("subject") or "").strip()
+    preview_text = str((body or {}).get("previewText") or "").strip()
+    list_id = str((body or {}).get("listId") or "").strip()
+    delay_hours = (body or {}).get("delayHours")
+    from_email, from_label = await _resolve_sender(
+        (body or {}).get("fromEmail"),
+        (body or {}).get("fromLabel"),
+    )
+
+    if preset not in ("welcome", "abandoned_cart", "post_purchase"):
+        raise HTTPException(
+            status_code=400,
+            detail="preset must be welcome, abandoned_cart, or post_purchase",
+        )
+    if not template_id:
+        raise HTTPException(status_code=400, detail="templateId required")
+    if not subject:
+        raise HTTPException(status_code=400, detail="subject required")
+
+    try:
+        hours = int(delay_hours) if delay_hours is not None else {
+            "welcome": 0,
+            "abandoned_cart": 4,
+            "post_purchase": 24,
+        }[preset]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="delayHours must be an integer")
+    hours = max(0, min(hours, 24 * 30))
+
+    if preset == "welcome":
+        if not list_id:
+            raise HTTPException(status_code=400, detail="listId required for welcome")
+        if not name:
+            name = "Welcome series"
+        triggers: List[Dict[str, Any]] = [{"type": "list", "id": list_id}]
+    elif preset == "abandoned_cart":
+        metric_id = await _find_metric_id(
+            ["Started Checkout", "Checkout Started", "Added to Cart"]
+        )
+        if not metric_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No checkout/cart metric found in Klaviyo for abandoned_cart.",
+            )
+        if not name:
+            name = "Abandoned cart"
+        triggers = [{"type": "metric", "id": metric_id}]
+    else:
+        metric_id = await _find_metric_id(["Placed Order", "Ordered Product"])
+        if not metric_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No Placed Order metric found in Klaviyo for post_purchase.",
+            )
+        if not name:
+            name = "Post-purchase"
+        triggers = [{"type": "metric", "id": metric_id}]
+
+    delay_id = "action-delay"
+    email_id = "action-email"
+    actions: List[Dict[str, Any]] = []
+    entry_id = email_id
+    if hours > 0:
+        entry_id = delay_id
+        actions.append(
+            {
+                "temporary_id": delay_id,
+                "type": "time-delay",
+                "links": {"next": email_id},
+                "data": {
+                    "unit": "hours",
+                    "value": hours,
+                    "secondary_value": 0,
+                    "timezone": "profile",
+                    "delay_until_time": None,
+                    "delay_until_weekdays": None,
+                },
+            }
+        )
+    actions.append(
+        {
+            "temporary_id": email_id,
+            "type": "send-email",
+            "links": {"next": None},
+            "data": {
+                "status": "draft",
+                "message": {
+                    "from_email": from_email,
+                    "from_label": from_label,
+                    "reply_to_email": from_email,
+                    "subject_line": subject,
+                    "preview_text": preview_text,
+                    "template_id": template_id,
+                    "smart_sending_enabled": True,
+                    "transactional": False,
+                    "add_tracking_params": False,
+                    "name": subject,
+                },
+            },
+        }
+    )
+
+    payload = {
+        "data": {
+            "type": "flow",
+            "attributes": {
+                "name": name,
+                "definition": {
+                    "triggers": triggers,
+                    "profile_filter": None,
+                    "actions": actions,
+                    "entry_action_id": entry_id,
+                },
+            },
+        }
+    }
+    data = await _post("/flows/", payload)
+    row = data.get("data") if isinstance(data.get("data"), dict) else {}
+    attrs = row.get("attributes") or {}
+    return {
+        "ok": True,
+        "flow": {
+            "id": row.get("id"),
+            "name": attrs.get("name") or name,
+            "status": attrs.get("status") or "draft",
+            "triggerType": attrs.get("trigger_type"),
+            "created": attrs.get("created"),
+            "updated": attrs.get("updated"),
+        },
+        "preset": preset,
+    }
 
 
 async def overview() -> Dict[str, Any]:
