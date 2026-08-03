@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import asyncio
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from fastapi import HTTPException
@@ -12,6 +14,13 @@ from .config import get_settings
 KLAVIYO_BASE = "https://a.klaviyo.com/api"
 # Pin a stable revision; bump intentionally when adopting new fields.
 KLAVIYO_REVISION = "2024-10-15"
+
+# profile_count via additional-fields is rate-limited to ~1/s (15/m).
+_PROFILE_COUNT_MIN_INTERVAL_S = 1.15
+_PROFILE_COUNT_CACHE_TTL_S = 120.0
+_profile_count_lock = asyncio.Lock()
+_profile_count_last_at = 0.0
+_profile_count_cache: Dict[str, Tuple[float, Optional[int]]] = {}
 
 
 def klaviyo_configured() -> bool:
@@ -150,48 +159,83 @@ def _map_list_item(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def _get_list_with_count(list_id: str) -> Optional[Dict[str, Any]]:
-    """Singular Get List supports additional-fields[list]=profile_count."""
+async def _fetch_list_profile_count(list_id: str) -> Optional[int]:
+    """Get List + profile_count, paced + cached for Klaviyo's 1/s limit."""
+    global _profile_count_last_at
     list_id = (list_id or "").strip()
     if not list_id:
         return None
-    data = await _get(
-        f"/lists/{list_id}/",
-        params={"additional-fields[list]": "profile_count"},
-    )
-    row = data.get("data")
-    if not isinstance(row, dict):
-        return None
-    return _map_list_item(row)
 
+    now = time.monotonic()
+    cached = _profile_count_cache.get(list_id)
+    if cached and (now - cached[0]) < _PROFILE_COUNT_CACHE_TTL_S:
+        return cached[1]
 
-async def list_lists(limit: int = 50) -> Dict[str, Any]:
-    # Collection endpoint usually omits profile_count; request it, then
-    # enrich any missing counts via singular Get List.
-    try:
-        rows = await _get_pages(
-            "/lists/",
-            params={"additional-fields[list]": "profile_count"},
-            limit=limit,
-        )
-    except HTTPException:
-        rows = await _get_pages("/lists/", limit=limit)
+    async with _profile_count_lock:
+        now = time.monotonic()
+        cached = _profile_count_cache.get(list_id)
+        if cached and (now - cached[0]) < _PROFILE_COUNT_CACHE_TTL_S:
+            return cached[1]
 
-    items = [_map_list_item(r) for r in rows]
-    missing = [item for item in items if item.get("profileCount") is None]
-    if missing:
-        enriched: List[Dict[str, Any]] = []
-        for item in items:
-            if item.get("profileCount") is not None:
-                enriched.append(item)
+        wait = _PROFILE_COUNT_MIN_INTERVAL_S - (now - _profile_count_last_at)
+        if wait > 0:
+            await asyncio.sleep(wait)
+
+        url = f"{KLAVIYO_BASE}/lists/{list_id}/"
+        params = {"additional-fields[list]": "profile_count"}
+        count: Optional[int] = None
+        resolved = False
+        for attempt in range(4):
+            async with httpx.AsyncClient(timeout=40.0) as client:
+                res = await client.get(url, headers=_headers(), params=params)
+            _profile_count_last_at = time.monotonic()
+            if res.status_code == 429:
+                retry_after = res.headers.get("Retry-After")
+                try:
+                    delay = float(retry_after) if retry_after else 2.0 * (attempt + 1)
+                except ValueError:
+                    delay = 2.0 * (attempt + 1)
+                await asyncio.sleep(min(max(delay, 1.0), 10.0))
                 continue
-            try:
-                full = await _get_list_with_count(str(item.get("id") or ""))
-                enriched.append(full or item)
-            except HTTPException:
-                enriched.append(item)
-        items = enriched
-    return {"lists": items}
+            if res.status_code >= 400:
+                break
+            data = res.json()
+            row = data.get("data") if isinstance(data, dict) else None
+            if not isinstance(row, dict):
+                break
+            mapped = _map_list_item(row)
+            count = mapped.get("profileCount")
+            # Empty lists sometimes omit the field; treat as 0 when request ok.
+            if count is None:
+                count = 0
+            resolved = True
+            break
+
+        if resolved:
+            _profile_count_cache[list_id] = (time.monotonic(), count)
+        return count
+
+
+async def list_lists(limit: int = 50, *, include_counts: bool = True) -> Dict[str, Any]:
+    # Collection omits profile_count. Singular Get List supports it, but
+    # additional-fields[list]=profile_count is capped at ~1 req/sec.
+    rows = await _get_pages("/lists/", limit=limit)
+    items = [_map_list_item(r) for r in rows]
+    if not include_counts:
+        return {"lists": items}
+
+    enriched: List[Dict[str, Any]] = []
+    for item in items:
+        list_id = str(item.get("id") or "")
+        if item.get("profileCount") is not None:
+            enriched.append(item)
+            continue
+        try:
+            count = await _fetch_list_profile_count(list_id)
+            enriched.append({**item, "profileCount": count})
+        except HTTPException:
+            enriched.append(item)
+    return {"lists": enriched}
 
 
 async def list_segments(limit: int = 50) -> Dict[str, Any]:
@@ -317,7 +361,8 @@ async def overview() -> Dict[str, Any]:
     except HTTPException:
         campaigns = {"campaigns": []}
     flows = await list_flows(20)
-    lists = await list_lists(20)
+    # Skip profile counts here — /lists enriches them (rate-limited 1/s).
+    lists = await list_lists(20, include_counts=False)
     live_flows = [
         f for f in flows.get("flows") or [] if (f.get("status") or "").lower() == "live"
     ]

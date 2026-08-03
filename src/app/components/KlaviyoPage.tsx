@@ -296,7 +296,9 @@ export function KlaviyoPage() {
                           <span className="shrink-0 text-[13px] tabular-nums text-gray-500">
                             {typeof list.profileCount === "number"
                               ? list.profileCount.toLocaleString()
-                              : "…"}
+                              : loading
+                                ? "…"
+                                : "—"}
                           </span>
                         </li>
                       ))}
@@ -455,7 +457,9 @@ export function KlaviyoPage() {
                     <span className="shrink-0 text-[13px] tabular-nums text-gray-400">
                       {typeof list.profileCount === "number"
                         ? list.profileCount.toLocaleString()
-                        : "—"}
+                        : loading
+                          ? "…"
+                          : "—"}
                     </span>
                   </li>
                 ))}
