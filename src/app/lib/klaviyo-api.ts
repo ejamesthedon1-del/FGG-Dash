@@ -12,6 +12,8 @@ export type KlaviyoAccount = {
   timezone?: string | null;
   preferredCurrency?: string | null;
   publicApiKey?: string | null;
+  defaultSenderEmail?: string | null;
+  websiteUrl?: string | null;
 };
 
 export type KlaviyoCampaign = {
@@ -53,6 +55,16 @@ export type KlaviyoSegment = {
   isProcessing?: boolean | null;
 };
 
+export type KlaviyoTemplate = {
+  id: string;
+  name?: string | null;
+  editorType?: string | null;
+  html?: string | null;
+  text?: string | null;
+  created?: string | null;
+  updated?: string | null;
+};
+
 export type KlaviyoOverview = {
   configured: boolean;
   account: KlaviyoAccount | null;
@@ -66,6 +78,44 @@ export type KlaviyoOverview = {
   recentCampaigns?: KlaviyoCampaign[];
   flows?: KlaviyoFlow[];
   lists?: KlaviyoList[];
+};
+
+export type ScheduleEmailCampaignInput = {
+  name: string;
+  templateId: string;
+  listId?: string;
+  segmentId?: string;
+  subject: string;
+  previewText?: string;
+  sendAt: string;
+  fromEmail?: string;
+  fromLabel?: string;
+  replyToEmail?: string;
+};
+
+export type CreateSimpleFlowInput = {
+  preset: "welcome" | "abandoned_cart" | "post_purchase";
+  name?: string;
+  templateId: string;
+  subject: string;
+  previewText?: string;
+  listId?: string;
+  delayHours?: number;
+  fromEmail?: string;
+  fromLabel?: string;
+};
+
+export type SendSmsCampaignInput = {
+  name: string;
+  body: string;
+  listId?: string;
+  segmentId?: string;
+  sendNow?: boolean;
+  sendAt?: string;
+  confirm?: boolean;
+  shortenLinks?: boolean;
+  addOrgPrefix?: boolean;
+  addOptOutLanguage?: boolean;
 };
 
 async function readJson<T>(res: Response): Promise<T> {
@@ -92,9 +142,12 @@ export async function fetchKlaviyoOverview(): Promise<KlaviyoOverview> {
 
 export async function fetchKlaviyoCampaigns(
   limit = 25,
+  channel: "email" | "sms" | "all" = "email",
 ): Promise<{ campaigns: KlaviyoCampaign[] }> {
   const res = await fetch(
-    apiUrl(`/api/klaviyo/campaigns?limit=${encodeURIComponent(String(limit))}`),
+    apiUrl(
+      `/api/klaviyo/campaigns?limit=${encodeURIComponent(String(limit))}&channel=${encodeURIComponent(channel)}`,
+    ),
   );
   return readJson(res);
 }
@@ -138,5 +191,105 @@ export async function fetchKlaviyoSegments(
   const res = await fetch(
     apiUrl(`/api/klaviyo/segments?limit=${encodeURIComponent(String(limit))}`),
   );
+  return readJson(res);
+}
+
+export async function fetchKlaviyoTemplates(
+  limit = 50,
+): Promise<{ templates: KlaviyoTemplate[] }> {
+  const res = await fetch(
+    apiUrl(`/api/klaviyo/templates?limit=${encodeURIComponent(String(limit))}`),
+  );
+  return readJson(res);
+}
+
+export async function fetchKlaviyoTemplate(
+  templateId: string,
+): Promise<{ template: KlaviyoTemplate }> {
+  const res = await fetch(
+    apiUrl(`/api/klaviyo/templates/${encodeURIComponent(templateId)}`),
+  );
+  return readJson(res);
+}
+
+export async function createKlaviyoTemplate(input: {
+  name: string;
+  html?: string;
+  text?: string;
+}): Promise<{ template: KlaviyoTemplate }> {
+  const res = await fetch(apiUrl("/api/klaviyo/templates"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
+export async function updateKlaviyoTemplate(
+  templateId: string,
+  input: { name?: string; html?: string; text?: string },
+): Promise<{ template: KlaviyoTemplate }> {
+  const res = await fetch(
+    apiUrl(`/api/klaviyo/templates/${encodeURIComponent(templateId)}`),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  return readJson(res);
+}
+
+export async function deleteKlaviyoTemplate(
+  templateId: string,
+): Promise<{ ok: boolean; id: string }> {
+  const res = await fetch(
+    apiUrl(`/api/klaviyo/templates/${encodeURIComponent(templateId)}`),
+    { method: "DELETE" },
+  );
+  return readJson(res);
+}
+
+export async function scheduleKlaviyoCampaign(
+  input: ScheduleEmailCampaignInput,
+): Promise<{
+  ok: boolean;
+  campaignId: string;
+  messageId: string;
+  sendAt: string;
+}> {
+  const res = await fetch(apiUrl("/api/klaviyo/campaigns/schedule"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
+export async function createKlaviyoSimpleFlow(
+  input: CreateSimpleFlowInput,
+): Promise<{ ok: boolean; flow: KlaviyoFlow; preset: string }> {
+  const res = await fetch(apiUrl("/api/klaviyo/flows/simple"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
+export async function sendKlaviyoSmsCampaign(
+  input: SendSmsCampaignInput,
+): Promise<{
+  ok: boolean;
+  campaignId: string;
+  channel: string;
+  sendNow: boolean;
+  sendAt: string | null;
+}> {
+  const res = await fetch(apiUrl("/api/klaviyo/campaigns/sms"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
   return readJson(res);
 }

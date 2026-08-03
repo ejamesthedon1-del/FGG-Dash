@@ -330,8 +330,8 @@ async def klaviyo_overview() -> dict:
 
 
 @app.get("/api/klaviyo/campaigns")
-async def klaviyo_campaigns(limit: int = 25) -> dict:
-    return await klaviyo.list_campaigns(limit)
+async def klaviyo_campaigns(limit: int = 25, channel: str = "email") -> dict:
+    return await klaviyo.list_campaigns(limit, channel=channel)
 
 
 @app.get("/api/klaviyo/flows")
@@ -402,6 +402,11 @@ async def klaviyo_delete_template(template_id: str) -> dict:
 @app.post("/api/klaviyo/campaigns/schedule")
 async def klaviyo_schedule_campaign(body: dict) -> dict:
     return await klaviyo.schedule_email_campaign(body or {})
+
+
+@app.post("/api/klaviyo/campaigns/sms")
+async def klaviyo_send_sms_campaign(body: dict) -> dict:
+    return await klaviyo.send_sms_campaign(body or {})
 
 
 @app.post("/api/klaviyo/flows/simple")

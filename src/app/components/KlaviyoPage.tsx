@@ -11,13 +11,19 @@ import {
   fetchKlaviyoOverview,
   fetchKlaviyoSegments,
   fetchKlaviyoStatus,
+  fetchKlaviyoTemplates,
   setKlaviyoFlowStatus,
   type KlaviyoCampaign,
   type KlaviyoFlow,
   type KlaviyoList,
   type KlaviyoOverview,
   type KlaviyoSegment,
+  type KlaviyoTemplate,
 } from "../lib/klaviyo-api";
+import { KlaviyoSchedulePanel } from "./klaviyo/KlaviyoSchedulePanel";
+import { KlaviyoSimpleFlowForm } from "./klaviyo/KlaviyoSimpleFlowForm";
+import { KlaviyoSmsPanel } from "./klaviyo/KlaviyoSmsPanel";
+import { KlaviyoTemplatesPanel } from "./klaviyo/KlaviyoTemplatesPanel";
 import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "./ui/utils";
@@ -52,6 +58,7 @@ export function KlaviyoPage() {
   const [flows, setFlows] = React.useState<KlaviyoFlow[]>([]);
   const [lists, setLists] = React.useState<KlaviyoList[]>([]);
   const [segments, setSegments] = React.useState<KlaviyoSegment[]>([]);
+  const [templates, setTemplates] = React.useState<KlaviyoTemplate[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [busyFlowId, setBusyFlowId] = React.useState<string | null>(null);
 
@@ -66,17 +73,19 @@ export function KlaviyoPage() {
         setFlows([]);
         setLists([]);
         setSegments([]);
+        setTemplates([]);
         return;
       }
       // Don't let one failing endpoint blank the whole page.
       const settled = await Promise.allSettled([
         fetchKlaviyoOverview(),
-        fetchKlaviyoCampaigns(40),
+        fetchKlaviyoCampaigns(80),
         fetchKlaviyoFlows(50),
         fetchKlaviyoLists(50),
         fetchKlaviyoSegments(50),
+        fetchKlaviyoTemplates(50),
       ]);
-      const [ov, camps, flowRes, listRes, segRes] = settled;
+      const [ov, camps, flowRes, listRes, segRes, tplRes] = settled;
       const errors: string[] = [];
 
       if (ov.status === "fulfilled") setOverview(ov.value);
@@ -113,6 +122,16 @@ export function KlaviyoPage() {
           segRes.reason instanceof Error
             ? segRes.reason.message
             : "Segments failed",
+        );
+      }
+
+      if (tplRes.status === "fulfilled") setTemplates(tplRes.value.templates || []);
+      else {
+        setTemplates([]);
+        errors.push(
+          tplRes.reason instanceof Error
+            ? tplRes.reason.message
+            : "Templates failed",
         );
       }
 
@@ -165,8 +184,8 @@ export function KlaviyoPage() {
             Email
           </h2>
           <p className="mt-1 text-[15px] text-gray-500">
-            Lite Klaviyo control panel — skip their cluttered UI for day-to-day
-            ops.
+            Build templates, schedule the week, and spin up simple flows without
+            living in Klaviyo.
           </p>
         </div>
         <Button
@@ -199,8 +218,9 @@ export function KlaviyoPage() {
             <li>
               Scopes:{" "}
               <code className="text-[12px]">
-                accounts:read, campaigns:read, flows:read, flows:write,
-                lists:read, segments:read, metrics:read
+                accounts:read, campaigns:read, campaigns:write, templates:read,
+                templates:write, flows:read, flows:write, lists:read,
+                segments:read, metrics:read
               </code>
             </li>
             <li>
@@ -219,6 +239,9 @@ export function KlaviyoPage() {
             {(
               [
                 ["overview", "Overview"],
+                ["sms", "SMS"],
+                ["templates", "Templates"],
+                ["schedule", "Schedule"],
                 ["campaigns", "Campaigns"],
                 ["flows", "Flows"],
                 ["lists", "Lists & segments"],
@@ -346,6 +369,36 @@ export function KlaviyoPage() {
             )}
           </TabsContent>
 
+          <TabsContent value="sms" className="mt-6">
+            <KlaviyoSmsPanel lists={lists} segments={segments} />
+          </TabsContent>
+
+          <TabsContent value="templates" className="mt-6">
+            <KlaviyoTemplatesPanel
+              templates={templates}
+              onChange={setTemplates}
+            />
+          </TabsContent>
+
+          <TabsContent value="schedule" className="mt-6">
+            <KlaviyoSchedulePanel
+              campaigns={campaigns}
+              templates={templates}
+              lists={lists}
+              defaultFromEmail={
+                typeof overview?.account?.defaultSenderEmail === "string"
+                  ? overview.account.defaultSenderEmail
+                  : null
+              }
+              defaultFromLabel={
+                typeof overview?.account?.name === "string"
+                  ? overview.account.name
+                  : null
+              }
+              onScheduled={() => void load()}
+            />
+          </TabsContent>
+
           <TabsContent value="campaigns" className="mt-6">
             <ul className="border-t border-black/[0.06]">
               {campaigns.map((c) => (
@@ -379,7 +432,22 @@ export function KlaviyoPage() {
             </ul>
           </TabsContent>
 
-          <TabsContent value="flows" className="mt-6">
+          <TabsContent value="flows" className="mt-6 space-y-6">
+            <KlaviyoSimpleFlowForm
+              templates={templates}
+              lists={lists}
+              defaultFromEmail={
+                typeof overview?.account?.defaultSenderEmail === "string"
+                  ? overview.account.defaultSenderEmail
+                  : null
+              }
+              defaultFromLabel={
+                typeof overview?.account?.name === "string"
+                  ? overview.account.name
+                  : null
+              }
+              onCreated={() => void load()}
+            />
             <ul className="border-t border-black/[0.06]">
               {flows.map((flow) => {
                 const status = (flow.status || "").toLowerCase();

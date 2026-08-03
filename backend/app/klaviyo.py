@@ -288,22 +288,33 @@ async def list_segments(limit: int = 50) -> Dict[str, Any]:
     return {"segments": items}
 
 
-async def list_campaigns(limit: int = 25) -> Dict[str, Any]:
+async def list_campaigns(limit: int = 25, channel: str = "email") -> Dict[str, Any]:
     # Campaigns API rejects page[size]; filter+cursor only.
+    channel = (channel or "email").strip().lower()
+    if channel not in ("email", "sms", "all"):
+        channel = "email"
     # Prefer channel filter; fall back to unfiltered if account rejects it.
-    try:
-        rows = await _get_pages(
-            "/campaigns/",
-            params={"filter": "equals(messages.channel,'email')"},
-            limit=limit,
-            include_page_size=False,
-        )
-    except HTTPException:
+    rows: List[Dict[str, Any]] = []
+    if channel == "all":
         rows = await _get_pages(
             "/campaigns/",
             limit=limit,
             include_page_size=False,
         )
+    else:
+        try:
+            rows = await _get_pages(
+                "/campaigns/",
+                params={"filter": f"equals(messages.channel,'{channel}')"},
+                limit=limit,
+                include_page_size=False,
+            )
+        except HTTPException:
+            rows = await _get_pages(
+                "/campaigns/",
+                limit=limit,
+                include_page_size=False,
+            )
     items = []
     for row in rows:
         attrs = row.get("attributes") or {}
@@ -313,7 +324,7 @@ async def list_campaigns(limit: int = 25) -> Dict[str, Any]:
                 "name": attrs.get("name"),
                 "status": attrs.get("status"),
                 "archived": attrs.get("archived"),
-                "channel": "email",
+                "channel": channel if channel != "all" else None,
                 "createdAt": attrs.get("created_at"),
                 "scheduledAt": attrs.get("scheduled_at"),
                 "sendTime": attrs.get("send_time"),
@@ -824,6 +835,115 @@ async def schedule_email_campaign(body: Dict[str, Any]) -> Dict[str, Any]:
         "messageId": message_id,
         "templateId": template_id,
         "sendAt": send_at,
+        "sendJob": send_job.get("data") if isinstance(send_job, dict) else None,
+    }
+
+
+DEFAULT_SMS_REENGAGE_BODY = (
+    "Still want your 20% off?\n\n"
+    "Your code:\n"
+    "{% coupon_code 'SMSentry' %}\n\n"
+    "Shop now: www.sinnerstestimony.com"
+)
+
+
+async def send_sms_campaign(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Create an SMS campaign and queue send (now or scheduled)."""
+    name = str((body or {}).get("name") or "").strip()
+    list_id = str((body or {}).get("listId") or "").strip()
+    segment_id = str((body or {}).get("segmentId") or "").strip()
+    message = str((body or {}).get("body") or "").strip()
+    send_at = str((body or {}).get("sendAt") or "").strip()
+    send_now = bool((body or {}).get("sendNow"))
+    confirm = bool((body or {}).get("confirm"))
+    shorten_links = (body or {}).get("shortenLinks")
+    add_org_prefix = (body or {}).get("addOrgPrefix")
+    add_opt_out = (body or {}).get("addOptOutLanguage")
+
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    if not list_id and not segment_id:
+        raise HTTPException(status_code=400, detail="listId or segmentId required")
+    if not message:
+        raise HTTPException(status_code=400, detail="body required")
+    if len(message) > 1000:
+        raise HTTPException(status_code=400, detail="SMS body too long (max 1000 chars)")
+    if send_now and not confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="confirm must be true to send SMS immediately",
+        )
+    if not send_now and not send_at:
+        raise HTTPException(
+            status_code=400,
+            detail="sendAt required unless sendNow is true",
+        )
+
+    if send_now:
+        send_strategy: Dict[str, Any] = {"method": "immediate"}
+    else:
+        send_strategy = {
+            "method": "static",
+            "options_static": {"datetime": send_at, "is_local": False},
+        }
+
+    create_payload = {
+        "data": {
+            "type": "campaign",
+            "attributes": {
+                "name": name,
+                "audiences": {
+                    "included": [list_id or segment_id],
+                    "excluded": [],
+                },
+                "send_strategy": send_strategy,
+                "send_options": {"use_smart_sending": True},
+                "campaign-messages": {
+                    "data": [
+                        {
+                            "type": "campaign-message",
+                            "attributes": {
+                                "definition": {
+                                    "channel": "sms",
+                                    "render_options": {
+                                        "shorten_links": True
+                                        if shorten_links is None
+                                        else bool(shorten_links),
+                                        "add_org_prefix": True
+                                        if add_org_prefix is None
+                                        else bool(add_org_prefix),
+                                        "add_info_link": False,
+                                        "add_opt_out_language": True
+                                        if add_opt_out is None
+                                        else bool(add_opt_out),
+                                    },
+                                    "content": {"body": message},
+                                }
+                            },
+                        }
+                    ]
+                },
+            },
+        }
+    }
+
+    created = await _post("/campaigns/", create_payload)
+    campaign = created.get("data") if isinstance(created.get("data"), dict) else {}
+    campaign_id = str(campaign.get("id") or "")
+    if not campaign_id:
+        raise HTTPException(status_code=400, detail="SMS campaign create failed")
+
+    send_job = await _post(
+        "/campaign-send-jobs/",
+        {"data": {"type": "campaign-send-job", "id": campaign_id}},
+    )
+
+    return {
+        "ok": True,
+        "campaignId": campaign_id,
+        "channel": "sms",
+        "sendNow": send_now,
+        "sendAt": None if send_now else send_at,
         "sendJob": send_job.get("data") if isinstance(send_job, dict) else None,
     }
 
