@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import httpx
 from fastapi import HTTPException
@@ -46,7 +46,10 @@ def _headers() -> Dict[str, str]:
 PAGE_SIZE_MAX = 10
 
 
-async def _get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def _get(
+    path: str,
+    params: Optional[Union[Dict[str, Any], Sequence[Tuple[str, Any]]]] = None,
+) -> Dict[str, Any]:
     url = path if path.startswith("http") else f"{KLAVIYO_BASE}{path}"
     async with httpx.AsyncClient(timeout=40.0) as client:
         res = await client.get(url, headers=_headers(), params=params)
@@ -372,15 +375,27 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
     if not flow_id:
         raise HTTPException(status_code=400, detail="flow_id required")
 
-    data = await _get(
-        f"/flows/{flow_id}/",
-        params={"additional-fields[flow]": "definition"},
-    )
+    data = await _get(f"/flows/{flow_id}/")
     row = data.get("data")
     if not isinstance(row, dict):
         raise HTTPException(status_code=404, detail="Flow not found")
     attrs = row.get("attributes") or {}
     definition = attrs.get("definition") or {}
+
+    # Definition is an additional-field; request it with a list-style query.
+    if not definition:
+        try:
+            data_def = await _get(
+                f"/flows/{flow_id}/",
+                params=[("additional-fields[flow]", "definition")],  # type: ignore[arg-type]
+            )
+            row_def = data_def.get("data")
+            if isinstance(row_def, dict):
+                attrs = row_def.get("attributes") or attrs
+                definition = attrs.get("definition") or {}
+        except HTTPException:
+            definition = {}
+
     triggers = definition.get("triggers") or []
 
     resolved_triggers: List[Dict[str, Any]] = []
@@ -424,6 +439,45 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
             item["name"] = None
         resolved_triggers.append(item)
 
+    # Reverse-lookup which metric triggers this flow when definition is unavailable.
+    if not resolved_triggers and str(attrs.get("trigger_type") or "").lower() == "metric":
+        try:
+            metrics = await list_metrics(80)
+            for metric in metrics.get("metrics") or []:
+                mid = str(metric.get("id") or "").strip()
+                if not mid:
+                    continue
+                try:
+                    rel = await _get(f"/metrics/{mid}/relationships/flow-triggers/")
+                except HTTPException:
+                    continue
+                for rel_row in rel.get("data") or []:
+                    if isinstance(rel_row, dict) and str(rel_row.get("id") or "") == flow_id:
+                        resolved_triggers.append(
+                            {
+                                "type": "metric",
+                                "id": mid,
+                                "name": metric.get("name"),
+                                "integration": metric.get("integration"),
+                                "hasFilter": False,
+                            }
+                        )
+                        break
+                if resolved_triggers:
+                    break
+        except HTTPException:
+            pass
+
+    if not resolved_triggers and attrs.get("trigger_type"):
+        resolved_triggers.append(
+            {
+                "type": attrs.get("trigger_type"),
+                "id": None,
+                "name": attrs.get("trigger_type"),
+                "hasFilter": False,
+            }
+        )
+
     actions_out: List[Dict[str, Any]] = []
     for action in definition.get("actions") or []:
         if not isinstance(action, dict):
@@ -445,7 +499,7 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
             entry["delayValue"] = adata.get("value")
         actions_out.append(entry)
 
-    # Prefer flow-actions endpoint for authoritative per-message status.
+    # Authoritative per-message status from flow-actions.
     try:
         action_rows = await _get_pages(
             f"/flows/{flow_id}/flow-actions/",
@@ -456,18 +510,34 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
             attrs_a = row_a.get("attributes") or {}
             aid = str(row_a.get("id") or "")
             mapped = by_id.get(aid)
+            action_type = str(attrs_a.get("action_type") or "").lower()
             if mapped:
                 mapped["status"] = attrs_a.get("status") or mapped.get("status")
                 mapped["actionType"] = attrs_a.get("action_type")
             else:
-                actions_out.append(
-                    {
-                        "id": aid,
-                        "type": attrs_a.get("action_type"),
-                        "status": attrs_a.get("status"),
-                        "actionType": attrs_a.get("action_type"),
-                    }
-                )
+                mapped = {
+                    "id": aid,
+                    "type": attrs_a.get("action_type"),
+                    "status": attrs_a.get("status"),
+                    "actionType": attrs_a.get("action_type"),
+                }
+                actions_out.append(mapped)
+
+            # Enrich send-email actions with message details when missing.
+            if ("email" in action_type or action_type == "send-email") and not mapped.get(
+                "subject"
+            ):
+                try:
+                    msg_data = await _get(f"/flow-actions/{aid}/flow-messages/")
+                    msgs = msg_data.get("data") or []
+                    if msgs and isinstance(msgs[0], dict):
+                        mattrs = msgs[0].get("attributes") or {}
+                        content = mattrs.get("content") or {}
+                        mapped["subject"] = content.get("subject") or mattrs.get("name")
+                        mapped["fromEmail"] = content.get("from_email")
+                        mapped["name"] = mattrs.get("name")
+                except HTTPException:
+                    pass
     except HTTPException:
         pass
 
@@ -483,7 +553,10 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
                 warnings.append(
                     f"Email action is '{st}' — even if the flow is live, this email will not send automatically."
                 )
-    if any(t.get("type") == "metric" for t in resolved_triggers):
+    trigger_blob = " ".join(
+        str(t.get("type") or "") + " " + str(t.get("name") or "") for t in resolved_triggers
+    ).lower()
+    if "metric" in trigger_blob or str(attrs.get("trigger_type") or "").lower() == "metric":
         warnings.append(
             "This flow is metric-triggered. Form/list signups only fire it if that exact metric is tracked when they submit."
         )
@@ -508,7 +581,8 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
 
 
 async def list_metrics(limit: int = 50) -> Dict[str, Any]:
-    rows = await _get_pages("/metrics/", limit=limit)
+    # Metrics API rejects page[size] (same class of issue as campaigns).
+    rows = await _get_pages("/metrics/", limit=limit, include_page_size=False)
     items: List[Dict[str, Any]] = []
     for row in rows:
         attrs = row.get("attributes") or {}
