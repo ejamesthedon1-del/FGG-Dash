@@ -85,7 +85,6 @@ function qualityLabel(width: number, height: number): {
   tone: "good" | "ok" | "low";
 } {
   const short = Math.min(width, height);
-  const long = Math.max(width, height);
   if (short >= 1440) {
     return {
       label: "High",
@@ -111,6 +110,50 @@ function qualityLabel(width: number, height: number): {
     label: "Low",
     detail: `${width}×${height} · too small for crisp Feed`,
     tone: "low",
+  };
+}
+
+/** How Instagram Feed will present this file (from real pixel ratio). */
+function feedUploadHint(width: number, height: number): {
+  title: string;
+  detail: string;
+  ok: boolean;
+} {
+  const r = width / height;
+  const within =
+    r >= 4 / 5 - 0.01 && r <= 1.91 + 0.02;
+  if (Math.abs(r - 1) < 0.03) {
+    return {
+      title: "Uploads as square (1:1)",
+      detail: `${width}×${height} · Feed shows full frame · target often 1080×1080`,
+      ok: true,
+    };
+  }
+  if (Math.abs(r - 4 / 5) < 0.04) {
+    return {
+      title: "Uploads as portrait (4:5)",
+      detail: `${width}×${height} · Feed shows full frame · target often 1080×1350`,
+      ok: true,
+    };
+  }
+  if (Math.abs(r - 1.91) < 0.05 || (r > 1.5 && r <= 1.91 + 0.02)) {
+    return {
+      title: "Uploads as landscape (~1.91:1)",
+      detail: `${width}×${height} · Feed shows full frame`,
+      ok: true,
+    };
+  }
+  if (!within) {
+    return {
+      title: "Outside Instagram Feed range",
+      detail: `${width}×${height} · IG expects between 4:5 and 1.91:1 — may reject or crop`,
+      ok: false,
+    };
+  }
+  return {
+    title: `Uploads at ${ratioLabel(width, height)}`,
+    detail: `${width}×${height} · Instagram uses this exact ratio from the file`,
+    ok: true,
   };
 }
 
@@ -188,6 +231,7 @@ type InstagramFeedLayoutProps = {
   focusedId?: string | null;
   onFocusPost?: (postId: string) => void;
   onReorder?: (reordered: IgScheduledPost[]) => void;
+  className?: string;
 };
 
 export function InstagramFeedLayout({
@@ -196,6 +240,7 @@ export function InstagramFeedLayout({
   focusedId,
   onFocusPost,
   onReorder,
+  className,
 }: InstagramFeedLayoutProps) {
   const layout = React.useMemo(
     () => feedLayoutPosts(posts, brand),
@@ -240,10 +285,18 @@ export function InstagramFeedLayout({
   const quality = meta
     ? qualityLabel(meta.width, meta.height)
     : null;
+  const uploadHint = meta
+    ? feedUploadHint(meta.width, meta.height)
+    : null;
 
   return (
-    <section className="space-y-3 border-t border-black/[0.06] pt-6">
-      <div className="flex items-baseline justify-between gap-2">
+    <section
+      className={cn(
+        "space-y-3 border-t border-black/[0.06] pt-6",
+        className,
+      )}
+    >
+      <div className="flex h-14 items-end justify-between gap-2 pb-2">
         <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
           Feed layout
         </h3>
@@ -252,9 +305,9 @@ export function InstagramFeedLayout({
         </span>
       </div>
 
-      <div className="mx-auto w-full max-w-[390px]">
+      <div className="w-full min-w-0">
         <div
-          className="grid grid-cols-3 gap-[2px] bg-white"
+          className="grid w-full grid-cols-3 gap-[2px] bg-white"
           onDragLeave={(e) => {
             if (!e.currentTarget.contains(e.relatedTarget as Node)) {
               setOverIndex(null);
@@ -342,9 +395,6 @@ export function InstagramFeedLayout({
             );
           })}
         </div>
-        <p className="mt-2 text-[12px] text-gray-400">
-          Tap a tile to preview · Drag to reorder · Stories excluded
-        </p>
       </div>
 
       <Dialog
@@ -356,77 +406,108 @@ export function InstagramFeedLayout({
         <DialogContent className="max-h-[90vh] max-w-lg gap-0 overflow-hidden p-0 sm:max-w-xl">
           <DialogHeader className="space-y-1 border-b border-border px-4 py-3 pr-12 text-left">
             <DialogTitle className="text-[15px] font-medium">
-              Image preview
+              Upload size preview
             </DialogTitle>
             <DialogDescription className="text-[13px] text-muted-foreground">
               {previewPost
-                ? `${formatWhenShort(previewPost.scheduledAt)} · ${statusBadge(previewPost.status)}`
+                ? `${formatWhenShort(previewPost.scheduledAt)} · ${statusBadge(previewPost.status)} · as Instagram will receive the file`
                 : null}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="relative bg-black">
-            {previewSrc ? (
-              <img
-                src={previewSrc}
-                alt=""
-                className="mx-auto max-h-[min(55vh,520px)] w-full object-contain"
-              />
-            ) : (
-              <div className="flex h-48 items-center justify-center text-gray-500">
-                <ImageIcon className="size-8" />
+          <div className="max-h-[min(70vh,640px)] overflow-y-auto bg-[#f5f5f5] px-4 py-4">
+            <div className="mx-auto w-full max-w-[360px]">
+              {uploadHint ? (
+                <div
+                  className={cn(
+                    "mb-3 rounded-lg px-3 py-2 text-[13px]",
+                    uploadHint.ok
+                      ? "bg-white text-gray-800"
+                      : "bg-amber-50 text-amber-950",
+                  )}
+                >
+                  <p className="font-semibold">{uploadHint.title}</p>
+                  <p className="mt-0.5 text-[12px] opacity-80">
+                    {uploadHint.detail}
+                  </p>
+                </div>
+              ) : metaLoading ? (
+                <p className="mb-3 text-[13px] text-muted-foreground">
+                  Reading image size…
+                </p>
+              ) : metaError ? (
+                <p className="mb-3 text-[13px] text-amber-800">{metaError}</p>
+              ) : null}
+
+              <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+                <div className="relative flex min-h-[120px] items-center justify-center bg-[#111]">
+                  {previewSrc ? (
+                    <img
+                      src={previewSrc}
+                      alt=""
+                      className="mx-auto block h-auto max-h-[min(52vh,480px)] w-auto max-w-full"
+                    />
+                  ) : (
+                    <div className="flex h-48 items-center justify-center text-gray-500">
+                      <ImageIcon className="size-8" />
+                    </div>
+                  )}
+                  {previewUrls.length > 1 ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="absolute top-1/2 left-2 size-8 -translate-y-1/2 rounded-full p-0"
+                        disabled={slideIndex <= 0}
+                        onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}
+                        aria-label="Previous slide"
+                      >
+                        <ChevronLeft className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="absolute top-1/2 right-2 size-8 -translate-y-1/2 rounded-full p-0"
+                        disabled={slideIndex >= previewUrls.length - 1}
+                        onClick={() =>
+                          setSlideIndex((i) =>
+                            Math.min(previewUrls.length - 1, i + 1),
+                          )
+                        }
+                        aria-label="Next slide"
+                      >
+                        <ChevronRight className="size-4" />
+                      </Button>
+                      <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white">
+                        {slideIndex + 1} / {previewUrls.length}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+                {meta ? (
+                  <div className="flex items-center justify-between gap-2 border-t border-black/[0.06] px-3 py-2 text-[12px]">
+                    <span className="font-medium text-gray-950">
+                      {meta.width}×{meta.height}
+                    </span>
+                    <span className="text-gray-500">
+                      {ratioLabel(meta.width, meta.height)}
+                    </span>
+                  </div>
+                ) : null}
               </div>
-            )}
-            {previewUrls.length > 1 ? (
-              <>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  className="absolute top-1/2 left-2 size-8 -translate-y-1/2 rounded-full p-0"
-                  disabled={slideIndex <= 0}
-                  onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}
-                  aria-label="Previous slide"
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  className="absolute top-1/2 right-2 size-8 -translate-y-1/2 rounded-full p-0"
-                  disabled={slideIndex >= previewUrls.length - 1}
-                  onClick={() =>
-                    setSlideIndex((i) =>
-                      Math.min(previewUrls.length - 1, i + 1),
-                    )
-                  }
-                  aria-label="Next slide"
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-                <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white">
-                  {slideIndex + 1} / {previewUrls.length}
-                </span>
-              </>
-            ) : null}
+
+              <p className="mt-2 text-[11px] leading-relaxed text-gray-500">
+                Frame matches the file’s real aspect ratio (not the square grid
+                crop). Profile grid still shows a centered 1:1 thumb.
+              </p>
+            </div>
           </div>
 
           <div className="space-y-3 px-4 py-3">
-            {metaLoading ? (
-              <p className="text-[13px] text-muted-foreground">Reading image…</p>
-            ) : metaError ? (
-              <p className="text-[13px] text-muted-foreground">{metaError}</p>
-            ) : meta ? (
+            {meta && quality ? (
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
-                <div>
-                  <dt className="text-[11px] uppercase tracking-wide text-gray-400">
-                    Ratio
-                  </dt>
-                  <dd className="mt-0.5 font-medium text-gray-950">
-                    {ratioLabel(meta.width, meta.height)}
-                  </dd>
-                </div>
                 <div>
                   <dt className="text-[11px] uppercase tracking-wide text-gray-400">
                     Quality
@@ -434,19 +515,21 @@ export function InstagramFeedLayout({
                   <dd
                     className={cn(
                       "mt-0.5 font-medium",
-                      quality?.tone === "good" && "text-emerald-700",
-                      quality?.tone === "ok" && "text-amber-700",
-                      quality?.tone === "low" && "text-red-700",
+                      quality.tone === "good" && "text-emerald-700",
+                      quality.tone === "ok" && "text-amber-700",
+                      quality.tone === "low" && "text-red-700",
                     )}
                   >
-                    {quality?.label}
+                    {quality.label}
                   </dd>
                 </div>
-                <div className="col-span-2">
+                <div>
                   <dt className="text-[11px] uppercase tracking-wide text-gray-400">
-                    Resolution
+                    Feed size
                   </dt>
-                  <dd className="mt-0.5 text-gray-700">{quality?.detail}</dd>
+                  <dd className="mt-0.5 font-medium text-gray-950">
+                    {ratioLabel(meta.width, meta.height)}
+                  </dd>
                 </div>
                 {meta.bytes != null ? (
                   <div className="col-span-2">
@@ -456,20 +539,11 @@ export function InstagramFeedLayout({
                     <dd className="mt-0.5 text-gray-700">
                       {formatBytes(meta.bytes)}
                       {meta.bytes > 8 * 1024 * 1024
-                        ? " · large for upload"
+                        ? " · over 8 MB upload limit"
                         : null}
                     </dd>
                   </div>
                 ) : null}
-                <div className="col-span-2">
-                  <dt className="text-[11px] uppercase tracking-wide text-gray-400">
-                    Grid crop
-                  </dt>
-                  <dd className="mt-0.5 text-gray-700">
-                    Profile grid shows a 1:1 crop (center). Full ratio appears when
-                    the post opens.
-                  </dd>
-                </div>
               </dl>
             ) : null}
 

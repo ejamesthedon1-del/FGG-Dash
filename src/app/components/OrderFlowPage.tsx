@@ -61,8 +61,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Tabs, TabsContent } from "./ui/tabs";
 import { cn } from "./ui/utils";
+import { FloatingPillNav } from "./FloatingPillNav";
 import { OrderFlowRiskReviewSection } from "./OrderFlowRiskReviewSection";
 import { OrderFlowDataTable } from "./OrderFlowDataTable";
 import {
@@ -662,19 +663,22 @@ export function OrderFlowPage() {
         onValueChange={(v) => setBoardTab(v === "risk" ? "risk" : "production")}
         className="gap-4"
       >
-        <TabsList data-tour="orders-tabs" className="h-9 rounded-xl p-1">
-          <TabsTrigger value="production" className="rounded-xl">
-            Production
-          </TabsTrigger>
-          <TabsTrigger value="risk" className="rounded-xl">
-            Risk review
-            {riskQueue.pendingCount > 0 ? (
-              <span className="rounded-md bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                {riskQueue.pendingCount}
-              </span>
-            ) : null}
-          </TabsTrigger>
-        </TabsList>
+        <FloatingPillNav
+          data-tour="orders-tabs"
+          layoutId="orders-board-pill"
+          value={boardTab}
+          onChange={(id) =>
+            setBoardTab(id === "risk" ? "risk" : "production")
+          }
+          items={[
+            { id: "production", label: "Production" },
+            {
+              id: "risk",
+              label: "Risk review",
+              badge: riskQueue.pendingCount,
+            },
+          ]}
+        />
 
         <TabsContent value="risk" className="outline-none">
           <OrderFlowRiskReviewSection

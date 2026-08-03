@@ -833,8 +833,8 @@ export function SupportPage() {
                   <TabsTrigger value="needs" className="flex-1 gap-1.5">
                     Needs attention
                     {needsCount > 0 ? (
-                      <span className="rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-brand-foreground">
-                        +{needsCount > 99 ? "99" : needsCount}
+                      <span className="inline-flex size-4 items-center justify-center rounded-full bg-brand text-[9px] font-semibold tabular-nums text-brand-foreground">
+                        {needsCount > 99 ? "99" : needsCount}
                       </span>
                     ) : null}
                   </TabsTrigger>

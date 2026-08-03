@@ -55,7 +55,7 @@ const SECTION_META: Record<
   },
   templates: {
     title: "Templates",
-    description: "Create and edit HTML email templates in Klaviyo.",
+    description: "",
   },
   schedule: {
     title: "Schedule",
@@ -239,29 +239,39 @@ export function KlaviyoPage() {
   const meta = SECTION_META[section];
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 pb-10">
+    <div
+      className={
+        section === "templates"
+          ? "w-full space-y-2 pb-6"
+          : "w-full space-y-6 pb-10"
+      }
+    >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-gray-950">
             {meta.title}
           </h2>
-          <p className="mt-1 text-[15px] text-gray-500">{meta.description}</p>
+          {meta.description ? (
+            <p className="mt-1 text-[15px] text-gray-500">{meta.description}</p>
+          ) : null}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          {loading ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="size-3.5" />
-          )}
-          Refresh
-        </Button>
+        {section !== "templates" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="size-3.5" />
+            )}
+            Refresh
+          </Button>
+        ) : null}
       </header>
 
       {configured === false ? (

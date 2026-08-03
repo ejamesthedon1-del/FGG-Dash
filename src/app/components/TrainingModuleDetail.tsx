@@ -91,7 +91,7 @@ export function TrainingModuleDetail() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto w-full max-w-3xl space-y-8">
       <div className="flex flex-col gap-4">
         <Button variant="ghost" size="sm" className="w-fit gap-1.5 px-0 text-gray-600" asChild>
           <Link to="/training-center">

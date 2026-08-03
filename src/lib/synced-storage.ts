@@ -117,8 +117,7 @@ export async function pullAndMergeRemoteStorage(): Promise<void> {
   const remoteMap = new Map((rows ?? []).map((r) => [r.key as string, r.value as unknown]));
 
   const keysToSync = new Set<string>(SYNCED_STORAGE_KEYS);
-  const personalTasksKey = myTasksStorageKey(session.user.id);
-  keysToSync.add(personalTasksKey);
+  keysToSync.add(myTasksStorageKey(session.user.id));
 
   const today = new Date();
   const dateIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;

@@ -3,21 +3,24 @@
 import * as React from "react";
 import { useSearchParams } from "react-router";
 import {
+  BadgeCheck,
+  Bookmark,
   CalendarPlus,
   ChevronRight,
+  Heart,
   ImageIcon,
-  Instagram,
   Loader2,
+  MessageCircle,
+  MoreHorizontal,
+  Send,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   deleteInstagramSchedulePost,
-  disconnectInstagram,
   fetchInstagramSchedule,
   fetchInstagramStatus,
-  instagramConnectUrl,
   publishInstagramPost,
   pushInstagramSchedule,
   upsertInstagramSchedulePost,
@@ -113,6 +116,19 @@ function isPublicHttpsUrl(src: string | undefined): boolean {
   return /^https:\/\//i.test(src);
 }
 
+function brandHandle(brand: IgScheduleBrand): string {
+  return brand === "live-don" ? "livdon" : "sinnerstestimony";
+}
+
+/** Split caption body vs trailing @/# tokens for IG-style preview. */
+function splitCaptionPreview(text: string): { body: string; tags: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { body: "", tags: "" };
+  const match = trimmed.match(/^(.*?)((?:\s+(?:@\w[\w.]*|#\w+))+)$/s);
+  if (!match) return { body: trimmed, tags: "" };
+  return { body: match[1].trim(), tags: match[2].trim() };
+}
+
 export function InstagramScheduleSection() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [posts, setPosts] = React.useState<IgScheduledPost[]>(() =>
@@ -120,7 +136,11 @@ export function InstagramScheduleSection() {
   );
   const [brand, setBrand] = React.useState<IgScheduleBrand>("live-don");
   const [caption, setCaption] = React.useState("");
-  const [kind, setKind] = React.useState<IgPostKind>("feed");
+  const kind: IgPostKind = "feed";
+  /** Composer IG preview frame — how Feed would crop/show the media. */
+  const [previewFrame, setPreviewFrame] = React.useState<
+    "square" | "portrait"
+  >("square");
   const [scheduledLocal, setScheduledLocal] = React.useState(() =>
     toDatetimeLocalValue(defaultScheduleAt()),
   );
@@ -130,7 +150,6 @@ export function InstagramScheduleSection() {
     { src: string; name?: string; assetId?: string }[]
   >([]);
   const [status, setStatus] = React.useState<IgConnectionStatus | null>(null);
-  const [statusLoading, setStatusLoading] = React.useState(true);
   const [publishingId, setPublishingId] = React.useState<string | null>(null);
   const [focusedPostId, setFocusedPostId] = React.useState<string | null>(null);
   const queueItemRefs = React.useRef<Map<string, HTMLLIElement>>(new Map());
@@ -180,7 +199,6 @@ export function InstagramScheduleSection() {
   }, [pushLocalQueue, refresh, syncFromBackend]);
 
   const loadStatus = React.useCallback(async (b: IgScheduleBrand) => {
-    setStatusLoading(true);
     try {
       const next = await fetchInstagramStatus(b);
       setStatus(next);
@@ -197,8 +215,6 @@ export function InstagramScheduleSection() {
             ? err.message
             : "Could not reach API — is the backend running on :8000?",
       });
-    } finally {
-      setStatusLoading(false);
     }
   }, []);
 
@@ -410,6 +426,8 @@ export function InstagramScheduleSection() {
   };
 
   const brandPosts = posts.filter((p) => p.brand === brand);
+  const previewHandle = brandHandle(brand);
+  const { body: captionBody, tags: captionTags } = splitCaptionPreview(caption);
 
   const onFocusPost = React.useCallback((postId: string) => {
     setFocusedPostId(postId);
@@ -436,21 +454,13 @@ export function InstagramScheduleSection() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-12 pb-10">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-gray-950">
-            Instagram
-          </h2>
-          <p className="mt-1 text-[15px] text-gray-500">
-            Schedule organic posts — they auto-publish at the set time.
-          </p>
-        </div>
+    <div className="relative w-full pb-10">
+      <div className="absolute top-0 right-0 z-10">
         <Select
           value={brand}
           onValueChange={(v) => setBrand(v as IgScheduleBrand)}
         >
-          <SelectTrigger className="w-[200px]" aria-label="Brand">
+          <SelectTrigger className="h-7 w-[160px] text-[12px]" aria-label="Brand">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -461,270 +471,322 @@ export function InstagramScheduleSection() {
             ))}
           </SelectContent>
         </Select>
-      </header>
+      </div>
 
-      <section className="space-y-3 border-t border-black/[0.06] pt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-[15px]">
-            <Instagram className="size-4 text-gray-400" strokeWidth={1.5} />
-            {statusLoading ? (
-              <span className="text-gray-400">Checking connection…</span>
-            ) : status?.connected ? (
-              <span className="text-gray-950">
-                Connected as{" "}
-                <span className="font-medium">
-                  @{status.username || "instagram"}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] lg:gap-8">
+          <div className="min-w-0 space-y-3">
+            <div>
+              <div className="flex h-14 items-end">
+                <span className="text-[12px] leading-none text-gray-400">
+                  Caption
                 </span>
-              </span>
-            ) : status?.configured ? (
-              <span className="text-gray-500">Not connected</span>
-            ) : status?.error ? (
-              <span className="text-gray-500">
-                Can’t reach API — start the backend on port 8000
-              </span>
-            ) : (
-              <span className="text-gray-500">
-                Meta app not configured for Instagram publishing
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {status?.connected ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  void (async () => {
-                    try {
-                      await disconnectInstagram(brand);
-                      toast.success("Disconnected");
-                      void loadStatus(brand);
-                    } catch (err) {
-                      toast.error(
-                        err instanceof Error ? err.message : "Disconnect failed",
-                      );
-                    }
-                  })();
-                }}
-              >
-                Disconnect
-              </Button>
-            ) : status?.configured ? (
-              <Button type="button" size="sm" className="gap-1.5" asChild>
-                <a href={instagramConnectUrl(brand)}>Connect Instagram</a>
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void loadStatus(brand)}
-              >
-                Retry
-              </Button>
-            )}
-          </div>
-        </div>
-        {!statusLoading && !status?.configured && !status?.error ? (
-          <p className="text-[13px] text-gray-400">
-            Set <code className="text-[12px]">META_APP_ID</code> and{" "}
-            <code className="text-[12px]">META_APP_SECRET</code> on the API, add
-            redirect{" "}
-            <code className="break-all text-[12px]">
-              {status?.redirectUri || "…/api/instagram/callback"}
-            </code>
-            , then connect a Business/Creator account linked to a Facebook Page.
-          </p>
-        ) : null}
-        {!statusLoading && status?.error ? (
-          <p className="text-[13px] text-gray-400">
-            Run the API locally, then click Retry:{" "}
-            <code className="text-[12px]">
-              cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
-            </code>
-          </p>
-        ) : null}
-      </section>
-
-      <InstagramFeedLayout
-        posts={posts}
-        brand={brand}
-        focusedId={focusedPostId}
-        onFocusPost={onFocusPost}
-        onReorder={onFeedReorder}
-      />
-
-      <section className="space-y-4 border-t border-black/[0.06] pt-6">
-        <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
-          New post
-        </h3>
-        <div className="flex gap-2">
-          {(["feed", "story"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setKind(value)}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
-                kind === value
-                  ? "bg-gray-950 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200",
-              )}
-            >
-              {value === "feed" ? "Feed" : "Story"}
-            </button>
-          ))}
-        </div>
-        {kind === "feed" ? (
-          <Textarea
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            placeholder="Caption"
-            className="min-h-[110px] resize-y text-[15px] shadow-none"
-          />
-        ) : (
-          <p className="text-[13px] text-gray-400">
-            Stories post the image only (no feed caption). Use a vertical 9:16
-            image when possible.
-          </p>
-        )}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block space-y-1.5">
-            <span className="text-[13px] text-gray-400">
-              Add creative asset
-              {kind === "feed" ? " (carousel)" : ""}
-            </span>
-            <Select
-              value={assetId || "__none__"}
-              onValueChange={(v) => {
-                if (v === "__none__") {
-                  setAssetId("");
-                  return;
-                }
-                setAssetId(v);
-                const asset =
-                  findAsset(loadCreativeAssets(), v) ??
-                  images.find((i) => i.id === v);
-                if (asset?.src) {
-                  addSlide(asset.src, { name: asset.name, assetId: asset.id });
-                  setAssetId("");
-                }
-              }}
-            >
-              <SelectTrigger aria-label="Creative asset">
-                <SelectValue placeholder="Choose image" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Choose to add…</SelectItem>
-                {images.map((img) => (
-                  <SelectItem key={img.id} value={img.id}>
-                    {img.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-[13px] text-gray-400">
-              Add public image URL
-            </span>
-            <div className="flex gap-2">
-              <Input
-                value={externalUrl}
-                onChange={(e) => setExternalUrl(e.target.value)}
-                placeholder="https://…"
-                className="shadow-none"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (externalUrl.trim()) {
-                      addSlide(externalUrl.trim());
-                      setExternalUrl("");
-                    }
-                  }
-                }}
+              </div>
+              <Textarea
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Write a caption…"
+                className="min-h-[80px] resize-y rounded-xl px-3 py-2 text-[13px] shadow-none"
+                aria-label="Caption"
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0"
-                onClick={() => {
-                  if (!externalUrl.trim()) return;
-                  addSlide(externalUrl.trim());
-                  setExternalUrl("");
-                }}
-              >
-                Add
-              </Button>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPreviewFrame("square")}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                    previewFrame === "square"
+                      ? "bg-gray-950 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+                  )}
+                >
+                  Square · 1080×1080
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewFrame("portrait")}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                    previewFrame === "portrait"
+                      ? "bg-gray-950 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+                  )}
+                >
+                  4:5 · 1080×1350
+                </button>
+              </div>
             </div>
-          </label>
-          <label className="block space-y-1.5 sm:col-span-2">
-            <span className="text-[13px] text-gray-400">Post at</span>
-            <Input
-              type="datetime-local"
-              value={scheduledLocal}
-              onChange={(e) => setScheduledLocal(e.target.value)}
-              className="shadow-none"
-            />
-          </label>
-        </div>
-        {slides.length > 0 ? (
-          <div className="space-y-2">
-            <p className="text-[13px] text-gray-400">
-              {kind === "story"
-                ? "Story image"
-                : slides.length > 1
-                  ? `Carousel · ${slides.length} of ${IG_CAROUSEL_MAX}`
-                  : "1 image · add more for a carousel"}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {slides.map((slide, index) => (
-                <div key={`${slide.src}-${index}`} className="relative">
-                  <img
-                    src={slide.src}
-                    alt=""
-                    className="size-16 rounded-md object-cover"
-                  />
-                  <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1 text-[9px] text-white">
-                    {index + 1}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => removeSlide(index)}
-                    className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-gray-950 text-[10px] text-white"
-                    aria-label={`Remove image ${index + 1}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-            {!slides.every((s) => isPublicHttpsUrl(s.src)) ? (
-              <p className="text-[13px] text-amber-700">
-                Every slide needs a public https:// URL to auto-publish
+
+            {slides.length > 1 ? (
+              <div className="flex flex-wrap gap-2">
+                {slides.map((slide, index) => (
+                  <div key={`${slide.src}-${index}`} className="relative">
+                    <img
+                      src={slide.src}
+                      alt=""
+                      className="size-12 rounded-md object-cover"
+                    />
+                    <span className="absolute bottom-0.5 left-0.5 rounded bg-black/55 px-1 text-[9px] text-white">
+                      {index + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeSlide(index)}
+                      className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-gray-950 text-[10px] text-white"
+                      aria-label={`Remove image ${index + 1}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {slides.length > 0 &&
+            !slides.every((s) => isPublicHttpsUrl(s.src)) ? (
+              <p className="text-[12px] text-amber-700">
+                Needs a public https:// URL
               </p>
             ) : null}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-[13px] text-gray-400">
-            <ImageIcon className="size-4" />
-            No images yet — add assets or URLs
-            {kind === "feed" ? " (2+ = carousel)" : ""}
-          </div>
-        )}
-        <Button type="button" className="gap-1.5" onClick={onSchedule}>
-          <CalendarPlus className="size-4" />
-          {kind === "story"
-            ? "Schedule story"
-            : slides.length > 1
-              ? "Schedule carousel"
-              : "Schedule post"}
-        </Button>
-      </section>
 
-      <section className="space-y-2 border-t border-black/[0.06] pt-6">
+            <div className="grid grid-cols-1 gap-2.5">
+              <label className="block space-y-1.5">
+                <span className="text-[12px] text-gray-400">
+                  Asset · carousel
+                </span>
+                <Select
+                  value={assetId || "__none__"}
+                  onValueChange={(v) => {
+                    if (v === "__none__") {
+                      setAssetId("");
+                      return;
+                    }
+                    setAssetId(v);
+                    const asset =
+                      findAsset(loadCreativeAssets(), v) ??
+                      images.find((i) => i.id === v);
+                    if (asset?.src) {
+                      addSlide(asset.src, {
+                        name: asset.name,
+                        assetId: asset.id,
+                      });
+                      setAssetId("");
+                    }
+                  }}
+                >
+                  <SelectTrigger
+                    aria-label="Creative asset"
+                    className="h-7 w-full rounded-full px-3 text-[12px]"
+                  >
+                    <SelectValue placeholder="Choose to add…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Choose to add…</SelectItem>
+                    {images.map((img) => (
+                      <SelectItem key={img.id} value={img.id}>
+                        {img.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-[12px] text-gray-400">Image URL</span>
+                <div className="flex gap-1.5">
+                  <Input
+                    value={externalUrl}
+                    onChange={(e) => setExternalUrl(e.target.value)}
+                    placeholder="https://…"
+                    className="h-7 rounded-full px-3 text-[12px] shadow-none md:text-[12px]"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (externalUrl.trim()) {
+                          addSlide(externalUrl.trim());
+                          setExternalUrl("");
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 shrink-0 rounded-full px-3 text-[12px]"
+                    onClick={() => {
+                      if (!externalUrl.trim()) return;
+                      addSlide(externalUrl.trim());
+                      setExternalUrl("");
+                    }}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-[12px] text-gray-400">Post at</span>
+                <Input
+                  type="datetime-local"
+                  value={scheduledLocal}
+                  onChange={(e) => setScheduledLocal(e.target.value)}
+                  className="h-7 rounded-full px-3 text-[12px] shadow-none md:text-[12px]"
+                />
+              </label>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 gap-1.5 rounded-full px-3.5 text-[12px]"
+              onClick={onSchedule}
+            >
+              <CalendarPlus className="size-3.5" />
+              {slides.length > 1 ? "Schedule carousel" : "Schedule post"}
+            </Button>
+          </div>
+
+          <div className="grid min-w-0 items-start gap-6 sm:grid-cols-2">
+            <div className="min-w-0 w-full max-w-[360px]">
+              <div className="w-full overflow-hidden rounded-2xl bg-white">
+                <div className="flex h-14 items-center gap-2.5 px-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(45deg,#f09433_0%,#e6683c_25%,#dc2743_50%,#cc2366_75%,#bc1888_100%)] p-[2px]">
+                    <div className="flex size-full items-center justify-center rounded-full bg-white p-[2px]">
+                      <div className="flex size-full items-center justify-center rounded-full bg-gray-100 text-[11px] font-semibold uppercase text-gray-500">
+                        {IG_BRAND_LABELS[brand].slice(0, 1)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex min-w-0 flex-1 items-center gap-1">
+                    <span className="truncate text-[13px] font-semibold text-gray-950">
+                      {previewHandle}
+                    </span>
+                    <span className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full bg-[#3897f0]">
+                      <BadgeCheck
+                        className="size-2.5 text-white"
+                        strokeWidth={2.5}
+                      />
+                    </span>
+                  </div>
+                  <MoreHorizontal
+                    className="size-5 shrink-0 text-gray-950"
+                    strokeWidth={1.75}
+                  />
+                </div>
+
+                <div
+                  className={cn(
+                    "relative w-full bg-[#efefef]",
+                    previewFrame === "portrait"
+                      ? "aspect-[1080/1350]"
+                      : "aspect-square",
+                  )}
+                >
+                  {slides[0]?.src ? (
+                    <img
+                      src={slides[0].src}
+                      alt=""
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex size-full flex-col items-center justify-center gap-1 px-4 text-center">
+                      <ImageIcon
+                        className="size-12 text-[#8e8e8e]"
+                        strokeWidth={1.25}
+                      />
+                      <p className="text-[11px] text-gray-400">
+                        {previewFrame === "portrait"
+                          ? "1080×1350 preview"
+                          : "1080×1080 preview"}
+                      </p>
+                    </div>
+                  )}
+                  <span className="absolute bottom-2.5 left-2.5 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white">
+                    {previewFrame === "portrait"
+                      ? "4:5 · 1080×1350"
+                      : "1:1 · 1080×1080"}
+                  </span>
+                  {slides.length > 1 ? (
+                    <span className="absolute top-2.5 right-2.5 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white">
+                      1 / {slides.length}
+                    </span>
+                  ) : null}
+                  {slides[0] ? (
+                    <button
+                      type="button"
+                      onClick={() => removeSlide(0)}
+                      className="absolute top-2.5 left-2.5 flex size-6 items-center justify-center rounded-full bg-black/55 text-xs text-white hover:bg-black/70"
+                      aria-label="Remove image"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <div className="flex items-center gap-3.5">
+                    <Heart
+                      className="size-[22px] fill-[#ed4956] text-[#ed4956]"
+                      strokeWidth={0}
+                    />
+                    <MessageCircle
+                      className="size-[22px] text-gray-950"
+                      strokeWidth={1.75}
+                    />
+                    <Send
+                      className="size-[22px] text-gray-950"
+                      strokeWidth={1.75}
+                    />
+                  </div>
+                  <Bookmark
+                    className="size-[22px] text-gray-950"
+                    strokeWidth={1.75}
+                  />
+                </div>
+
+                <div className="space-y-1.5 px-3 pb-3.5">
+                  <p className="text-[13px] font-semibold text-gray-950">
+                    3,452 likes
+                  </p>
+                  <div className="text-[13px] leading-snug text-gray-950">
+                    <span className="inline-flex items-center gap-0.5 align-middle font-semibold">
+                      {previewHandle}
+                      <span className="inline-flex size-3 items-center justify-center rounded-full bg-[#3897f0]">
+                        <BadgeCheck
+                          className="size-2 text-white"
+                          strokeWidth={2.5}
+                        />
+                      </span>
+                    </span>{" "}
+                    {captionBody || caption.trim() ? (
+                      <span className="font-normal">
+                        {captionBody || caption.trim()}
+                      </span>
+                    ) : (
+                      <span className="font-normal text-gray-400">
+                        Write a caption…
+                      </span>
+                    )}
+                    {captionTags ? (
+                      <p className="mt-1 font-normal text-[#00376b]">
+                        {captionTags}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <InstagramFeedLayout
+              posts={posts}
+              brand={brand}
+              focusedId={focusedPostId}
+              onFocusPost={onFocusPost}
+              onReorder={onFeedReorder}
+              className="min-w-0 border-0 pt-0"
+            />
+          </div>
+      </div>
+
+      <section className="space-y-2 pt-2">
         <div className="mb-1 flex items-baseline justify-between gap-2">
           <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
             Queue · {IG_BRAND_LABELS[brand]}
@@ -736,7 +798,7 @@ export function InstagramScheduleSection() {
         {brandPosts.length === 0 ? (
           <p className="py-8 text-[15px] text-gray-400">No scheduled posts yet</p>
         ) : (
-          <ul className="border-t border-black/[0.06]">
+          <ul>
             {brandPosts.map((post) => (
               <li
                 key={post.id}

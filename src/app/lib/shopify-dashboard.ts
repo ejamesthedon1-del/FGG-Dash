@@ -1,6 +1,6 @@
 import { apiUrl } from "./api-base";
 
-/** Brands whose Brand Hub KPIs pull from the Shopify backend. */
+/** Brands whose Brands KPIs pull from the Shopify backend. */
 export const SHOPIFY_LIVE_BRAND_SLUGS = new Set(["live-don", "sinners-testimony"]);
 
 export const SHOPIFY_BRAND_LABELS: Record<string, string> = {

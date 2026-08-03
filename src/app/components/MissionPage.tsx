@@ -3,7 +3,7 @@ import { Target } from "lucide-react";
 
 export function MissionPage() {
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
       <div>
         <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">Our Mission</h2>
         <p className="mt-1 text-gray-600">What we stand for and where we’re headed.</p>

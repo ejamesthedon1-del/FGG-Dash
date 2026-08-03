@@ -404,6 +404,40 @@ async def klaviyo_delete_template(template_id: str) -> dict:
     return await klaviyo.delete_template(template_id)
 
 
+@app.post("/api/klaviyo/template-images")
+async def klaviyo_upload_template_image(
+    file: UploadFile = File(..., description="Image for an email template"),
+) -> dict:
+    """Upload a photo and return a public URL for use in Klaviyo HTML."""
+    settings = get_settings()
+    if not (settings.fal_key or "").strip():
+        raise HTTPException(
+            status_code=503,
+            detail="FAL_KEY is not configured — needed to host template images.",
+        )
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="Image file required")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 12MB)")
+    ctype = file.content_type or "image/jpeg"
+    if not ctype.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Not an image")
+    try:
+        url = await asyncio.to_thread(
+            mockups.upload_bytes,
+            data,
+            file.filename or "email-image.jpg",
+            ctype,
+            settings.fal_key,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"url": url, "filename": file.filename}
+
+
 @app.post("/api/klaviyo/campaigns/schedule")
 async def klaviyo_schedule_campaign(body: dict) -> dict:
     return await klaviyo.schedule_email_campaign(body or {})
@@ -1000,7 +1034,7 @@ async def get_meta_ads_spend_today(brand: str = "live-don") -> dict:
             detail="Meta ads not configured for this brand (token / ad account missing).",
         )
     try:
-        # Prefer Shopify shop timezone so “today” matches Brand Hub sales day.
+        # Prefer Shopify shop timezone so “today” matches Brands sales day.
         try:
             tz = await shop_timezone(brand_key)
             day = datetime.now(timezone.utc).astimezone(tz).date()
@@ -1093,7 +1127,7 @@ async def get_brand_kpis(
 ) -> dict:
     """Store KPIs for a date range.
 
-    Default (no start/end): today + month-to-date (Brand Hub compatible).
+    Default (no start/end): today + month-to-date (Brands compatible).
     With start/end (YYYY-MM-DD, shop timezone): period totals for that inclusive range.
     """
     brand_key = resolve_brand(brand)

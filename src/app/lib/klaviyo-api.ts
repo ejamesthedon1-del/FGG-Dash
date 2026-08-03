@@ -273,6 +273,19 @@ export async function deleteKlaviyoTemplate(
   return readJson(res);
 }
 
+/** Host an image for use in email templates (public HTTPS URL). */
+export async function uploadKlaviyoTemplateImage(
+  file: File,
+): Promise<{ url: string; filename: string }> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(apiUrl("/api/klaviyo/template-images"), {
+    method: "POST",
+    body,
+  });
+  return readJson(res);
+}
+
 export async function scheduleKlaviyoCampaign(
   input: ScheduleEmailCampaignInput,
 ): Promise<{

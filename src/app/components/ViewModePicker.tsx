@@ -14,7 +14,7 @@ const OPTIONS: {
   {
     mode: "ceo",
     title: "CEO view",
-    description: "Finance, Cash, Brand Hub, Studio, Training, and Mission.",
+    description: "Finance, Cash, Brands, Studio, Training, and Mission.",
     icon: LayoutDashboard,
   },
   {

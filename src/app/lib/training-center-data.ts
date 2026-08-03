@@ -70,19 +70,19 @@ export const TRAINING_MODULE_CATALOG: TrainingModule[] = [
     content: `Welcome to the Future Garment Group internal operating system. This dashboard pulls together training systems, standard procedures (SOPs), brand context, and your mission — so you are not hunting across tools on day one.
 
 How to use the dashboard:
-• Use the left sidebar to jump between All Systems (department training tracks), SOPs (how work gets done), Brand Hub (line-specific rules), Training Center (you are here), and Our Mission.
+• Use the left sidebar to jump between All Systems (department training tracks), SOPs (how work gets done), Brands (line-specific rules), Training Center (you are here), and Our Mission.
 • Prefer the Training Center “Recommended path” below as your default sequence unless your manager assigns a different track.
-• When in doubt, SOPs are the source of truth for process; Brand Hub adds nuance by brand; Training Center explains how to navigate both.
+• When in doubt, SOPs are the source of truth for process; Brands covers line-specific nuance; Training Center explains how to navigate both.
 
 First steps for new hires:
 1. Complete this module and mark it complete when you have read it.
 2. Finish “Dashboard basics” next.
-3. Follow the recommended path through SOP orientation and Brand Hub essentials before role-specific modules.
+3. Follow the recommended path through SOP orientation and Brands essentials before role-specific modules.
 
 Required training order is suggested in the Recommended Learning Path on the Training Center home page — your lead may add role-specific modules after that baseline.`,
     linkedSops: [{ label: "Open SOP hub", href: "/sops" }],
-    linkedResources: [{ label: "Brand Hub", href: "/brand-hub" }],
-    notesTakeaways: "Bookmark SOPs and Brand Hub — you will live in them daily.",
+    linkedResources: [{ label: "Brands", href: "/brand-hub" }],
+    notesTakeaways: "Bookmark SOPs and Brands — you will live in them daily.",
   },
   {
     id: "dashboard-basics",
@@ -97,15 +97,15 @@ Required training order is suggested in the Recommended Learning Path on the Tra
 
 SOPs hold procedural truth: fulfillment steps, support macros, returns rules, and escalations. Use search and the area → section drill-down to find the right document.
 
-Brand Hub describes how each customer-facing brand should be handled — packaging, inserts, tone, and operational exceptions.
+Brands covers how each customer-facing brand should be handled — packaging, inserts, tone, and operational exceptions.
 
 Training Center (this section) is your map: ordered learning, module metadata, and simple progress so you and your manager can see what is done.`,
     linkedSops: [{ label: "SOP hub", href: "/sops" }],
     linkedResources: [
       { label: "All Systems (home)", href: "/" },
-      { label: "Brand Hub", href: "/brand-hub" },
+      { label: "Brands", href: "/brand-hub" },
     ],
-    notesTakeaways: "If you are looking for “how do I do X?”, start with SOPs; if “how is brand Y different?”, use Brand Hub.",
+    notesTakeaways: "If you are looking for “how do I do X?”, start with SOPs; if “how is brand Y different?”, use Brands.",
   },
   {
     id: "daily-tasks-sop-orientation",
@@ -153,11 +153,11 @@ When you open a section, use filters and status badges to focus on Active proced
     priority: "High",
     estimatedMinutes: 45,
     learningObjective: "Align day-one warehouse behavior with group SOPs and brand-specific pack notes.",
-    content: `Pair this module with the Fulfillment and Inventory areas inside SOPs. Pay attention to any brand-specific packaging notes in Brand Hub for lines you will ship.
+    content: `Pair this module with the Fulfillment and Inventory areas inside SOPs. Pay attention to any brand-specific packaging notes in Brands for lines you will ship.
 
 If a pick sheet conflicts with an SOP, stop and escalate — never guess on address or SKU substitutions.`,
     linkedSops: [{ label: "SOP hub — Fulfillment", href: "/sops" }],
-    linkedResources: [{ label: "Brand Hub (packaging context)", href: "/brand-hub" }],
+    linkedResources: [{ label: "Brands (packaging context)", href: "/brand-hub" }],
   },
   {
     id: "customer-support-101",
@@ -168,11 +168,11 @@ If a pick sheet conflicts with an SOP, stop and escalate — never guess on addr
     priority: "High",
     estimatedMinutes: 40,
     learningObjective: "Handle inbound requests consistently and route edge cases correctly.",
-    content: `Read Customer Support and Escalations sections in SOPs. Brand Hub informs voice and exceptions for each line.
+    content: `Read Customer Support and Escalations sections in SOPs. Brands covers voice and exceptions for each line.
 
 Document what you promised in the ticket thread; the next shift should be able to continue without context loss.`,
     linkedSops: [{ label: "SOP hub", href: "/sops" }],
-    linkedResources: [{ label: "Brand Hub", href: "/brand-hub" }],
+    linkedResources: [{ label: "Brands", href: "/brand-hub" }],
   },
   {
     id: "store-ops-101",
@@ -183,7 +183,7 @@ Document what you promised in the ticket thread; the next shift should be able t
     priority: "Medium",
     estimatedMinutes: 30,
     learningObjective: "Know where storefront procedures live and when to loop merchandising or leadership.",
-    content: `Use the Store Operations area in the SOP hub for day-to-day ecommerce operations. Cross-check launches with Brand Hub notes when a drop is brand-specific.`,
+    content: `Use the Store Operations area in the SOP hub for day-to-day ecommerce operations. Cross-check launches with Brands notes when a drop is brand-specific.`,
     linkedSops: [{ label: "SOP hub", href: "/sops" }],
     linkedResources: [],
   },
@@ -191,16 +191,16 @@ Document what you promised in the ticket thread; the next shift should be able t
     id: "brand-hub-essentials",
     title: "Review Brand Notes",
     category: "Brand Training",
-    shortDescription: "Why Brand Hub exists and how to use it beside SOPs.",
+    shortDescription: "What Brands is for and how to use it beside SOPs.",
     status: "Published",
     priority: "High",
     estimatedMinutes: 25,
     learningObjective: "Explain how two brands differ operationally and where to find their asset and handling notes.",
-    content: `Open Brand Hub and read each brand profile you will touch. Compare packaging, inserts, and operations notes.
+    content: `Open Brands and read each brand profile you will touch. Compare packaging, inserts, and operations notes.
 
-SOPs remain default process; Brand Hub documents intentional deviations and creative constraints.`,
+SOPs remain default process; Brands covers intentional deviations and creative constraints.`,
     linkedSops: [{ label: "SOP hub — Brand Notes area", href: "/sops" }],
-    linkedResources: [{ label: "Brand Hub", href: "/brand-hub" }],
+    linkedResources: [{ label: "Brands", href: "/brand-hub" }],
     notesTakeaways: "Never assume two brands pack the same way.",
   },
   {

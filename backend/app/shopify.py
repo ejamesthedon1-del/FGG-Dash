@@ -152,7 +152,7 @@ def _normalize_domain(v: str) -> str:
 
 
 def get_shopify_client(brand: str = "live-don") -> ShopifyClient:
-    """Return a Shopify Admin client for the given Brand Hub slug."""
+    """Return a Shopify Admin client for the given Brands slug."""
     key = (brand or "live-don").strip().lower()
     if key in _BRAND_CLIENTS:
         return _BRAND_CLIENTS[key]

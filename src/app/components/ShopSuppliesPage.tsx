@@ -541,7 +541,7 @@ export function ShopSuppliesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="w-full space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-0.5">
           <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">

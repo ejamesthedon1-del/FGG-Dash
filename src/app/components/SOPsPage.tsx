@@ -302,8 +302,8 @@ export function SOPsPage() {
     sopsInSlot(categoryId, menuItemId).length;
 
   return (
-    <div className="space-y-6">
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-2 text-center">
+    <div className="mx-auto w-full max-w-4xl space-y-6">
+      <div className="flex w-full flex-col items-center gap-5 pt-2 text-center">
         <div className="flex w-full flex-col items-center gap-3">
           <div>
             <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
@@ -319,7 +319,7 @@ export function SOPsPage() {
             </Link>
           ) : null}
         </div>
-        <div className="relative w-full">
+        <div className="relative w-full max-w-3xl">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             value={hubSearch}
@@ -337,9 +337,9 @@ export function SOPsPage() {
         </div>
       </div>
 
-      <div className="-mx-4 flex min-w-0 flex-col sm:-mx-6 lg:-mx-10">
+      <div className="flex min-w-0 flex-col">
         {browseCategoryId ? (
-          <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 bg-white/80 px-4 py-3 text-sm sm:px-6 lg:px-10">
+          <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 bg-white/80 py-3 text-sm">
             <Button
               type="button"
               variant="ghost"
@@ -373,7 +373,7 @@ export function SOPsPage() {
           </div>
         ) : null}
 
-        <div className="min-w-0 flex-1 px-4 pb-10 pt-4 sm:px-6 lg:px-10">
+        <div className="min-w-0 flex-1 pb-6 pt-4">
           {browseCategoryId && browseMenuItemId && selectedCategory && selectedMenuItem ? (
             <div className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

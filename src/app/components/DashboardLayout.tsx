@@ -32,7 +32,6 @@ import { useAuth } from "../lib/use-auth";
 import { userFirstName, type AppRole } from "../lib/auth-roles";
 import { SignInPage } from "./SignInPage";
 import { ViewModePicker } from "./ViewModePicker";
-import { TimeClockStickyBar } from "./TimeClockStickyBar";
 import { OrdersSpotlightTour } from "./OrdersSpotlightTour";
 import { Button } from "./ui/button";
 import {
@@ -108,7 +107,7 @@ const NAV = {
   },
   brandHub: {
     to: "/brand-hub",
-    label: "Brand Hub",
+    label: "Brands",
     icon: Sparkles,
     match: (pathname: string) =>
       pathname === "/brand-hub" || pathname.startsWith("/brand-hub/"),
@@ -252,7 +251,7 @@ const NAV = {
 
 /** CEO: strategy → creative → personal day → operations → resources */
 const CEO_SECTIONS: NavSection[] = [
-  { label: "Overview", items: [NAV.dashboard, NAV.whiteboard] },
+  { label: "Overview", items: [NAV.dashboard] },
   { label: "Business", items: [NAV.brandHub, NAV.cash] },
   {
     label: "Email",
@@ -268,11 +267,15 @@ const CEO_SECTIONS: NavSection[] = [
     ],
   },
   { label: "Creative", items: [NAV.studio] },
-  { label: "My day", items: [NAV.myTasks, NAV.clock] },
   {
     label: "Operations",
     collapsible: true,
     items: [NAV.orderFlow, NAV.inventory, NAV.support],
+  },
+  {
+    label: "Workspace",
+    collapsible: true,
+    items: [NAV.myTasks, NAV.whiteboard],
   },
   {
     label: "Resources",
@@ -288,13 +291,15 @@ const OPS_SECTIONS: NavSection[] = [
     label: "Menu",
     items: [
       OPS_OVERVIEW,
-      NAV.whiteboard,
       NAV.orderFlow,
       NAV.inventory,
       NAV.support,
-      NAV.clock,
-      NAV.myTasks,
     ],
+  },
+  {
+    label: "Workspace",
+    collapsible: true,
+    items: [NAV.myTasks, NAV.whiteboard],
   },
   {
     label: "Resources",
@@ -346,7 +351,7 @@ function NavMenuItems({
                 showClockLive
                   ? "Time · live"
                   : badgeCount > 0
-                    ? `${item.label} (+${badgeCount})`
+                    ? `${item.label} (${badgeCount})`
                     : item.label
               }
               isActive={item.match(pathname)}
@@ -364,8 +369,8 @@ function NavMenuItems({
                 <Icon {...NAV_ICON_PROPS} />
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
                 {badgeCount > 0 ? (
-                  <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center overflow-visible rounded-md bg-brand px-1 text-xs font-medium tabular-nums text-brand-foreground">
-                    +{badgeCount > 99 ? "99" : badgeCount}
+                  <span className="ml-auto flex size-4 shrink-0 items-center justify-center rounded-full bg-brand text-[9px] font-semibold tabular-nums text-brand-foreground">
+                    {badgeCount > 99 ? "99" : badgeCount}
                   </span>
                 ) : showClockLive ? (
                   <span className="ml-auto flex h-5 shrink-0 items-center justify-center overflow-visible rounded-md bg-brand px-1.5 text-xs font-medium text-brand-foreground">
@@ -413,23 +418,29 @@ function AppSidebar({
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="Future Garment Group">
-              <Link to="/" onClick={closeMobile}>
-                <img
-                  src={LOGO_SRC}
-                  alt="Future Garment Group, LLC"
-                  className="size-8 object-contain"
-                  decoding="async"
-                />
-                <span className="truncate font-semibold text-sidebar-foreground">
-                  FGG Dash
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-0.5 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
+          <SidebarMenu className="min-w-0 flex-1 group-data-[collapsible=icon]:flex-none">
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild tooltip="Future Garment Group">
+                <Link to="/" onClick={closeMobile}>
+                  <img
+                    src={LOGO_SRC}
+                    alt="Future Garment Group, LLC"
+                    className="size-8 object-contain"
+                    decoding="async"
+                  />
+                  <span className="truncate font-semibold text-sidebar-foreground">
+                    FGG Dash
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <SidebarTrigger
+            className="ml-auto shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground group-data-[collapsible=icon]:ml-0"
+            title="Collapse menu"
+          />
+        </div>
       </SidebarHeader>
 
       <SidebarContent className="gap-0 px-1 py-1">
@@ -437,9 +448,12 @@ function AppSidebar({
           const showOpsBadge =
             section.label === "Operations" && orderFlowNewCount > 0;
           const sectionKey = section.label ?? `section-${index}`;
+          const isWorkspace = section.label === "Workspace";
+          const isResources = section.label === "Resources";
           const groupLabelClass = cn(
             "h-auto px-2 pt-2.5 pb-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-muted-foreground",
-            index > 0 && "mt-1.5",
+            index > 0 && !isWorkspace && "mt-1.5",
+            isResources && "mt-3",
           );
           const menu = (
             <SidebarGroupContent className="px-0">
@@ -456,14 +470,15 @@ function AppSidebar({
           );
 
           if (section.collapsible && section.label) {
-            const childActive = section.items.some((entry) =>
-              entry.match(pathname),
-            );
             return (
               <Collapsible
                 key={sectionKey}
-                defaultOpen={childActive || showOpsBadge}
-                className="group/collapsible"
+                defaultOpen
+                className={cn(
+                  "group/collapsible",
+                  isWorkspace && "mt-auto",
+                  isResources && "mb-32",
+                )}
               >
                 <SidebarGroup className="p-0">
                   <SidebarGroupLabel
@@ -476,13 +491,13 @@ function AppSidebar({
                     <CollapsibleTrigger>
                       {section.label}
                       {showOpsBadge ? (
-                        <span className="ml-1 rounded bg-brand px-1 py-px text-[8px] font-semibold leading-none normal-case tracking-normal tabular-nums text-brand-foreground">
-                          +{orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
+                        <span className="ml-1.5 inline-flex size-3.5 items-center justify-center rounded-full bg-brand text-[8px] font-semibold leading-none normal-case tracking-normal tabular-nums text-brand-foreground">
+                          {orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
                         </span>
                       ) : null}
                       <ChevronDown
                         strokeWidth={1.75}
-                        className="ml-auto size-3.5 text-muted-foreground/70 transition-transform group-data-[state=open]/collapsible:rotate-180"
+                        className="ml-auto size-2 text-muted-foreground/70 transition-transform group-data-[state=open]/collapsible:rotate-180"
                       />
                     </CollapsibleTrigger>
                   </SidebarGroupLabel>
@@ -498,8 +513,8 @@ function AppSidebar({
                 <SidebarGroupLabel className={groupLabelClass}>
                   {section.label}
                   {showOpsBadge ? (
-                    <span className="ml-1 rounded bg-brand px-1 py-px text-[8px] font-semibold leading-none normal-case tracking-normal tabular-nums text-brand-foreground">
-                      +{orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
+                    <span className="ml-1.5 inline-flex size-3.5 items-center justify-center rounded-full bg-brand text-[8px] font-semibold leading-none normal-case tracking-normal tabular-nums text-brand-foreground">
+                      {orderFlowNewCount > 99 ? "99" : orderFlowNewCount}
                     </span>
                   ) : null}
                 </SidebarGroupLabel>
@@ -668,15 +683,15 @@ export function DashboardLayout() {
         onSignOut={() => void handleSignOut()}
       />
       <SidebarInset className="min-h-0 overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
-          <SidebarTrigger className="-ml-1" />
+        {/* Mobile-only chrome — desktop has no top header; clock lives on CEO dashboard for now. */}
+        <header className="flex h-12 shrink-0 items-center gap-2 px-4 md:hidden">
+          <SidebarTrigger className="-ml-1" title="Open menu" />
           <img
             src={LOGO_SRC}
             alt="Future Garment Group, LLC"
-            className="h-8 w-auto object-contain object-left md:hidden"
+            className="h-8 w-auto object-contain object-left"
             decoding="async"
           />
-          <TimeClockStickyBar />
         </header>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
@@ -686,8 +701,8 @@ export function DashboardLayout() {
               <Outlet />
             </div>
           ) : (
-            <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 pt-6 sm:px-6 sm:pt-8 lg:px-8 lg:pt-8">
-              <div className="min-w-0 flex-1 pb-10 sm:pb-12">
+            <div className="flex min-h-full w-full flex-col px-4 pt-2 sm:px-6 sm:pt-3 lg:px-8">
+              <div className="min-w-0 flex-1 pb-6 sm:pb-8">
                 <Outlet />
               </div>
               <footer className="mt-auto shrink-0 border-t border-black/[0.06] py-8 text-center text-xs text-muted-foreground">

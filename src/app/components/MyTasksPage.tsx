@@ -227,8 +227,8 @@ export function MyTasksPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <header className="border-b border-gray-200 pb-5">
+    <div className="space-y-3">
+      <header>
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
             My Tasks
@@ -243,7 +243,7 @@ export function MyTasksPage() {
       <Tabs
         value={view}
         onValueChange={(v) => setView(v as ViewMode)}
-        className="gap-4"
+        className="gap-3"
       >
         <TabsList>
           <TabsTrigger value="board">Board</TabsTrigger>

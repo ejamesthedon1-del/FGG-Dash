@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   SHOPIFY_BRAND_LABELS,
   SHOPIFY_LIVE_BRAND_SLUGS,
@@ -14,10 +14,8 @@ import {
   saveCashSplitTargets,
   type CashSplitTargets,
 } from "../lib/cash-split";
-import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { DashboardSectionHeader } from "./dashboard/DashboardPrimitives";
 import { cn } from "./ui/utils";
 
 type BrandPayments = {
@@ -141,22 +139,28 @@ export function CeoCashSplitPanel({
   periodProduction,
   periodStart,
   periodEnd,
+  showSettings,
+  refreshNonce = 0,
+  onLoadingChange,
 }: {
   periodAds: number;
   periodFees: number;
   periodProduction: number;
   periodStart: string;
   periodEnd: string;
+  showSettings: boolean;
+  refreshNonce?: number;
+  onLoadingChange?: (loading: boolean) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [brands, setBrands] = useState<BrandPayments[]>([]);
   const [targets, setTargets] = useState<CashSplitTargets>(loadCashSplitTargets);
   const [depositInput, setDepositInput] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
 
   const load = async () => {
     setLoading(true);
+    onLoadingChange?.(true);
     setError(null);
     const slugs = [...SHOPIFY_LIVE_BRAND_SLUGS];
     const results = await Promise.all(
@@ -183,11 +187,13 @@ export function CeoCashSplitPanel({
     const ok = results.filter((r) => r.data && !r.error);
     setError(ok.length === 0 ? "Could not load Shopify Payments balances." : null);
     setLoading(false);
+    onLoadingChange?.(false);
   };
 
   useEffect(() => {
     void load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when nonce bumps
+  }, [refreshNonce]);
 
   const shopifyBalance = useMemo(
     () => brands.reduce((sum, b) => sum + balanceFromResponse(b.data), 0),
@@ -270,35 +276,7 @@ export function CeoCashSplitPanel({
   ];
 
   return (
-    <section className="space-y-4">
-      <DashboardSectionHeader
-        title="Cash split"
-        description="When funds are in Shopify Balance or land in Checking, here’s how to break them up."
-        action={
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowSettings((v) => !v)}
-            >
-              {showSettings ? "Hide targets" : "Edit targets"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="gap-1"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-              Refresh
-            </Button>
-          </div>
-        }
-      />
-
+    <section className="space-y-3">
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5">
         {loading ? (
           <div className="flex items-center gap-2 py-8 text-sm text-gray-500">

@@ -484,7 +484,7 @@ export function CombinedLiveStoresPanel() {
             <DashboardSectionHeader title="Jump into work" />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <DashboardCtaCard
-                title="Brand Hub"
+                title="Brands"
                 description="Store KPIs, product costs, and live Shopify pulse."
                 to="/brand-hub"
               />

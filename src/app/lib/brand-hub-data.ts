@@ -1,5 +1,5 @@
 /**
- * Canonical Brand Hub catalog for Future Garment Group.
+ * Canonical Brands catalog for Future Garment Group.
  * Add new rows here to ship new brands; operators can layer local overrides via `brand-hub-storage`.
  */
 

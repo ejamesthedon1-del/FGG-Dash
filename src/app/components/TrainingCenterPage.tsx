@@ -100,7 +100,7 @@ export function TrainingCenterPage() {
   const pathModules = useMemo(() => getRecommendedPathModules(), [pathname, modules]);
 
   return (
-    <div className="space-y-10">
+    <div className="mx-auto w-full max-w-4xl space-y-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">Training Center</h2>
@@ -187,7 +187,7 @@ export function TrainingCenterPage() {
                 </Link>
                 , and{" "}
                 <Link to="/brand-hub" className="text-blue-600 hover:underline">
-                  Brand Hub
+                  Brands
                 </Link>{" "}
                 — each has a distinct job; this center explains when to use which.
               </li>

@@ -32,6 +32,7 @@ import {
 } from "../lib/shift-due-today-storage";
 import { ChevronRight, Loader2 } from "lucide-react";
 import { CombinedLiveStoresPanel } from "./CombinedLiveStoresPanel";
+import { TimeClockStickyBar } from "./TimeClockStickyBar";
 import { cn } from "./ui/utils";
 
 type FocusItem = {
@@ -312,11 +313,12 @@ export function SystemsOverview() {
 
   if (showCeoFinance) {
     return (
-      <div className="space-y-6">
-        <header>
+      <div className="space-y-3">
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
             Dashboard
           </h1>
+          <TimeClockStickyBar />
         </header>
         <CombinedLiveStoresPanel />
       </div>
@@ -328,7 +330,7 @@ export function SystemsOverview() {
     (flowLoading ? 0 : pastDueItems.length + orderedItems.length);
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-14 pb-10">
+    <div className="w-full space-y-10 pb-8">
       <header className="flex items-baseline justify-between gap-4 pt-2">
         <h1 className="text-[34px] font-semibold leading-[1.1] tracking-[-0.03em] text-gray-950">
           Priorities

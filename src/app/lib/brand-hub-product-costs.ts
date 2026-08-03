@@ -190,7 +190,7 @@ export function productionCostForUnits(
 
 /**
  * Prefer complete recipe material rollups for garmentCost.
- * Labor stays from manual Brand Hub costs.
+ * Labor stays from manual Brands costs.
  */
 export function applyRecipeGarmentCosts(
   costs: Record<string, ProductUnitCost>,

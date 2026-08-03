@@ -7,46 +7,20 @@ import { toast } from "sonner";
 import {
   createKlaviyoTemplate,
   deleteKlaviyoTemplate,
-  fetchKlaviyoTemplate,
   updateKlaviyoTemplate,
   type KlaviyoTemplate,
 } from "../../lib/klaviyo-api";
+import {
+  compileLayoutToHtml,
+  createDefaultLayout,
+} from "../../lib/email-template-layout";
+import { KlaviyoVisualTemplateEditor } from "./KlaviyoVisualTemplateEditor";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 
-const STARTER_HTML = `<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Email</title>
-  </head>
-  <body style="margin:0;padding:24px;background:#f4f4f4;font-family:Helvetica,Arial,sans-serif;color:#111;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;margin:0 auto;background:#ffffff;">
-      <tr>
-        <td style="padding:28px 24px;">
-          <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">
-            Hey {{ first_name|default:'there' }},
-          </p>
-          <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">
-            Write your message here.
-          </p>
-          <p style="margin:24px 0 0;">
-            <a href="https://example.com" style="display:inline-block;padding:12px 18px;background:#111;color:#fff;text-decoration:none;font-size:14px;">
-              Shop now
-            </a>
-          </p>
-          <p style="margin:28px 0 0;font-size:12px;line-height:1.4;color:#888;">
-            {% unsubscribe %}
-          </p>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
-`;
+const STARTER_HTML = compileLayoutToHtml(createDefaultLayout());
 
 type Props = {
   templates: KlaviyoTemplate[];
@@ -58,28 +32,17 @@ export function KlaviyoTemplatesPanel({ templates, onChange }: Props) {
   const [name, setName] = React.useState("");
   const [html, setHtml] = React.useState(STARTER_HTML);
   const [busy, setBusy] = React.useState(false);
-  const [loadingEdit, setLoadingEdit] = React.useState(false);
+  const [showHtml, setShowHtml] = React.useState(false);
+  const [useVisual, setUseVisual] = React.useState(true);
+  const [editorKey, setEditorKey] = React.useState(0);
 
   const resetNew = () => {
     setEditingId(null);
     setName("");
     setHtml(STARTER_HTML);
-  };
-
-  const openEdit = async (template: KlaviyoTemplate) => {
-    setEditingId(template.id);
-    setName(template.name || "");
-    setLoadingEdit(true);
-    try {
-      const { template: full } = await fetchKlaviyoTemplate(template.id);
-      setHtml(full.html || STARTER_HTML);
-      setName(full.name || template.name || "");
-    } catch (err) {
-      setHtml(template.html || STARTER_HTML);
-      toast.error(err instanceof Error ? err.message : "Could not load template");
-    } finally {
-      setLoadingEdit(false);
-    }
+    setShowHtml(false);
+    setUseVisual(true);
+    setEditorKey((k) => k + 1);
   };
 
   const onSave = async () => {
@@ -131,50 +94,17 @@ export function KlaviyoTemplatesPanel({ templates, onChange }: Props) {
     }
   };
 
-  return (
-    <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
-            Templates
-          </h3>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1 px-2 text-xs"
-            onClick={resetNew}
-          >
-            <Plus className="size-3" />
-            New
-          </Button>
-        </div>
-        <ul className="border-t border-black/[0.06]">
-          {templates.map((t) => (
-            <li key={t.id}>
-              <button
-                type="button"
-                className={`flex w-full items-baseline justify-between gap-2 border-b border-black/[0.06] py-3 text-left ${
-                  editingId === t.id ? "text-gray-950" : "text-gray-600"
-                }`}
-                onClick={() => void openEdit(t)}
-              >
-                <span className="min-w-0 truncate text-[14px]">
-                  {t.name || "Untitled"}
-                </span>
-              </button>
-            </li>
-          ))}
-          {!templates.length ? (
-            <li className="py-6 text-[14px] text-gray-400">
-              No templates yet — create one
-            </li>
-          ) : null}
-        </ul>
-      </section>
+  const startVisualFromScratch = () => {
+    setHtml(STARTER_HTML);
+    setShowHtml(false);
+    setUseVisual(true);
+    setEditorKey((k) => k + 1);
+  };
 
-      <section className="space-y-4">
-        <div className="space-y-2">
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="max-w-sm flex-1 space-y-2">
           <Label htmlFor="tpl-name">Name</Label>
           <Input
             id="tpl-name"
@@ -183,56 +113,79 @@ export function KlaviyoTemplatesPanel({ templates, onChange }: Props) {
             placeholder="Spring drop announcement"
           />
         </div>
-        <div className="space-y-2">
-          <div className="flex items-baseline justify-between gap-2">
-            <Label htmlFor="tpl-html">HTML</Label>
-            <span className="text-[12px] text-gray-400">
-              Use {"{{ first_name }}"} · unsubscribe is auto-added if missing
-            </span>
-          </div>
-          {loadingEdit ? (
-            <div className="flex items-center gap-2 py-8 text-[14px] text-gray-400">
-              <Loader2 className="size-4 animate-spin" />
-              Loading template…
-            </div>
-          ) : (
-            <Textarea
-              id="tpl-html"
-              value={html}
-              onChange={(e) => setHtml(e.target.value)}
-              className="min-h-[280px] font-mono text-[12px] leading-5"
-              spellCheck={false}
-            />
-          )}
-        </div>
-        <div className="space-y-2">
-          <p className="text-[13px] font-medium tracking-wide text-gray-400">
-            Preview
-          </p>
-          <iframe
-            title="Template preview"
-            className="h-[320px] w-full border border-black/[0.08] bg-white"
-            sandbox=""
-            srcDoc={html}
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={() => void onSave()} disabled={busy}>
-            {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
-            {editingId ? "Save template" : "Create template"}
+        <Button type="button" onClick={() => void onSave()} disabled={busy}>
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          {editingId ? "Save template" : "Create template"}
+        </Button>
+        {editingId ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void onDelete()}
+          >
+            Delete
           </Button>
-          {editingId ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => void onDelete()}
-            >
-              Delete
-            </Button>
-          ) : null}
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-9 gap-1"
+          onClick={resetNew}
+        >
+          <Plus className="size-3.5" />
+          New
+        </Button>
+      </div>
+
+      {!useVisual ? (
+        <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-3 text-[13px] text-amber-950">
+          <p>
+            This template was built outside the visual editor (raw HTML). You
+            can keep editing HTML, or start a visual layout (replaces current
+            HTML).
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={startVisualFromScratch}
+          >
+            Start visual layout
+          </Button>
         </div>
-      </section>
+      ) : (
+        <KlaviyoVisualTemplateEditor
+          key={editorKey}
+          initialHtml={html}
+          onHtmlChange={setHtml}
+          disabled={busy}
+        />
+      )}
+
+      <div className="flex items-center justify-between gap-2 border-t border-black/[0.06] pt-3">
+        <button
+          type="button"
+          className="text-[12px] text-gray-500 hover:text-gray-800"
+          onClick={() => setShowHtml((v) => !v)}
+        >
+          {showHtml ? "Hide advanced HTML" : "Advanced HTML"}
+        </button>
+        <span className="text-[12px] text-gray-400">
+          {"{{ first_name }}"} · unsubscribe auto-added
+        </span>
+      </div>
+
+      {showHtml ? (
+        <Textarea
+          id="tpl-html"
+          value={html}
+          onChange={(e) => setHtml(e.target.value)}
+          className="min-h-[200px] font-mono text-[12px] leading-5"
+          spellCheck={false}
+        />
+      ) : null}
     </div>
   );
 }

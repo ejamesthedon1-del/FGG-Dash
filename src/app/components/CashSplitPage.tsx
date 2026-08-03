@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar } from "lucide-react";
+import { Calendar, RefreshCw, SlidersHorizontal } from "lucide-react";
 import {
   applyRecipeGarmentCosts,
   fetchProductCostsForBrand,
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "./ui/select";
 import { CeoCashSplitPanel } from "./CeoCashSplitPanel";
+import { cn } from "./ui/utils";
 
 type PeriodPreset = "today" | "yesterday" | "month" | "custom";
 
@@ -62,6 +63,9 @@ export function CashSplitPage() {
     fees: 0,
     production: 0,
   });
+  const [showSettings, setShowSettings] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [panelLoading, setPanelLoading] = useState(false);
 
   const range = useMemo(() => {
     if (preset === "today") return { start: todayIso, end: todayIso };
@@ -118,28 +122,55 @@ export function CashSplitPage() {
   }, [range]);
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-3">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.22px] text-gray-900">
             Cash
           </h1>
         </div>
-        <Select
-          value={preset}
-          onValueChange={(value) => setPreset(value as PeriodPreset)}
-        >
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="Period" />
-          </SelectTrigger>
-          <SelectContent>
-            {PRESETS.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={preset}
+            onValueChange={(value) => setPreset(value as PeriodPreset)}
+          >
+            <SelectTrigger className="h-7 w-[160px] py-0">
+              <SelectValue placeholder="Period" />
+            </SelectTrigger>
+            <SelectContent>
+              {PRESETS.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            className="size-7"
+            aria-label={showSettings ? "Hide targets" : "Edit targets"}
+            title={showSettings ? "Hide targets" : "Edit targets"}
+            onClick={() => setShowSettings((v) => !v)}
+          >
+            <SlidersHorizontal className="size-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            className="size-7"
+            aria-label="Refresh"
+            title="Refresh"
+            onClick={() => setRefreshNonce((n) => n + 1)}
+            disabled={panelLoading}
+          >
+            <RefreshCw
+              className={cn("size-3.5", panelLoading && "animate-spin")}
+            />
+          </Button>
+        </div>
       </header>
 
       {preset === "custom" ? (
@@ -189,6 +220,9 @@ export function CashSplitPage() {
         periodProduction={totals.production}
         periodStart={range.start}
         periodEnd={range.end}
+        showSettings={showSettings}
+        refreshNonce={refreshNonce}
+        onLoadingChange={setPanelLoading}
       />
     </div>
   );

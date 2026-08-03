@@ -36,7 +36,7 @@ function asSelectableActivity(value: string): TimeActivity {
     : TIME_ACTIVITIES[0];
 }
 
-/** Compact clock controls for the top app header — always in view. */
+/** Compact clock controls — parked on CEO dashboard until clock work is finished. */
 export function TimeClockStickyBar() {
   const { user } = useAuth();
   const userId = user?.id ?? "";
@@ -110,7 +110,7 @@ export function TimeClockStickyBar() {
   return (
     <div
       className={cn(
-        "ml-auto flex min-w-0 max-w-full items-center gap-1.5 sm:gap-2",
+        "flex min-w-0 max-w-full items-center gap-1.5 sm:gap-2",
         active && "rounded-lg bg-emerald-50 px-1.5 py-1 sm:px-2",
       )}
     >
