@@ -380,69 +380,13 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
     if not isinstance(row, dict):
         raise HTTPException(status_code=404, detail="Flow not found")
     attrs = row.get("attributes") or {}
-    definition = attrs.get("definition") or {}
-
-    # Definition is an additional-field; request it with a list-style query.
-    if not definition:
-        try:
-            data_def = await _get(
-                f"/flows/{flow_id}/",
-                params=[("additional-fields[flow]", "definition")],  # type: ignore[arg-type]
-            )
-            row_def = data_def.get("data")
-            if isinstance(row_def, dict):
-                attrs = row_def.get("attributes") or attrs
-                definition = attrs.get("definition") or {}
-        except HTTPException:
-            definition = {}
-
-    triggers = definition.get("triggers") or []
+    # Note: additional-fields[flow]=definition is not available on our pinned revision.
 
     resolved_triggers: List[Dict[str, Any]] = []
-    for trig in triggers:
-        if not isinstance(trig, dict):
-            continue
-        item: Dict[str, Any] = {
-            "type": trig.get("type"),
-            "id": trig.get("id"),
-            "hasFilter": bool(trig.get("trigger_filter")),
-        }
-        tid = str(trig.get("id") or "").strip()
-        ttype = str(trig.get("type") or "").lower()
+    # Reverse-lookup which metric triggers this flow.
+    if str(attrs.get("trigger_type") or "").lower() == "metric":
         try:
-            if tid and ttype == "metric":
-                m = await _get(f"/metrics/{tid}/")
-                mattrs = ((m.get("data") or {}) if isinstance(m.get("data"), dict) else {}).get(
-                    "attributes"
-                ) or {}
-                item["name"] = mattrs.get("name")
-                item["integration"] = (mattrs.get("integration") or {}).get("name")
-            elif tid and ttype == "list":
-                lst = await _get(f"/lists/{tid}/")
-                lattrs = (
-                    ((lst.get("data") or {}) if isinstance(lst.get("data"), dict) else {}).get(
-                        "attributes"
-                    )
-                    or {}
-                )
-                item["name"] = lattrs.get("name")
-            elif tid and ttype == "segment":
-                seg = await _get(f"/segments/{tid}/")
-                sattrs = (
-                    ((seg.get("data") or {}) if isinstance(seg.get("data"), dict) else {}).get(
-                        "attributes"
-                    )
-                    or {}
-                )
-                item["name"] = sattrs.get("name")
-        except HTTPException:
-            item["name"] = None
-        resolved_triggers.append(item)
-
-    # Reverse-lookup which metric triggers this flow when definition is unavailable.
-    if not resolved_triggers and str(attrs.get("trigger_type") or "").lower() == "metric":
-        try:
-            metrics = await list_metrics(80)
+            metrics = await list_metrics(100)
             for metric in metrics.get("metrics") or []:
                 mid = str(metric.get("id") or "").strip()
                 if not mid:
@@ -479,25 +423,6 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
         )
 
     actions_out: List[Dict[str, Any]] = []
-    for action in definition.get("actions") or []:
-        if not isinstance(action, dict):
-            continue
-        adata = action.get("data") or {}
-        msg = adata.get("message") if isinstance(adata, dict) else None
-        entry: Dict[str, Any] = {
-            "id": action.get("id"),
-            "type": action.get("type"),
-            "status": adata.get("status") if isinstance(adata, dict) else None,
-        }
-        if isinstance(msg, dict):
-            entry["subject"] = msg.get("subject_line")
-            entry["templateId"] = msg.get("template_id")
-            entry["fromEmail"] = msg.get("from_email")
-            entry["name"] = msg.get("name")
-        if action.get("type") == "time-delay" and isinstance(adata, dict):
-            entry["delayUnit"] = adata.get("unit")
-            entry["delayValue"] = adata.get("value")
-        actions_out.append(entry)
 
     # Authoritative per-message status from flow-actions.
     try:
@@ -572,7 +497,6 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
             "triggerType": attrs.get("trigger_type"),
             "created": attrs.get("created"),
             "updated": attrs.get("updated"),
-            "entryActionId": definition.get("entry_action_id"),
             "triggers": resolved_triggers,
             "actions": actions_out,
         },
