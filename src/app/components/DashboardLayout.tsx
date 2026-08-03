@@ -10,6 +10,7 @@ import {
   Library,
   ListTodo,
   LogOut,
+  Mail,
   Package,
   PenTool,
   Settings,
@@ -59,6 +60,8 @@ const LOGO_SRC = "/fgg-logo.png?v=2";
 const CEO_ONLY_PREFIXES = [
   "/brand-hub",
   "/cash",
+  "/email",
+  "/klaviyo",
   "/mockups",
   "/creative-assets",
   "/training-center",
@@ -110,6 +113,16 @@ const NAV = {
     icon: Wallet,
     match: (pathname: string) =>
       pathname === "/cash" || pathname.startsWith("/cash/"),
+  },
+  email: {
+    to: "/email",
+    label: "Email",
+    icon: Mail,
+    match: (pathname: string) =>
+      pathname === "/email" ||
+      pathname.startsWith("/email/") ||
+      pathname === "/klaviyo" ||
+      pathname.startsWith("/klaviyo/"),
   },
   studio: {
     to: "/mockups",
@@ -189,7 +202,7 @@ const NAV = {
 /** CEO: strategy → creative → personal day → operations → resources */
 const CEO_SECTIONS: NavSection[] = [
   { label: "Overview", items: [NAV.dashboard, NAV.whiteboard] },
-  { label: "Business", items: [NAV.brandHub, NAV.cash] },
+  { label: "Business", items: [NAV.brandHub, NAV.cash, NAV.email] },
   { label: "Creative", items: [NAV.studio] },
   { label: "My day", items: [NAV.myTasks, NAV.clock] },
   {

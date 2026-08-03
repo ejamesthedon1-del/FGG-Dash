@@ -30,6 +30,7 @@ from . import (
     instagram_publisher,
     instagram_schedule_store,
     instagram_store,
+    klaviyo,
     mockups,
     order_flow_store,
     product_costs_store,
@@ -160,6 +161,9 @@ async def health_detail() -> dict:
             "configured": instagram.instagram_configured(),
             "autoPublisher": True,
             "schedulePosts": schedule_posts,
+        },
+        "klaviyo": {
+            "configured": klaviyo.klaviyo_configured(),
         },
     }
 
@@ -309,6 +313,51 @@ async def instagram_schedule_delete_post(post_id: str) -> dict:
 async def instagram_schedule_process_due() -> dict:
     """Manual tick for testing; the background worker also runs every 30s."""
     return await instagram_publisher.process_due_once()
+
+
+@app.get("/api/klaviyo/status")
+async def klaviyo_status() -> dict:
+    return klaviyo.connection_status()
+
+
+@app.get("/api/klaviyo/overview")
+async def klaviyo_overview() -> dict:
+    if not klaviyo.klaviyo_configured():
+        return {"configured": False, "account": None, "counts": {}}
+    data = await klaviyo.overview()
+    data["configured"] = True
+    return data
+
+
+@app.get("/api/klaviyo/campaigns")
+async def klaviyo_campaigns(limit: int = 25) -> dict:
+    return await klaviyo.list_campaigns(limit)
+
+
+@app.get("/api/klaviyo/flows")
+async def klaviyo_flows(limit: int = 50) -> dict:
+    return await klaviyo.list_flows(limit)
+
+
+@app.patch("/api/klaviyo/flows/{flow_id}")
+async def klaviyo_flow_status(flow_id: str, body: dict) -> dict:
+    status = str((body or {}).get("status") or "")
+    return await klaviyo.set_flow_status(flow_id, status)
+
+
+@app.get("/api/klaviyo/lists")
+async def klaviyo_lists(limit: int = 50) -> dict:
+    return await klaviyo.list_lists(limit)
+
+
+@app.get("/api/klaviyo/segments")
+async def klaviyo_segments(limit: int = 50) -> dict:
+    return await klaviyo.list_segments(limit)
+
+
+@app.get("/api/klaviyo/metrics")
+async def klaviyo_metrics(limit: int = 50) -> dict:
+    return await klaviyo.list_metrics(limit)
 
 
 @app.get("/api/support/gmail/threads")

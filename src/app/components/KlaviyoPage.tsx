@@ -1,0 +1,418 @@
+"use client";
+
+import * as React from "react";
+import { Loader2, Mail, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
+
+import {
+  fetchKlaviyoCampaigns,
+  fetchKlaviyoFlows,
+  fetchKlaviyoLists,
+  fetchKlaviyoOverview,
+  fetchKlaviyoSegments,
+  fetchKlaviyoStatus,
+  setKlaviyoFlowStatus,
+  type KlaviyoCampaign,
+  type KlaviyoFlow,
+  type KlaviyoList,
+  type KlaviyoOverview,
+  type KlaviyoSegment,
+} from "../lib/klaviyo-api";
+import { Button } from "./ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { cn } from "./ui/utils";
+
+function formatWhen(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function statusTone(status: string | null | undefined): string {
+  const s = (status || "").toLowerCase();
+  if (s === "live" || s === "sent") return "text-emerald-700";
+  if (s === "scheduled" || s === "sending") return "text-blue-700";
+  if (s === "manual" || s === "draft") return "text-amber-700";
+  if (s === "cancelled" || s === "canceled") return "text-red-700";
+  return "text-gray-600";
+}
+
+export function KlaviyoPage() {
+  const [tab, setTab] = React.useState("overview");
+  const [configured, setConfigured] = React.useState<boolean | null>(null);
+  const [overview, setOverview] = React.useState<KlaviyoOverview | null>(null);
+  const [campaigns, setCampaigns] = React.useState<KlaviyoCampaign[]>([]);
+  const [flows, setFlows] = React.useState<KlaviyoFlow[]>([]);
+  const [lists, setLists] = React.useState<KlaviyoList[]>([]);
+  const [segments, setSegments] = React.useState<KlaviyoSegment[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [busyFlowId, setBusyFlowId] = React.useState<string | null>(null);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const status = await fetchKlaviyoStatus();
+      setConfigured(status.configured);
+      if (!status.configured) {
+        setOverview(null);
+        setCampaigns([]);
+        setFlows([]);
+        setLists([]);
+        setSegments([]);
+        return;
+      }
+      const [ov, camps, flowRes, listRes, segRes] = await Promise.all([
+        fetchKlaviyoOverview(),
+        fetchKlaviyoCampaigns(40),
+        fetchKlaviyoFlows(50),
+        fetchKlaviyoLists(50),
+        fetchKlaviyoSegments(50),
+      ]);
+      setOverview(ov);
+      setCampaigns(camps.campaigns || []);
+      setFlows(flowRes.flows || []);
+      setLists(listRes.lists || []);
+      setSegments(segRes.segments || []);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Klaviyo load failed");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  const onFlowStatus = async (
+    flow: KlaviyoFlow,
+    status: "live" | "manual" | "draft",
+  ) => {
+    setBusyFlowId(flow.id);
+    try {
+      await setKlaviyoFlowStatus(flow.id, status);
+      setFlows((prev) =>
+        prev.map((f) => (f.id === flow.id ? { ...f, status } : f)),
+      );
+      toast.success(`${flow.name || "Flow"} → ${status}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update flow");
+    } finally {
+      setBusyFlowId(null);
+    }
+  };
+
+  const accountName =
+    typeof overview?.account?.name === "string"
+      ? overview.account.name
+      : "Klaviyo";
+
+  return (
+    <div className="mx-auto w-full max-w-5xl space-y-6 pb-10">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-gray-950">
+            Email
+          </h2>
+          <p className="mt-1 text-[15px] text-gray-500">
+            Lite Klaviyo control panel — skip their cluttered UI for day-to-day
+            ops.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => void load()}
+          disabled={loading}
+        >
+          {loading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3.5" />
+          )}
+          Refresh
+        </Button>
+      </header>
+
+      {configured === false ? (
+        <section className="space-y-3 border-t border-black/[0.06] pt-6">
+          <div className="flex items-center gap-2 text-[15px] text-gray-950">
+            <Mail className="size-4 text-gray-400" />
+            Klaviyo not connected
+          </div>
+          <ol className="list-decimal space-y-2 pl-5 text-[14px] text-gray-600">
+            <li>
+              In Klaviyo: Settings → Account → API keys → Create Private API Key
+            </li>
+            <li>
+              Scopes:{" "}
+              <code className="text-[12px]">
+                accounts:read, campaigns:read, flows:read, flows:write,
+                lists:read, segments:read, metrics:read
+              </code>
+            </li>
+            <li>
+              Set{" "}
+              <code className="text-[12px]">KLAVIYO_PRIVATE_API_KEY</code> on
+              Railway (and local <code className="text-[12px]">backend/.env</code>
+              ), then redeploy / restart the API
+            </li>
+          </ol>
+        </section>
+      ) : null}
+
+      {configured ? (
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="h-auto flex-wrap gap-1 bg-transparent p-0">
+            {(
+              [
+                ["overview", "Overview"],
+                ["campaigns", "Campaigns"],
+                ["flows", "Flows"],
+                ["lists", "Lists & segments"],
+              ] as const
+            ).map(([id, label]) => (
+              <TabsTrigger
+                key={id}
+                value={id}
+                className="rounded-full border border-transparent px-3 py-1.5 text-[13px] data-[state=active]:border-border data-[state=active]:bg-white data-[state=active]:shadow-none"
+              >
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <TabsContent value="overview" className="mt-6 space-y-6">
+            {loading && !overview ? (
+              <p className="text-[14px] text-gray-400">Loading…</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    ["Live flows", overview?.counts.liveFlows ?? 0],
+                    ["All flows", overview?.counts.flows ?? 0],
+                    ["Lists", overview?.counts.lists ?? 0],
+                    [
+                      "Draft / scheduled",
+                      overview?.counts.draftOrScheduledCampaigns ?? 0,
+                    ],
+                  ].map(([label, value]) => (
+                    <div
+                      key={String(label)}
+                      className="border-t border-black/[0.06] pt-3"
+                    >
+                      <p className="text-[12px] uppercase tracking-wide text-gray-400">
+                        {label}
+                      </p>
+                      <p className="mt-1 text-[22px] font-semibold tabular-nums text-gray-950">
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[13px] text-gray-500">
+                  Account:{" "}
+                  <span className="font-medium text-gray-800">{accountName}</span>
+                  {overview?.account?.timezone
+                    ? ` · ${overview.account.timezone}`
+                    : null}
+                </p>
+                <section className="space-y-2">
+                  <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
+                    Recent campaigns
+                  </h3>
+                  <ul className="border-t border-black/[0.06]">
+                    {(overview?.recentCampaigns || []).slice(0, 6).map((c) => (
+                      <li
+                        key={c.id}
+                        className="flex items-baseline justify-between gap-3 border-b border-black/[0.06] py-3"
+                      >
+                        <span className="min-w-0 truncate text-[15px] text-gray-950">
+                          {c.name || "Untitled"}
+                        </span>
+                        <span
+                          className={cn(
+                            "shrink-0 text-[13px] capitalize",
+                            statusTone(c.status),
+                          )}
+                        >
+                          {c.status || "—"}
+                        </span>
+                      </li>
+                    ))}
+                    {!overview?.recentCampaigns?.length ? (
+                      <li className="py-6 text-[14px] text-gray-400">
+                        No recent email campaigns
+                      </li>
+                    ) : null}
+                  </ul>
+                </section>
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="campaigns" className="mt-6">
+            <ul className="border-t border-black/[0.06]">
+              {campaigns.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex flex-col gap-1 border-b border-black/[0.06] py-3 sm:flex-row sm:items-baseline sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-medium text-gray-950">
+                      {c.name || "Untitled"}
+                    </p>
+                    <p className="text-[13px] text-gray-400">
+                      Send {formatWhen(c.sendTime || c.scheduledAt)}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "text-[13px] capitalize",
+                      statusTone(c.status),
+                    )}
+                  >
+                    {c.status || "—"}
+                  </span>
+                </li>
+              ))}
+              {!loading && campaigns.length === 0 ? (
+                <li className="py-8 text-[14px] text-gray-400">
+                  No email campaigns found
+                </li>
+              ) : null}
+            </ul>
+          </TabsContent>
+
+          <TabsContent value="flows" className="mt-6">
+            <ul className="border-t border-black/[0.06]">
+              {flows.map((flow) => {
+                const status = (flow.status || "").toLowerCase();
+                return (
+                  <li
+                    key={flow.id}
+                    className="flex flex-col gap-3 border-b border-black/[0.06] py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-[15px] font-medium text-gray-950">
+                        {flow.name || "Untitled flow"}
+                      </p>
+                      <p className="text-[13px] text-gray-400">
+                        <span className={cn("capitalize", statusTone(status))}>
+                          {status || "—"}
+                        </span>
+                        {flow.triggerType ? ` · ${flow.triggerType}` : null}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={status === "live" ? "default" : "outline"}
+                        className="h-7 px-2 text-xs"
+                        disabled={busyFlowId === flow.id || status === "live"}
+                        onClick={() => void onFlowStatus(flow, "live")}
+                      >
+                        Live
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={status === "manual" ? "default" : "outline"}
+                        className="h-7 px-2 text-xs"
+                        disabled={busyFlowId === flow.id || status === "manual"}
+                        onClick={() => void onFlowStatus(flow, "manual")}
+                      >
+                        Manual
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="tertiary"
+                        className="h-7 px-2 text-xs"
+                        disabled={busyFlowId === flow.id || status === "draft"}
+                        onClick={() => void onFlowStatus(flow, "draft")}
+                      >
+                        Draft
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+              {!loading && flows.length === 0 ? (
+                <li className="py-8 text-[14px] text-gray-400">No flows found</li>
+              ) : null}
+            </ul>
+          </TabsContent>
+
+          <TabsContent value="lists" className="mt-6 space-y-8">
+            <section className="space-y-2">
+              <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
+                Lists
+              </h3>
+              <ul className="border-t border-black/[0.06]">
+                {lists.map((list) => (
+                  <li
+                    key={list.id}
+                    className="flex items-baseline justify-between gap-3 border-b border-black/[0.06] py-3"
+                  >
+                    <span className="min-w-0 truncate text-[15px] text-gray-950">
+                      {list.name || "Untitled list"}
+                    </span>
+                    <span className="shrink-0 text-[13px] tabular-nums text-gray-400">
+                      {typeof list.profileCount === "number"
+                        ? list.profileCount.toLocaleString()
+                        : "—"}
+                    </span>
+                  </li>
+                ))}
+                {!loading && lists.length === 0 ? (
+                  <li className="py-6 text-[14px] text-gray-400">No lists</li>
+                ) : null}
+              </ul>
+            </section>
+            <section className="space-y-2">
+              <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
+                Segments
+              </h3>
+              <ul className="border-t border-black/[0.06]">
+                {segments.map((seg) => (
+                  <li
+                    key={seg.id}
+                    className="flex items-baseline justify-between gap-3 border-b border-black/[0.06] py-3"
+                  >
+                    <span className="min-w-0 truncate text-[15px] text-gray-950">
+                      {seg.name || "Untitled segment"}
+                    </span>
+                    <span className="shrink-0 text-[13px] text-gray-400">
+                      {seg.isActive === false ? "Inactive" : "Active"}
+                    </span>
+                  </li>
+                ))}
+                {!loading && segments.length === 0 ? (
+                  <li className="py-6 text-[14px] text-gray-400">No segments</li>
+                ) : null}
+              </ul>
+            </section>
+          </TabsContent>
+        </Tabs>
+      ) : null}
+
+      {configured === null && loading ? (
+        <div className="flex items-center gap-2 text-[14px] text-gray-400">
+          <Loader2 className="size-4 animate-spin" />
+          Checking Klaviyo…
+        </div>
+      ) : null}
+    </div>
+  );
+}

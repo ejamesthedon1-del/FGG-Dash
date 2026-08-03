@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Optional fal.ai key for photoreal clothing mockups (CEO Mockups page)
     fal_key: Optional[str] = None
 
+    # Optional Klaviyo private API key (CEO → Email / Klaviyo lite panel)
+    klaviyo_private_api_key: Optional[str] = None
+
     # Optional Gmail OAuth for Support inbox
     gmail_client_id: Optional[str] = None
     gmail_client_secret: Optional[str] = None
