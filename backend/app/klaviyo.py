@@ -448,19 +448,32 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
                 }
                 actions_out.append(mapped)
 
-            # Enrich send-email actions with message details when missing.
-            if ("email" in action_type or action_type == "send-email") and not mapped.get(
-                "subject"
-            ):
+            # Enrich email/SMS actions with message content.
+            if any(x in action_type for x in ("email", "sms", "send-email", "send-sms")):
                 try:
                     msg_data = await _get(f"/flow-actions/{aid}/flow-messages/")
                     msgs = msg_data.get("data") or []
                     if msgs and isinstance(msgs[0], dict):
                         mattrs = msgs[0].get("attributes") or {}
                         content = mattrs.get("content") or {}
-                        mapped["subject"] = content.get("subject") or mattrs.get("name")
-                        mapped["fromEmail"] = content.get("from_email")
-                        mapped["name"] = mattrs.get("name")
+                        definition = mattrs.get("definition") or {}
+                        mapped["name"] = mattrs.get("name") or mapped.get("name")
+                        mapped["channel"] = mattrs.get("channel")
+                        mapped["subject"] = (
+                            content.get("subject")
+                            or mapped.get("subject")
+                        )
+                        mapped["fromEmail"] = content.get("from_email") or mapped.get(
+                            "fromEmail"
+                        )
+                        # SMS body can live under content.body or definition.body.
+                        body = (
+                            content.get("body")
+                            or definition.get("body")
+                            or mattrs.get("body")
+                        )
+                        if body:
+                            mapped["body"] = body
                 except HTTPException:
                     pass
     except HTTPException:
@@ -473,17 +486,21 @@ async def get_flow_detail(flow_id: str) -> Dict[str, Any]:
     for act in actions_out:
         st = str(act.get("status") or "").lower()
         atype = str(act.get("type") or act.get("actionType") or "").lower()
-        if "email" in atype or atype == "send-email":
+        if any(x in atype for x in ("email", "sms", "send-email", "send-sms")):
             if st and st != "live":
                 warnings.append(
-                    f"Email action is '{st}' — even if the flow is live, this email will not send automatically."
+                    f"Message action is '{st}' — even if the flow is live, it will not send automatically."
                 )
-    trigger_blob = " ".join(
-        str(t.get("type") or "") + " " + str(t.get("name") or "") for t in resolved_triggers
+            if "sms" in atype and not act.get("body"):
+                warnings.append(
+                    "SMS action has no readable message body via API — verify the text + coupon in Klaviyo."
+                )
+    trigger_names = " ".join(
+        str(t.get("name") or "") for t in resolved_triggers
     ).lower()
-    if "metric" in trigger_blob or str(attrs.get("trigger_type") or "").lower() == "metric":
+    if "text messaging marketing" in trigger_names or "sms" in trigger_names:
         warnings.append(
-            "This flow is metric-triggered. Form/list signups only fire it if that exact metric is tracked when they submit."
+            "Trigger is SMS marketing consent. The form must collect phone + explicit SMS opt-in; a phone field alone is not enough."
         )
     if any(t.get("hasFilter") for t in resolved_triggers):
         warnings.append("Trigger has filters — some signups may be excluded.")
