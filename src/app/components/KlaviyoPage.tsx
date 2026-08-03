@@ -68,18 +68,61 @@ export function KlaviyoPage() {
         setSegments([]);
         return;
       }
-      const [ov, camps, flowRes, listRes, segRes] = await Promise.all([
+      // Don't let one failing endpoint blank the whole page.
+      const settled = await Promise.allSettled([
         fetchKlaviyoOverview(),
         fetchKlaviyoCampaigns(40),
         fetchKlaviyoFlows(50),
         fetchKlaviyoLists(50),
         fetchKlaviyoSegments(50),
       ]);
-      setOverview(ov);
-      setCampaigns(camps.campaigns || []);
-      setFlows(flowRes.flows || []);
-      setLists(listRes.lists || []);
-      setSegments(segRes.segments || []);
+      const [ov, camps, flowRes, listRes, segRes] = settled;
+      const errors: string[] = [];
+
+      if (ov.status === "fulfilled") setOverview(ov.value);
+      else errors.push(ov.reason instanceof Error ? ov.reason.message : "Overview failed");
+
+      if (camps.status === "fulfilled") setCampaigns(camps.value.campaigns || []);
+      else {
+        setCampaigns([]);
+        errors.push(
+          camps.reason instanceof Error ? camps.reason.message : "Campaigns failed",
+        );
+      }
+
+      if (flowRes.status === "fulfilled") setFlows(flowRes.value.flows || []);
+      else {
+        setFlows([]);
+        errors.push(
+          flowRes.reason instanceof Error ? flowRes.reason.message : "Flows failed",
+        );
+      }
+
+      if (listRes.status === "fulfilled") setLists(listRes.value.lists || []);
+      else {
+        setLists([]);
+        errors.push(
+          listRes.reason instanceof Error ? listRes.reason.message : "Lists failed",
+        );
+      }
+
+      if (segRes.status === "fulfilled") setSegments(segRes.value.segments || []);
+      else {
+        setSegments([]);
+        errors.push(
+          segRes.reason instanceof Error
+            ? segRes.reason.message
+            : "Segments failed",
+        );
+      }
+
+      if (errors.length && settled.every((s) => s.status === "rejected")) {
+        toast.error(errors[0] || "Klaviyo load failed");
+      } else if (errors.length) {
+        toast.message("Some Klaviyo data didn’t load", {
+          description: errors[0],
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Klaviyo load failed");
     } finally {
@@ -227,11 +270,52 @@ export function KlaviyoPage() {
                     : null}
                 </p>
                 <section className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
+                      Lists
+                    </h3>
+                    <button
+                      type="button"
+                      className="text-[12px] text-blue-600 hover:text-blue-700"
+                      onClick={() => setTab("lists")}
+                    >
+                      View all
+                    </button>
+                  </div>
+                  <ul className="border-t border-black/[0.06]">
+                    {(lists.length ? lists : overview?.lists || [])
+                      .slice(0, 8)
+                      .map((list) => (
+                        <li
+                          key={list.id}
+                          className="flex items-baseline justify-between gap-3 border-b border-black/[0.06] py-3"
+                        >
+                          <span className="min-w-0 truncate text-[15px] text-gray-950">
+                            {list.name || "Untitled list"}
+                          </span>
+                          <span className="shrink-0 text-[13px] tabular-nums text-gray-400">
+                            {typeof list.profileCount === "number"
+                              ? list.profileCount.toLocaleString()
+                              : "List"}
+                          </span>
+                        </li>
+                      ))}
+                    {!lists.length && !overview?.lists?.length ? (
+                      <li className="py-6 text-[14px] text-gray-400">
+                        No lists in this Klaviyo account
+                      </li>
+                    ) : null}
+                  </ul>
+                </section>
+
+                <section className="space-y-2">
                   <h3 className="text-[13px] font-medium tracking-wide text-gray-400">
                     Recent campaigns
                   </h3>
                   <ul className="border-t border-black/[0.06]">
-                    {(overview?.recentCampaigns || []).slice(0, 6).map((c) => (
+                    {(overview?.recentCampaigns || campaigns)
+                      .slice(0, 6)
+                      .map((c) => (
                       <li
                         key={c.id}
                         className="flex items-baseline justify-between gap-3 border-b border-black/[0.06] py-3"
@@ -249,7 +333,7 @@ export function KlaviyoPage() {
                         </span>
                       </li>
                     ))}
-                    {!overview?.recentCampaigns?.length ? (
+                    {!overview?.recentCampaigns?.length && !campaigns.length ? (
                       <li className="py-6 text-[14px] text-gray-400">
                         No recent email campaigns
                       </li>
