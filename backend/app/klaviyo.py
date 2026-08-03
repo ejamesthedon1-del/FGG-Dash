@@ -33,6 +33,10 @@ def _headers() -> Dict[str, str]:
     }
 
 
+# Many collection endpoints only allow page[size] 1–10.
+PAGE_SIZE_MAX = 10
+
+
 async def _get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     url = path if path.startswith("http") else f"{KLAVIYO_BASE}{path}"
     async with httpx.AsyncClient(timeout=40.0) as client:
@@ -44,6 +48,41 @@ async def _get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, 
         )
     data = res.json()
     return data if isinstance(data, dict) else {"data": data}
+
+
+async def _get_pages(
+    path: str,
+    *,
+    params: Optional[Dict[str, Any]] = None,
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    """Fetch up to `limit` rows, paging at Klaviyo's max page size (10)."""
+    want = max(1, min(int(limit or 1), 100))
+    page_size = min(PAGE_SIZE_MAX, want)
+    query = dict(params or {})
+    query["page[size]"] = page_size
+    rows: List[Dict[str, Any]] = []
+    next_url: Optional[str] = None
+    first = True
+    while len(rows) < want:
+        if first:
+            data = await _get(path, query)
+            first = False
+        else:
+            if not next_url:
+                break
+            data = await _get(next_url)
+        for row in data.get("data") or []:
+            if isinstance(row, dict):
+                rows.append(row)
+                if len(rows) >= want:
+                    break
+        links = data.get("links") or {}
+        nxt = links.get("next")
+        next_url = nxt if isinstance(nxt, str) and nxt.strip() else None
+        if not next_url:
+            break
+    return rows[:want]
 
 
 async def _patch(path: str, body: Dict[str, Any]) -> Dict[str, Any]:
@@ -103,25 +142,14 @@ def _map_list_item(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def list_lists(limit: int = 50) -> Dict[str, Any]:
-    data = await _get(
-        "/lists/",
-        params={"page[size]": min(max(limit, 1), 100)},
-    )
-    items = [
-        _map_list_item(r) for r in (data.get("data") or []) if isinstance(r, dict)
-    ]
-    return {"lists": items}
+    rows = await _get_pages("/lists/", limit=limit)
+    return {"lists": [_map_list_item(r) for r in rows]}
 
 
 async def list_segments(limit: int = 50) -> Dict[str, Any]:
-    data = await _get(
-        "/segments/",
-        params={"page[size]": min(max(limit, 1), 100)},
-    )
+    rows = await _get_pages("/segments/", limit=limit)
     items = []
-    for row in data.get("data") or []:
-        if not isinstance(row, dict):
-            continue
+    for row in rows:
         attrs = row.get("attributes") or {}
         items.append(
             {
@@ -137,18 +165,16 @@ async def list_segments(limit: int = 50) -> Dict[str, Any]:
 
 
 async def list_campaigns(limit: int = 25) -> Dict[str, Any]:
-    data = await _get(
+    rows = await _get_pages(
         "/campaigns/",
         params={
             "filter": "equals(messages.channel,'email')",
-            "page[size]": min(max(limit, 1), 50),
             "sort": "-scheduled_at",
         },
+        limit=limit,
     )
     items = []
-    for row in data.get("data") or []:
-        if not isinstance(row, dict):
-            continue
+    for row in rows:
         attrs = row.get("attributes") or {}
         items.append(
             {
@@ -167,17 +193,13 @@ async def list_campaigns(limit: int = 25) -> Dict[str, Any]:
 
 
 async def list_flows(limit: int = 50) -> Dict[str, Any]:
-    data = await _get(
+    rows = await _get_pages(
         "/flows/",
-        params={
-            "page[size]": min(max(limit, 1), 50),
-            "sort": "-updated",
-        },
+        params={"sort": "-updated"},
+        limit=limit,
     )
     items = []
-    for row in data.get("data") or []:
-        if not isinstance(row, dict):
-            continue
+    for row in rows:
         attrs = row.get("attributes") or {}
         items.append(
             {
@@ -217,14 +239,9 @@ async def set_flow_status(flow_id: str, status: str) -> Dict[str, Any]:
 
 
 async def list_metrics(limit: int = 50) -> Dict[str, Any]:
-    data = await _get(
-        "/metrics/",
-        params={"page[size]": min(max(limit, 1), 100)},
-    )
+    rows = await _get_pages("/metrics/", limit=limit)
     items: List[Dict[str, Any]] = []
-    for row in data.get("data") or []:
-        if not isinstance(row, dict):
-            continue
+    for row in rows:
         attrs = row.get("attributes") or {}
         items.append(
             {
