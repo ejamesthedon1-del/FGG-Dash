@@ -4,15 +4,21 @@ import { toast } from "sonner";
 import {
   BookOpen,
   Boxes,
+  CalendarDays,
   ChevronDown,
+  GitBranch,
   Inbox,
   LayoutDashboard,
+  LayoutTemplate,
   Library,
+  List,
   ListTodo,
   LogOut,
   Mail,
+  MessageSquare,
   Package,
   PenTool,
+  Send,
   Settings,
   Shirt,
   Sparkles,
@@ -114,15 +120,60 @@ const NAV = {
     match: (pathname: string) =>
       pathname === "/cash" || pathname.startsWith("/cash/"),
   },
-  email: {
+  emailOverview: {
     to: "/email",
-    label: "Email",
+    label: "Overview",
     icon: Mail,
+    end: true,
     match: (pathname: string) =>
       pathname === "/email" ||
-      pathname.startsWith("/email/") ||
       pathname === "/klaviyo" ||
-      pathname.startsWith("/klaviyo/"),
+      pathname === "/klaviyo/",
+  },
+  emailSms: {
+    to: "/email/sms",
+    label: "SMS",
+    icon: MessageSquare,
+    match: (pathname: string) =>
+      pathname === "/email/sms" || pathname.startsWith("/email/sms/"),
+  },
+  emailTemplates: {
+    to: "/email/templates",
+    label: "Templates",
+    icon: LayoutTemplate,
+    match: (pathname: string) =>
+      pathname === "/email/templates" ||
+      pathname.startsWith("/email/templates/"),
+  },
+  emailSchedule: {
+    to: "/email/schedule",
+    label: "Schedule",
+    icon: CalendarDays,
+    match: (pathname: string) =>
+      pathname === "/email/schedule" ||
+      pathname.startsWith("/email/schedule/"),
+  },
+  emailCampaigns: {
+    to: "/email/campaigns",
+    label: "Campaigns",
+    icon: Send,
+    match: (pathname: string) =>
+      pathname === "/email/campaigns" ||
+      pathname.startsWith("/email/campaigns/"),
+  },
+  emailFlows: {
+    to: "/email/flows",
+    label: "Flows",
+    icon: GitBranch,
+    match: (pathname: string) =>
+      pathname === "/email/flows" || pathname.startsWith("/email/flows/"),
+  },
+  emailLists: {
+    to: "/email/lists",
+    label: "Lists",
+    icon: List,
+    match: (pathname: string) =>
+      pathname === "/email/lists" || pathname.startsWith("/email/lists/"),
   },
   studio: {
     to: "/mockups",
@@ -202,7 +253,20 @@ const NAV = {
 /** CEO: strategy → creative → personal day → operations → resources */
 const CEO_SECTIONS: NavSection[] = [
   { label: "Overview", items: [NAV.dashboard, NAV.whiteboard] },
-  { label: "Business", items: [NAV.brandHub, NAV.cash, NAV.email] },
+  { label: "Business", items: [NAV.brandHub, NAV.cash] },
+  {
+    label: "Email",
+    collapsible: true,
+    items: [
+      NAV.emailOverview,
+      NAV.emailSms,
+      NAV.emailTemplates,
+      NAV.emailSchedule,
+      NAV.emailCampaigns,
+      NAV.emailFlows,
+      NAV.emailLists,
+    ],
+  },
   { label: "Creative", items: [NAV.studio] },
   { label: "My day", items: [NAV.myTasks, NAV.clock] },
   {
