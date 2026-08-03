@@ -134,20 +134,64 @@ async def get_account() -> Dict[str, Any]:
 
 def _map_list_item(row: Dict[str, Any]) -> Dict[str, Any]:
     attrs = row.get("attributes") or {}
+    count = attrs.get("profile_count")
+    if count is None and "profileCount" in attrs:
+        count = attrs.get("profileCount")
+    try:
+        profile_count = int(count) if count is not None else None
+    except (TypeError, ValueError):
+        profile_count = None
     return {
         "id": row.get("id"),
         "name": attrs.get("name"),
         "created": attrs.get("created"),
         "updated": attrs.get("updated"),
-        "profileCount": (
-            attrs.get("profile_count") if "profile_count" in attrs else None
-        ),
+        "profileCount": profile_count,
     }
 
 
+async def _get_list_with_count(list_id: str) -> Optional[Dict[str, Any]]:
+    """Singular Get List supports additional-fields[list]=profile_count."""
+    list_id = (list_id or "").strip()
+    if not list_id:
+        return None
+    data = await _get(
+        f"/lists/{list_id}/",
+        params={"additional-fields[list]": "profile_count"},
+    )
+    row = data.get("data")
+    if not isinstance(row, dict):
+        return None
+    return _map_list_item(row)
+
+
 async def list_lists(limit: int = 50) -> Dict[str, Any]:
-    rows = await _get_pages("/lists/", limit=limit)
-    return {"lists": [_map_list_item(r) for r in rows]}
+    # Collection endpoint usually omits profile_count; request it, then
+    # enrich any missing counts via singular Get List.
+    try:
+        rows = await _get_pages(
+            "/lists/",
+            params={"additional-fields[list]": "profile_count"},
+            limit=limit,
+        )
+    except HTTPException:
+        rows = await _get_pages("/lists/", limit=limit)
+
+    items = [_map_list_item(r) for r in rows]
+    missing = [item for item in items if item.get("profileCount") is None]
+    if missing:
+        enriched: List[Dict[str, Any]] = []
+        for item in items:
+            if item.get("profileCount") is not None:
+                enriched.append(item)
+                continue
+            try:
+                full = await _get_list_with_count(str(item.get("id") or ""))
+                enriched.append(full or item)
+            except HTTPException:
+                enriched.append(item)
+        items = enriched
+    return {"lists": items}
 
 
 async def list_segments(limit: int = 50) -> Dict[str, Any]:

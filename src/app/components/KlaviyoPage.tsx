@@ -293,10 +293,10 @@ export function KlaviyoPage() {
                           <span className="min-w-0 truncate text-[15px] text-gray-950">
                             {list.name || "Untitled list"}
                           </span>
-                          <span className="shrink-0 text-[13px] tabular-nums text-gray-400">
+                          <span className="shrink-0 text-[13px] tabular-nums text-gray-500">
                             {typeof list.profileCount === "number"
                               ? list.profileCount.toLocaleString()
-                              : "List"}
+                              : "…"}
                           </span>
                         </li>
                       ))}
