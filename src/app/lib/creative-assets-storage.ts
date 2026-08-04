@@ -445,6 +445,25 @@ export function findAsset(items: AssetItem[], id: string): AssetItem | undefined
   return undefined;
 }
 
+/** Flat folder list for pickers (id + breadcrumb path). Root = id "". */
+export function listAssetFolders(
+  items: AssetItem[],
+): Array<{ id: string; path: string }> {
+  const out: Array<{ id: string; path: string }> = [
+    { id: "", path: "Creative Assets (root)" },
+  ];
+  const walk = (list: AssetItem[], prefix: string) => {
+    for (const item of list) {
+      if (item.kind !== "folder") continue;
+      const path = prefix ? `${prefix} / ${item.name}` : item.name;
+      out.push({ id: item.id, path });
+      if (item.children?.length) walk(item.children, path);
+    }
+  };
+  walk(items, "");
+  return out;
+}
+
 export function renameAsset(items: AssetItem[], id: string, name: string): AssetItem[] {
   const nextName = name.trim();
   if (!nextName) return items;

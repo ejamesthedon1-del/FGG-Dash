@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 import asyncio
+import base64
 
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -15,7 +16,6 @@ from .schemas import (
     OrderFlowRiskDecisionRequest,
     OrderFlowStatusUpdateRequest,
     OrderFlowSuppliesAppliedRequest,
-    PinterestResolveRequest,
     ProductCostsPutRequest,
     ProductCreateRequest,
     ProductRenameRequest,
@@ -35,7 +35,6 @@ from . import (
     klaviyo,
     mockups,
     order_flow_store,
-    pinterest,
     product_costs_store,
     shop_supplies_store,
     support_auto_reply,
@@ -601,23 +600,36 @@ async def support_gmail_auto_reply_thread(
     )
 
 
-@app.post("/api/mockups/pinterest-resolve")
-async def resolve_pinterest_pins(body: PinterestResolveRequest) -> dict:
-    """Fetch public Pinterest pin image(s) for Studio recreate (not board scrapes)."""
+@app.get("/api/mockups/fetch-image")
+async def fetch_mockup_image(url: str) -> dict:
+    """Proxy a remote mockup image to a data URL (avoids browser CORS on fal CDN)."""
+    cleaned = (url or "").strip()
+    if not cleaned.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="url must be http(s)")
     try:
-        return await pinterest.resolve_pins(body.urls)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            response = await client.get(cleaned)
+            response.raise_for_status()
+            data = response.content
+            if not data:
+                raise HTTPException(status_code=400, detail="Empty image")
+            if len(data) > 12 * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="Image larger than 12MB")
+            ctype = (response.headers.get("content-type") or "image/jpeg").split(";")[0].strip()
+            if not ctype.startswith("image/"):
+                ctype = "image/jpeg"
+            b64 = base64.b64encode(data).decode("ascii")
+            return {
+                "dataUrl": f"data:{ctype};base64,{b64}",
+                "contentType": ctype,
+                "byteLength": len(data),
+            }
+    except HTTPException:
+        raise
     except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Could not reach Pinterest: {exc}",
-        ) from exc
+        raise HTTPException(status_code=502, detail=f"Could not fetch image: {exc}") from exc
     except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Pinterest import failed: {exc}",
-        ) from exc
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/api/mockups/generate")

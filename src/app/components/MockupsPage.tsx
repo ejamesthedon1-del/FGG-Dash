@@ -2,6 +2,7 @@ import { useId, useRef, useState, type ChangeEvent, type DragEvent } from "react
 import {
   BookOpen,
   Download,
+  FolderPlus,
   ImagePlus,
   Loader2,
   Pencil,
@@ -37,6 +38,7 @@ import { InstagramScheduleSection } from "./InstagramScheduleSection";
 import { MockupManualEditor } from "./MockupManualEditor";
 import { MockupsSectionNav } from "./MockupsSectionNav";
 import { PushToShopifyDialog } from "./PushToShopifyDialog";
+import { SaveToCreativeAssetsDialog } from "./SaveToCreativeAssetsDialog";
 import {
   generateClothingMockup,
   type MockupAspectRatio,
@@ -117,6 +119,10 @@ export function MockupsPage() {
   const [shopifyPush, setShopifyPush] = useState<{
     imageUrls: string[];
     defaultTitle: string;
+  } | null>(null);
+  const [assetsSave, setAssetsSave] = useState<{
+    imageUrls: string[];
+    defaultName: string;
   } | null>(null);
 
   const addImages = (incoming: File[]) => {
@@ -544,6 +550,22 @@ export function MockupsPage() {
                           className="h-7 gap-1.5 text-xs"
                           disabled={loading}
                           onClick={() =>
+                            setAssetsSave({
+                              imageUrls: [img.url],
+                              defaultName: "mockup",
+                            })
+                          }
+                        >
+                          <FolderPlus className="h-3.5 w-3.5" />
+                          Assets
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs"
+                          disabled={loading}
+                          onClick={() =>
                             setShopifyPush({
                               imageUrls: [img.url],
                               defaultTitle: "",
@@ -573,7 +595,7 @@ export function MockupsPage() {
                   ) : (
                     <span />
                   )}
-                  {result.images.length > 1 ? (
+                  <div className="flex flex-wrap gap-1">
                     <Button
                       type="button"
                       variant="tertiary"
@@ -581,16 +603,36 @@ export function MockupsPage() {
                       className="h-7 gap-1.5 text-xs"
                       disabled={loading}
                       onClick={() =>
-                        setShopifyPush({
+                        setAssetsSave({
                           imageUrls: result.images.map((img) => img.url),
-                          defaultTitle: "",
+                          defaultName: "mockup",
                         })
                       }
                     >
-                      <ShoppingBag className="h-3.5 w-3.5" />
-                      Push all to Shopify
+                      <FolderPlus className="h-3.5 w-3.5" />
+                      {result.images.length > 1
+                        ? "Save all to Assets"
+                        : "Save to Assets"}
                     </Button>
-                  ) : null}
+                    {result.images.length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
+                        disabled={loading}
+                        onClick={() =>
+                          setShopifyPush({
+                            imageUrls: result.images.map((img) => img.url),
+                            defaultTitle: "",
+                          })
+                        }
+                      >
+                        <ShoppingBag className="h-3.5 w-3.5" />
+                        Push all to Shopify
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -774,6 +816,15 @@ export function MockupsPage() {
         }}
         imageUrls={shopifyPush?.imageUrls ?? []}
         defaultTitle={shopifyPush?.defaultTitle ?? ""}
+      />
+
+      <SaveToCreativeAssetsDialog
+        open={assetsSave != null}
+        onOpenChange={(open) => {
+          if (!open) setAssetsSave(null);
+        }}
+        imageUrls={assetsSave?.imageUrls ?? []}
+        defaultName={assetsSave?.defaultName ?? "mockup"}
       />
     </div>
   );
