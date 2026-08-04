@@ -247,7 +247,7 @@ export function MockupsPage() {
       );
       toast.success(
         mode === "remove_background"
-          ? "Background removed (PNG)"
+          ? "Background removed (detail cutout)"
           : data.images.length > 1
             ? `${data.images.length} images ready`
             : "Image ready",
@@ -316,7 +316,7 @@ export function MockupsPage() {
               />
               <p className="mt-1.5 text-xs text-gray-400">
                 For cutouts, use <span className="font-medium text-gray-600">Remove BG</span>{" "}
-                — Nano can’t do real transparency (it paints fake checkerboards).
+                (BiRefNet, high-res) — not Nano, which invents fake checkerboards.
               </p>
               <Button
                 type="button"

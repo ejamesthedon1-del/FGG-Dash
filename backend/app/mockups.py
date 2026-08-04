@@ -487,12 +487,22 @@ def looks_like_background_remove(prompt: str) -> bool:
     return bool(_BG_REMOVE_RE.search((prompt or "").strip()))
 
 
+def _parse_rembg_image(payload: dict[str, Any]) -> dict[str, Any] | None:
+    image = payload.get("image") if isinstance(payload.get("image"), dict) else None
+    if image and image.get("url"):
+        return image
+    raw = payload.get("images") or []
+    if raw and isinstance(raw[0], dict) and raw[0].get("url"):
+        return raw[0]
+    return None
+
+
 def remove_background(
     *,
     image_url: str,
     fal_key: str | None = None,
 ) -> dict[str, Any]:
-    """Real alpha cutout via Bria RMBG — not Nano (JPEG invents checkerboards)."""
+    """High-detail PNG cutout via BiRefNet v2 (keeps fine text/edges better than Bria)."""
     _ensure_fal_key(fal_key)
     import fal_client
 
@@ -500,21 +510,58 @@ def remove_background(
     if not url:
         raise RuntimeError("image_url is required")
 
-    result = fal_client.subscribe(
-        "fal-ai/bria/background/remove",
-        arguments={"image_url": url},
-        with_logs=False,
-    )
-    payload = result if isinstance(result, dict) else {}
-    image = payload.get("image") if isinstance(payload.get("image"), dict) else None
-    if not image or not image.get("url"):
-        # Some fal variants return images[] 
-        raw = payload.get("images") or []
-        if raw and isinstance(raw[0], dict) and raw[0].get("url"):
-            image = raw[0]
-    if not image or not image.get("url"):
-        raise RuntimeError("Background removal returned no image")
+    model_id = "fal-ai/birefnet/v2"
+    # Dynamic + max res preserves thin lettering / small graphic details.
+    attempts: list[dict[str, Any]] = [
+        {
+            "model": "General Use (Dynamic)",
+            "operating_resolution": "2304x2304",
+            "refine_foreground": True,
+            "output_format": "png",
+            "image_url": url,
+        },
+        {
+            "model": "General Use (Heavy)",
+            "operating_resolution": "2048x2048",
+            "refine_foreground": True,
+            "output_format": "png",
+            "image_url": url,
+        },
+        {
+            "model": "Matting",
+            "operating_resolution": "2048x2048",
+            "refine_foreground": True,
+            "output_format": "png",
+            "image_url": url,
+        },
+    ]
 
+    last_err: Exception | None = None
+    image: dict[str, Any] | None = None
+    used_args: dict[str, Any] | None = None
+    for args in attempts:
+        try:
+            result = fal_client.subscribe(
+                model_id,
+                arguments=args,
+                with_logs=False,
+            )
+            payload = result if isinstance(result, dict) else {}
+            image = _parse_rembg_image(payload)
+            if image:
+                used_args = args
+                break
+        except Exception as exc:
+            last_err = exc
+            continue
+
+    if not image:
+        raise RuntimeError(
+            f"Background removal returned no image"
+            + (f": {last_err}" if last_err else "")
+        )
+
+    variant = (used_args or {}).get("model") or "BiRefNet"
     return {
         "images": [
             {
@@ -524,10 +571,10 @@ def remove_background(
                 "height": image.get("height"),
             }
         ],
-        "prompt": "Remove background (Bria RMBG)",
+        "prompt": f"Remove background ({variant})",
         "description": None,
         "seed": None,
-        "model": "fal-ai/bria/background/remove",
+        "model": model_id,
         "logoComposited": False,
     }
 
