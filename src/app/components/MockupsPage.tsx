@@ -1,5 +1,16 @@
 import { useId, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { BookOpen, Download, ImagePlus, Loader2, RotateCcw, Save, Trash2, X } from "lucide-react";
+import {
+  BookOpen,
+  Download,
+  ImagePlus,
+  Loader2,
+  Pencil,
+  RotateCcw,
+  Save,
+  ShoppingBag,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
@@ -23,7 +34,9 @@ import {
 import { cn } from "./ui/utils";
 import { MockupsAdCopySection } from "./MockupsAdCopySection";
 import { InstagramScheduleSection } from "./InstagramScheduleSection";
+import { MockupManualEditor } from "./MockupManualEditor";
 import { MockupsSectionNav } from "./MockupsSectionNav";
+import { PushToShopifyDialog } from "./PushToShopifyDialog";
 import {
   generateClothingMockup,
   type MockupAspectRatio,
@@ -97,6 +110,14 @@ export function MockupsPage() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  const [manualEdit, setManualEdit] = useState<{
+    url: string;
+    index: number;
+  } | null>(null);
+  const [shopifyPush, setShopifyPush] = useState<{
+    imageUrls: string[];
+    defaultTitle: string;
+  } | null>(null);
 
   const addImages = (incoming: File[]) => {
     const onlyImages = incoming.filter((f) => f.type.startsWith("image/"));
@@ -157,6 +178,37 @@ export function MockupsPage() {
     toast.message("Template deleted");
   };
 
+  /** Load a generated result back into Input so you can refine with another prompt. */
+  const editResultAgain = async (url: string, index: number) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("fetch failed");
+      const blob = await res.blob();
+      if (!blob.type.startsWith("image/") && blob.size === 0) {
+        throw new Error("empty");
+      }
+      const ext = blob.type.includes("png")
+        ? "png"
+        : blob.type.includes("webp")
+          ? "webp"
+          : "jpg";
+      const file = new File([blob], `edit-${index + 1}.${ext}`, {
+        type: blob.type || "image/jpeg",
+      });
+      revokeAll(images);
+      setImages(toPreviewFiles([file]));
+      setPrompt("");
+      toast.message("Loaded into Input — describe the change, then Run");
+      window.requestAnimationFrame(() => {
+        document.getElementById("mockup-prompt")?.focus();
+      });
+    } catch {
+      toast.error(
+        "Couldn’t load that result for editing — download it, then re-upload as #1",
+      );
+    }
+  };
+
   const onRun = async () => {
     if (!canRun) return;
     setLoading(true);
@@ -199,12 +251,7 @@ export function MockupsPage() {
         <InstagramScheduleSection />
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <p className="text-sm text-gray-600">
-              Freeform image edit — write your prompt, add reference images in order, run.
-              Type <span className="font-medium text-gray-800">#1</span>,{" "}
-              <span className="font-medium text-gray-800">#2</span>… to reference inputs.
-            </p>
+          <div className="flex flex-wrap items-start justify-end gap-3">
             <Button
               type="button"
               variant="tertiary"
@@ -246,9 +293,6 @@ export function MockupsPage() {
                 placeholder='e.g. Swap the hoodie on #1 with the exact product in #2. Keep the same model, pose, and lighting. Fabric in #3 is textile feel only.'
                 className="min-h-[140px] resize-y"
               />
-              <p className="mt-1.5 text-xs text-gray-400">
-                Type # to reference inputs (image order = #1, #2, #3…).
-              </p>
               <Button
                 type="button"
                 variant="tertiary"
@@ -469,13 +513,52 @@ export function MockupsPage() {
                         alt={`Result ${i + 1}`}
                         className="max-h-[70vh] w-full object-contain"
                       />
-                      <div className="flex justify-end border-t border-gray-100 p-2">
+                      <div className="flex flex-wrap justify-end gap-1 border-t border-gray-100 p-2">
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs"
+                          disabled={loading}
+                          onClick={() =>
+                            setManualEdit({ url: img.url, index: i })
+                          }
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs text-gray-500"
+                          disabled={loading}
+                          onClick={() => void editResultAgain(img.url, i)}
+                        >
+                          Refine with AI
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs"
+                          disabled={loading}
+                          onClick={() =>
+                            setShopifyPush({
+                              imageUrls: [img.url],
+                              defaultTitle: "",
+                            })
+                          }
+                        >
+                          <ShoppingBag className="h-3.5 w-3.5" />
+                          Shopify
+                        </Button>
                         <a
                           href={img.url}
                           download={`fgg-mockup-${i + 1}.jpg`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
                         >
                           <Download className="h-3.5 w-3.5" />
                           Download
@@ -484,9 +567,31 @@ export function MockupsPage() {
                     </div>
                   ))}
                 </div>
-                {result.model ? (
-                  <p className="text-xs text-gray-400">{result.model}</p>
-                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {result.model ? (
+                    <p className="text-xs text-gray-400">{result.model}</p>
+                  ) : (
+                    <span />
+                  )}
+                  {result.images.length > 1 ? (
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      disabled={loading}
+                      onClick={() =>
+                        setShopifyPush({
+                          imageUrls: result.images.map((img) => img.url),
+                          defaultTitle: "",
+                        })
+                      }
+                    >
+                      <ShoppingBag className="h-3.5 w-3.5" />
+                      Push all to Shopify
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <p className="flex min-h-[200px] items-center justify-center text-center text-sm text-gray-500">
@@ -640,6 +745,36 @@ export function MockupsPage() {
           </DialogContent>
         </Dialog>
       ) : null}
+
+      {manualEdit ? (
+        <MockupManualEditor
+          open
+          imageUrl={manualEdit.url}
+          onOpenChange={(open) => {
+            if (!open) setManualEdit(null);
+          }}
+          onSave={(dataUrl) => {
+            const index = manualEdit.index;
+            setResult((prev) => {
+              if (!prev?.images?.length) return prev;
+              const images = prev.images.map((img, i) =>
+                i === index ? { ...img, url: dataUrl } : img,
+              );
+              return { ...prev, images };
+            });
+            setManualEdit(null);
+          }}
+        />
+      ) : null}
+
+      <PushToShopifyDialog
+        open={shopifyPush != null}
+        onOpenChange={(open) => {
+          if (!open) setShopifyPush(null);
+        }}
+        imageUrls={shopifyPush?.imageUrls ?? []}
+        defaultTitle={shopifyPush?.defaultTitle ?? ""}
+      />
     </div>
   );
 }

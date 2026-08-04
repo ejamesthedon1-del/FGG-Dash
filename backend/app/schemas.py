@@ -4,15 +4,25 @@ from pydantic import BaseModel, Field
 
 
 class ProductCreateRequest(BaseModel):
+    brand: str = "live-don"
     title: str = Field(..., min_length=1)
     description_html: Optional[str] = None
     vendor: Optional[str] = None
     product_type: Optional[str] = None
     status: Optional[str] = "DRAFT"
     tags: Optional[List[str]] = None
+    # Starting price applied to every size variant.
+    price: Optional[str] = None
+    # Size option values (default S–2XL).
+    sizes: Optional[List[str]] = None
+    # Optional Color option (single value) for apparel.
+    color: Optional[str] = None
+    # Public https image URLs and/or data:image… URLs from Studio.
+    image_urls: Optional[List[str]] = None
 
 
 class ProductRenameRequest(BaseModel):
+    brand: str = "live-don"
     product_id: str = Field(..., min_length=1)
     new_title: str = Field(..., min_length=1)
 

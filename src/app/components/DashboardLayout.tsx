@@ -6,6 +6,7 @@ import {
   Boxes,
   CalendarDays,
   ChevronDown,
+  Clapperboard,
   GitBranch,
   Inbox,
   LayoutDashboard,
@@ -20,7 +21,6 @@ import {
   PenTool,
   Send,
   Settings,
-  Shirt,
   Sparkles,
   Target,
   Timer,
@@ -121,7 +121,7 @@ const NAV = {
   },
   emailOverview: {
     to: "/email",
-    label: "Overview",
+    label: "Home",
     icon: Mail,
     end: true,
     match: (pathname: string) =>
@@ -177,7 +177,7 @@ const NAV = {
   studio: {
     to: "/mockups",
     label: "Studio",
-    icon: Shirt,
+    icon: Clapperboard,
     match: (pathname: string) =>
       pathname === "/mockups" ||
       pathname.startsWith("/mockups") ||
@@ -220,7 +220,7 @@ const NAV = {
   },
   whiteboard: {
     to: "/whiteboard",
-    label: "Whiteboard",
+    label: "Board",
     icon: PenTool,
     match: (pathname: string) =>
       pathname === "/whiteboard" || pathname.startsWith("/whiteboard/"),
@@ -234,7 +234,7 @@ const NAV = {
   },
   trainingCenter: {
     to: "/training-center",
-    label: "Training Center",
+    label: "Training",
     icon: BookOpen,
     match: (pathname: string) =>
       pathname === "/training-center" ||
@@ -242,19 +242,22 @@ const NAV = {
   },
   ourMission: {
     to: "/our-mission",
-    label: "Our Mission",
+    label: "Mission",
     icon: Target,
     match: (pathname: string) =>
       pathname === "/our-mission" || pathname.startsWith("/our-mission/"),
   },
 } as const satisfies Record<string, NavItem>;
 
-/** CEO: strategy → creative → personal day → operations → resources */
+function sectionHasActiveItem(section: NavSection, pathname: string): boolean {
+  return section.items.some((item) => item.match(pathname));
+}
+
+/** CEO — short groups; Marketing collapses to save space */
 const CEO_SECTIONS: NavSection[] = [
-  { label: "Overview", items: [NAV.dashboard] },
-  { label: "Business", items: [NAV.brandHub, NAV.cash] },
+  { items: [NAV.dashboard, NAV.brandHub, NAV.cash, NAV.studio] },
   {
-    label: "Email",
+    label: "Marketing",
     collapsible: true,
     items: [
       NAV.emailOverview,
@@ -266,43 +269,37 @@ const CEO_SECTIONS: NavSection[] = [
       NAV.emailLists,
     ],
   },
-  { label: "Creative", items: [NAV.studio] },
   {
     label: "Operations",
     collapsible: true,
     items: [NAV.orderFlow, NAV.inventory, NAV.support],
   },
   {
-    label: "Workspace",
+    label: "Desk",
     collapsible: true,
     items: [NAV.myTasks, NAV.whiteboard],
   },
   {
-    label: "Resources",
+    label: "Learn",
     collapsible: true,
     items: [NAV.knowledgeBase, NAV.trainingCenter, NAV.ourMission],
   },
 ];
 
-const OPS_OVERVIEW: NavItem = { ...NAV.dashboard, label: "Overview" };
+const OPS_OVERVIEW: NavItem = { ...NAV.dashboard, label: "Home" };
 
 const OPS_SECTIONS: NavSection[] = [
   {
-    label: "Menu",
-    items: [
-      OPS_OVERVIEW,
-      NAV.orderFlow,
-      NAV.inventory,
-      NAV.support,
-    ],
+    label: "Operations",
+    items: [OPS_OVERVIEW, NAV.orderFlow, NAV.inventory, NAV.support],
   },
   {
-    label: "Workspace",
+    label: "Desk",
     collapsible: true,
     items: [NAV.myTasks, NAV.whiteboard],
   },
   {
-    label: "Resources",
+    label: "Learn",
     collapsible: true,
     items: [NAV.knowledgeBase],
   },
@@ -445,15 +442,17 @@ function AppSidebar({
 
       <SidebarContent className="gap-0 px-1 py-1">
         {(isCeo ? CEO_SECTIONS : OPS_SECTIONS).map((section, index) => {
+          const sectionKey = section.label ?? `section-${index}`;
+          const isDesk = section.label === "Desk";
+          const isLearn = section.label === "Learn";
+          const isMarketing = section.label === "Marketing";
           const showOpsBadge =
             section.label === "Operations" && orderFlowNewCount > 0;
-          const sectionKey = section.label ?? `section-${index}`;
-          const isWorkspace = section.label === "Workspace";
-          const isResources = section.label === "Resources";
+          const sectionActive = sectionHasActiveItem(section, pathname);
           const groupLabelClass = cn(
             "h-auto px-2 pt-2.5 pb-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-muted-foreground",
-            index > 0 && !isWorkspace && "mt-1.5",
-            isResources && "mt-3",
+            index > 0 && !isDesk && "mt-1.5",
+            isLearn && "mt-3",
           );
           const menu = (
             <SidebarGroupContent className="px-0">
@@ -473,11 +472,14 @@ function AppSidebar({
             return (
               <Collapsible
                 key={sectionKey}
-                defaultOpen
+                defaultOpen={
+                  // Marketing stays closed unless you're already in it
+                  isMarketing ? sectionActive : true
+                }
                 className={cn(
                   "group/collapsible",
-                  isWorkspace && "mt-auto",
-                  isResources && "mb-32",
+                  isDesk && "mt-auto",
+                  isLearn && "mb-32",
                 )}
               >
                 <SidebarGroup className="p-0">
@@ -508,7 +510,10 @@ function AppSidebar({
           }
 
           return (
-            <SidebarGroup key={sectionKey} className="p-0">
+            <SidebarGroup
+              key={sectionKey}
+              className={cn("p-0", isDesk && "mt-auto", isLearn && "mb-32")}
+            >
               {section.label ? (
                 <SidebarGroupLabel className={groupLabelClass}>
                   {section.label}

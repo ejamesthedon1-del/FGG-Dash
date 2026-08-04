@@ -21,6 +21,7 @@ from .schemas import (
     ShopifyqlRequest,
 )
 from .shopify import ShopifyGraphQLError, cancel_order_for_fraud, get_shopify_client
+from .shopify_products import create_draft_product
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
 from . import (
@@ -1859,51 +1860,55 @@ async def get_products(brand: str = "live-don") -> dict:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+def _shopify_product_scope_error(detail: str) -> str | None:
+    lower = detail.lower()
+    if "access_denied" not in lower and "access denied" not in lower:
+        if "write_products" not in lower and "write_files" not in lower:
+            return None
+    return (
+        "Shopify product write access denied. Add scopes write_products and write_files "
+        "(and write_product_listings if you use Online Store publishing later) on the brand "
+        "app in Shopify Admin → Settings → Apps → Develop apps, then reinstall/refresh "
+        "the app so the token picks up the new scopes."
+    )
+
+
 @app.post("/api/shopify/products")
 async def create_product(payload: ProductCreateRequest) -> dict:
-    mutation = """
-    mutation CreateProduct($product: ProductCreateInput!) {
-      productCreate(product: $product) {
-        product {
-          id
-          title
-          handle
-          status
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }
-    """
-
-    product_input: dict = {
-        "title": payload.title,
-        "status": payload.status,
-    }
-
-    if payload.description_html:
-        product_input["descriptionHtml"] = payload.description_html
-    if payload.vendor:
-        product_input["vendor"] = payload.vendor
-    if payload.product_type:
-        product_input["productType"] = payload.product_type
-    if payload.tags:
-        product_input["tags"] = payload.tags
+    """Create a DRAFT product on an existing brand store (Studio → Shopify push)."""
+    brand_key = resolve_brand(payload.brand)
+    vendor = payload.vendor or BRAND_LABELS.get(brand_key)
 
     try:
-        data = await get_shopify_client("live-don").graphql(mutation, {"product": product_input})
-        result = data.get("productCreate") or {}
-        errors = result.get("userErrors") or []
-        if errors:
-            raise HTTPException(status_code=400, detail=errors)
-
-        return {"product": result.get("product")}
+        client = get_shopify_client(brand_key)
+        created = await create_draft_product(
+            client,
+            title=payload.title,
+            description_html=payload.description_html,
+            vendor=vendor,
+            product_type=payload.product_type,
+            tags=payload.tags,
+            status=payload.status or "DRAFT",
+            price=payload.price,
+            sizes=payload.sizes,
+            color=payload.color,
+            image_urls=payload.image_urls,
+        )
+        return {
+            "brand": brand_key,
+            "brandLabel": BRAND_LABELS.get(brand_key, brand_key),
+            **created,
+        }
     except HTTPException:
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ShopifyGraphQLError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        detail = str(exc)
+        scope_msg = _shopify_product_scope_error(detail)
+        raise HTTPException(status_code=502, detail=scope_msg or detail) from exc
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=502, detail=f"Shopify HTTP error: {exc}") from exc
     except Exception as exc:
@@ -1912,6 +1917,7 @@ async def create_product(payload: ProductCreateRequest) -> dict:
 
 @app.patch("/api/shopify/products/rename")
 async def rename_product(payload: ProductRenameRequest) -> dict:
+    brand_key = resolve_brand(payload.brand)
     mutation = """
     mutation RenameProduct($product: ProductUpdateInput!) {
       productUpdate(product: $product) {
@@ -1930,7 +1936,8 @@ async def rename_product(payload: ProductRenameRequest) -> dict:
     """
 
     try:
-        data = await get_shopify_client("live-don").graphql(
+        client = get_shopify_client(brand_key)
+        data = await client.graphql(
             mutation,
             {"product": {"id": payload.product_id, "title": payload.new_title}},
         )
@@ -1939,11 +1946,15 @@ async def rename_product(payload: ProductRenameRequest) -> dict:
         if errors:
             raise HTTPException(status_code=400, detail=errors)
 
-        return {"product": result.get("product")}
+        return {"brand": brand_key, "product": result.get("product")}
     except HTTPException:
         raise
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ShopifyGraphQLError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        detail = str(exc)
+        scope_msg = _shopify_product_scope_error(detail)
+        raise HTTPException(status_code=502, detail=scope_msg or detail) from exc
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=502, detail=f"Shopify HTTP error: {exc}") from exc
     except Exception as exc:

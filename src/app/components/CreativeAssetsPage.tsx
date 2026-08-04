@@ -21,12 +21,14 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  ShoppingBag,
   Star,
   Trash2,
   X,
 } from "lucide-react";
 import { FolderIcon } from "./icons/FolderIcon";
 import { MockupsSectionNav } from "./MockupsSectionNav";
+import { PushToShopifyDialog } from "./PushToShopifyDialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import {
@@ -171,6 +173,10 @@ export function CreativeAssetsPage() {
   const [addName, setAddName] = useState("");
   const [viewOverride, setViewOverride] = useState<"list" | "gallery" | null>(null);
   const [lightbox, setLightbox] = useState<AssetItem | null>(null);
+  const [shopifyPush, setShopifyPush] = useState<{
+    imageUrls: string[];
+    defaultTitle: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const persist = useCallback((next: AssetItem[]) => {
@@ -372,6 +378,19 @@ export function CreativeAssetsPage() {
         ) : null}
         {isImageItem(item) ? (
           <DropdownMenuItem onClick={() => setLightbox(item)}>Preview</DropdownMenuItem>
+        ) : null}
+        {isImageItem(item) && item.src ? (
+          <DropdownMenuItem
+            onClick={() =>
+              setShopifyPush({
+                imageUrls: [item.src!],
+                defaultTitle: item.name.replace(/\.[^.]+$/, ""),
+              })
+            }
+          >
+            <ShoppingBag className="mr-2 h-4 w-4" />
+            Push to Shopify
+          </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem
           onClick={() => {
@@ -651,6 +670,27 @@ export function CreativeAssetsPage() {
             >
               <Star className="mr-1.5 h-3.5 w-3.5" />
               Quick Access
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-blue-200 bg-white"
+              onClick={() => {
+                const urls = items
+                  .filter((item) => selectedIds.has(item.id) && isImageItem(item) && item.src)
+                  .map((item) => item.src!);
+                if (!urls.length) return;
+                const first = items.find(
+                  (item) => selectedIds.has(item.id) && isImageItem(item),
+                );
+                setShopifyPush({
+                  imageUrls: urls,
+                  defaultTitle: first?.name.replace(/\.[^.]+$/, "") ?? "",
+                });
+              }}
+            >
+              <ShoppingBag className="mr-1.5 h-3.5 w-3.5" />
+              Shopify
             </Button>
             <Button
               size="sm"
@@ -1017,6 +1057,15 @@ export function CreativeAssetsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <PushToShopifyDialog
+        open={shopifyPush != null}
+        onOpenChange={(open) => {
+          if (!open) setShopifyPush(null);
+        }}
+        imageUrls={shopifyPush?.imageUrls ?? []}
+        defaultTitle={shopifyPush?.defaultTitle ?? ""}
+      />
     </div>
   );
 }
