@@ -224,42 +224,111 @@ function sortByPriority(orders: OrderFlowOrder[]): OrderFlowOrder[] {
   });
 }
 
-export async function fetchOrderFlow(params?: {
+const ORDER_FLOW_CLIENT_TTL_MS = 15_000;
+const orderFlowInflight = new Map<string, Promise<OrderFlowResponse>>();
+const orderFlowClientCache = new Map<
+  string,
+  { at: number; data: OrderFlowResponse }
+>();
+
+function orderFlowCacheKey(params?: {
   brand?: string;
   stage?: string;
   days?: number;
-}): Promise<OrderFlowResponse> {
-  const qs = new URLSearchParams();
-  if (params?.brand) qs.set("brand", params.brand);
-  if (params?.stage) qs.set("stage", params.stage);
-  if (params?.days) qs.set("days", String(params.days));
-  const url = apiUrl(`/api/order-flow${qs.toString() ? `?${qs}` : ""}`);
-  let res: Response;
-  try {
-    res = await fetch(url);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Failed to fetch";
-    throw new Error(
-      msg === "Failed to fetch"
-        ? "Could not reach Orders API (network or payload too large). Try Refresh, or redeploy the backend if this keeps happening."
-        : msg,
-    );
-  }
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Order flow failed (${res.status})`);
-  }
-  const data = (await res.json()) as OrderFlowResponse;
+}): string {
+  return [
+    params?.brand || "all",
+    params?.stage || "all",
+    String(params?.days ?? 90),
+  ].join("|");
+}
+
+function enrichOrderFlowResponse(data: OrderFlowResponse): OrderFlowResponse {
   const enriched = sortByPriority(
     (data.orders || []).map((o) => withOrderPriority(o, data.today)),
   );
   const riskQueue: OrderFlowRiskQueue = {
-    pending: (data.riskQueue?.pending || []).map((o) => withOrderPriority(o, data.today)),
-    approved: (data.riskQueue?.approved || []).map((o) => withOrderPriority(o, data.today)),
-    denied: (data.riskQueue?.denied || []).map((o) => withOrderPriority(o, data.today)),
-    pendingCount: data.riskQueue?.pendingCount ?? data.riskQueue?.pending?.length ?? 0,
+    pending: (data.riskQueue?.pending || []).map((o) =>
+      withOrderPriority(o, data.today),
+    ),
+    approved: (data.riskQueue?.approved || []).map((o) =>
+      withOrderPriority(o, data.today),
+    ),
+    denied: (data.riskQueue?.denied || []).map((o) =>
+      withOrderPriority(o, data.today),
+    ),
+    pendingCount:
+      data.riskQueue?.pendingCount ?? data.riskQueue?.pending?.length ?? 0,
   };
   return { ...data, orders: enriched, riskQueue };
+}
+
+/** Drop client cache so the next fetch hits the network (still may use server TTL). */
+export function invalidateOrderFlowClientCache(): void {
+  orderFlowClientCache.clear();
+}
+
+export async function fetchOrderFlow(params?: {
+  brand?: string;
+  stage?: string;
+  days?: number;
+  /** Bypass client + server short caches (Refresh / after writes). */
+  forceRefresh?: boolean;
+}): Promise<OrderFlowResponse> {
+  const key = orderFlowCacheKey(params);
+  const force = Boolean(params?.forceRefresh);
+
+  if (force) {
+    orderFlowClientCache.clear();
+  } else {
+    const cached = orderFlowClientCache.get(key);
+    if (cached && Date.now() - cached.at < ORDER_FLOW_CLIENT_TTL_MS) {
+      return cached.data;
+    }
+    const shared = orderFlowInflight.get(key);
+    if (shared) return shared;
+  }
+
+  const qs = new URLSearchParams();
+  if (params?.brand) qs.set("brand", params.brand);
+  if (params?.stage) qs.set("stage", params.stage);
+  if (params?.days) qs.set("days", String(params.days));
+  if (force) qs.set("refresh", "true");
+  const url = apiUrl(`/api/order-flow${qs.toString() ? `?${qs}` : ""}`);
+
+  const request = (async () => {
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to fetch";
+      throw new Error(
+        msg === "Failed to fetch"
+          ? "Could not reach Orders API (network or payload too large). Try Refresh, or redeploy the backend if this keeps happening."
+          : msg,
+      );
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `Order flow failed (${res.status})`);
+    }
+    const data = enrichOrderFlowResponse(
+      (await res.json()) as OrderFlowResponse,
+    );
+    orderFlowClientCache.set(key, { at: Date.now(), data });
+    return data;
+  })();
+
+  if (!force) {
+    orderFlowInflight.set(key, request);
+  }
+  try {
+    return await request;
+  } finally {
+    if (orderFlowInflight.get(key) === request) {
+      orderFlowInflight.delete(key);
+    }
+  }
 }
 
 export async function fetchOrderFlowReceipt(

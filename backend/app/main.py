@@ -15,6 +15,7 @@ from .schemas import (
     OrderFlowRiskDecisionRequest,
     OrderFlowStatusUpdateRequest,
     OrderFlowSuppliesAppliedRequest,
+    PinterestResolveRequest,
     ProductCostsPutRequest,
     ProductCreateRequest,
     ProductRenameRequest,
@@ -34,11 +35,12 @@ from . import (
     klaviyo,
     mockups,
     order_flow_store,
+    pinterest,
     product_costs_store,
     shop_supplies_store,
     support_auto_reply,
 )
-from .order_flow import build_order_flow
+from .order_flow import build_order_flow, invalidate_order_flow_cache
 from .shopify_color import PRODUCT_COLOR_GRAPHQL, product_label_with_color, resolve_product_color
 
 
@@ -599,6 +601,25 @@ async def support_gmail_auto_reply_thread(
     )
 
 
+@app.post("/api/mockups/pinterest-resolve")
+async def resolve_pinterest_pins(body: PinterestResolveRequest) -> dict:
+    """Fetch public Pinterest pin image(s) for Studio recreate (not board scrapes)."""
+    try:
+        return await pinterest.resolve_pins(body.urls)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not reach Pinterest: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Pinterest import failed: {exc}",
+        ) from exc
+
+
 @app.post("/api/mockups/generate")
 async def generate_clothing_mockup(
     prompt: str = Form(..., description="Freeform edit prompt"),
@@ -719,10 +740,20 @@ async def get_order_flow(
     brand: str = "all",
     stage: str = "all",
     days: int = 90,
+    refresh: bool = False,
 ) -> dict:
-    """Combined Livdon + Sinners orders with FGG production stages."""
+    """Combined Livdon + Sinners orders with FGG production stages.
+
+    Responses are cached ~45s (shared across page + badge). Pass refresh=true
+    to bypass after a manual Refresh or stage change.
+    """
     try:
-        return await build_order_flow(brand_filter=brand, stage_filter=stage, days=days)
+        return await build_order_flow(
+            brand_filter=brand,
+            stage_filter=stage,
+            days=days,
+            refresh=refresh,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -777,6 +808,7 @@ async def post_order_flow_status(body: OrderFlowStatusUpdateRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not save stage: {exc}") from exc
+    invalidate_order_flow_cache()
     return {"ok": True, "stage": stage, "updated": updated}
 
 
@@ -806,6 +838,7 @@ async def get_order_flow_storage() -> dict:
 async def post_order_flow_notes(body: OrderFlowNotesUpdateRequest) -> dict:
     brand_key = resolve_brand(body.brand)
     record = order_flow_store.update_notes(brand_key, body.shopifyOrderId, body.notes)
+    invalidate_order_flow_cache()
     return {"ok": True, "record": record}
 
 
@@ -822,6 +855,7 @@ async def post_order_flow_supplies_applied(body: OrderFlowSuppliesAppliedRequest
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not save supplies stamp: {exc}") from exc
+    invalidate_order_flow_cache()
     return {"ok": True, "record": record}
 
 
@@ -847,6 +881,7 @@ async def post_order_flow_risk_approve(body: OrderFlowRiskDecisionRequest) -> di
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not save approval: {exc}") from exc
+    invalidate_order_flow_cache()
     return {"ok": True, "record": record}
 
 
@@ -899,6 +934,7 @@ async def post_order_flow_risk_deny(body: OrderFlowRiskDecisionRequest) -> dict:
                 f"{exc}"
             ),
         ) from exc
+    invalidate_order_flow_cache()
     return {"ok": True, "record": record, "shopify": cancel_payload}
 
 

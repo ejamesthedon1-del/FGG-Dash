@@ -269,18 +269,31 @@ export function OrderFlowPage() {
     return () => window.removeEventListener("fgg-spotlight-orders", showProduction);
   }, []);
 
-  const load = useCallback(async (opts?: { preserveSelection?: boolean }) => {
+  const load = useCallback(async (opts?: {
+    preserveSelection?: boolean;
+    forceRefresh?: boolean;
+  }) => {
     setLoading(true);
     try {
       // Always fetch all stages for accurate counts; filter client-side by stage tab.
-      let data = await fetchOrderFlow({ brand, stage: "all", days: 90 });
+      let data = await fetchOrderFlow({
+        brand,
+        stage: "all",
+        days: 90,
+        forceRefresh: opts?.forceRefresh,
+      });
       rememberOrdersFromServer(data.orders);
 
       // Restore is best-effort — never block the board if backup sync fails.
       try {
         const restored = await restoreStagesToServer(data.orders);
         if (restored > 0) {
-          data = await fetchOrderFlow({ brand, stage: "all", days: 90 });
+          data = await fetchOrderFlow({
+            brand,
+            stage: "all",
+            days: 90,
+            forceRefresh: true,
+          });
           rememberOrdersFromServer(data.orders);
           toast.success(`Restored ${restored} saved order stage${restored === 1 ? "" : "s"}`);
         }
@@ -380,7 +393,7 @@ export function OrderFlowPage() {
           ? `${list[0].orderNumber} → ${STAGE_LABELS[target]}`
           : `${list.length} orders → ${STAGE_LABELS[target]}`,
       );
-      await load({ preserveSelection: true });
+      await load({ preserveSelection: true, forceRefresh: true });
       if (detail && list.some((o) => o.id === detail.id && o.brand === detail.brand)) {
         setDetail((d) =>
           d
@@ -505,7 +518,7 @@ export function OrderFlowPage() {
         { brand: detail.brand, shopifyOrderId: detail.id, orderName: detail.orderNumber },
       ]);
       toast.success("Notes saved");
-      await load({ preserveSelection: true });
+      await load({ preserveSelection: true, forceRefresh: true });
       setDetail((d) => (d ? { ...d, notes: notesDraft } : d));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save notes");
@@ -566,7 +579,7 @@ export function OrderFlowPage() {
         actor: "ops",
       });
       toast.success(`Supplies applied for ${order.orderNumber}`);
-      await load({ preserveSelection: true });
+      await load({ preserveSelection: true, forceRefresh: true });
       const at = new Date().toISOString();
       setDetail((prev) =>
         prev && prev.id === order.id && prev.brand === order.brand
@@ -638,7 +651,7 @@ export function OrderFlowPage() {
             variant="outline"
             size="sm"
             className={TOOLBAR_CONTROL}
-            onClick={() => void load()}
+            onClick={() => void load({ forceRefresh: true })}
             disabled={loading}
           >
             {loading ? "Refreshing…" : "Refresh"}
@@ -684,7 +697,9 @@ export function OrderFlowPage() {
           <OrderFlowRiskReviewSection
             riskQueue={riskQueue}
             busy={loading}
-            onChanged={() => load({ preserveSelection: true })}
+            onChanged={() =>
+              void load({ preserveSelection: true, forceRefresh: true })
+            }
           />
         </TabsContent>
 

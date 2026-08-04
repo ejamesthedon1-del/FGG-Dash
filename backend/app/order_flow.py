@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import copy
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -8,6 +10,16 @@ from zoneinfo import ZoneInfo
 from . import order_flow_store
 from .shopify import get_shopify_client
 from .shopify_color import PRODUCT_COLOR_GRAPHQL, resolve_product_color
+
+# Short TTL so Shopify isn't rebuilt on every page + badge poll.
+_ORDER_FLOW_CACHE_TTL_SEC = 45.0
+_order_flow_cache: Dict[int, Tuple[float, Dict[str, Any]]] = {}
+_order_flow_inflight: Dict[int, asyncio.Task[Dict[str, Any]]] = {}
+
+
+def invalidate_order_flow_cache() -> None:
+    """Clear cached Order Flow payloads (call after stage/risk/notes writes)."""
+    _order_flow_cache.clear()
 
 BRANDS = ("live-don", "sinners-testimony")
 
@@ -292,8 +304,8 @@ async def fetch_brand_orders(brand: str, days: int = 90) -> Tuple[List[Dict[str,
     try:
         for page_i in range(10):  # hard cap pages
             if page_i > 0:
-                # Small pause between pages to stay under Shopify cost limits.
-                await asyncio.sleep(0.35)
+                # Brief pause between pages; Shopify client already retries on throttle.
+                await asyncio.sleep(0.12)
             data = await client.graphql(
                 ORDERS_QUERY,
                 {"queryString": query_string, "cursor": cursor},
@@ -461,53 +473,51 @@ def _order_from_denied_record(record: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def build_order_flow(
+async def _build_order_flow_uncached(
     *,
-    brand_filter: Optional[str] = None,
-    stage_filter: Optional[str] = None,
     days: int = 90,
     persist_auto_shipped: bool = True,
 ) -> Dict[str, Any]:
     today = datetime.now(timezone.utc).astimezone(ZoneInfo("America/Chicago")).date().isoformat()
     stored = order_flow_store.load_all().get("orders") or {}
-
     brands = BRANDS
-    if brand_filter and brand_filter != "all":
-        key = brand_filter.strip().lower()
-        if key in {"livdon", "live-don"}:
-            brands = ("live-don",)
-        elif key in {"sinners", "sinners-testimony"}:
-            brands = ("sinners-testimony",)
-        else:
-            brands = (key,)
 
     all_merged: List[Dict[str, Any]] = []
     errors: Dict[str, str] = {}
     seen_ids: set[str] = set()
+    auto_ship_items: List[Dict[str, str]] = []
 
-    for brand in brands:
-        nodes, err = await fetch_brand_orders(brand, days=days)
+    fetched = await asyncio.gather(
+        *[fetch_brand_orders(brand, days=days) for brand in brands]
+    )
+    for brand, (nodes, err) in zip(brands, fetched):
         if err:
             errors[brand] = err
         for node in nodes:
             merged = merge_order(brand, node, stored, today)
-            if persist_auto_shipped and merged.get("autoShippedFromShopify") and not merged.get("cancelledAt"):
-                try:
-                    order_flow_store.upsert_stage(
-                        brand,
-                        merged["id"],
-                        "shipped",
-                        actor="shopify",
-                        order_name=merged["orderNumber"],
-                    )
-                    rec = order_flow_store.get_record(brand, merged["id"]) or {}
-                    merged["history"] = rec.get("history") or merged["history"]
-                    merged["updatedAt"] = rec.get("updatedAt")
-                    merged["autoShippedFromShopify"] = False
-                except Exception:
-                    pass
+            if (
+                persist_auto_shipped
+                and merged.get("autoShippedFromShopify")
+                and not merged.get("cancelledAt")
+            ):
+                auto_ship_items.append(
+                    {
+                        "brand": brand,
+                        "shopifyOrderId": merged["id"],
+                        "orderName": str(merged.get("orderNumber") or ""),
+                    }
+                )
+                merged["stage"] = "shipped"
+                merged["stageLabel"] = STAGE_LABELS["shipped"]
+                merged["autoShippedFromShopify"] = False
             all_merged.append(merged)
             seen_ids.add(f"{brand}::{merged['id']}")
+
+    if auto_ship_items:
+        try:
+            order_flow_store.bulk_upsert_stage(auto_ship_items, "shipped", actor="shopify")
+        except Exception:
+            pass
 
     # Denied decisions that dropped out of the Shopify window still appear in the queue.
     for key, record in stored.items():
@@ -517,7 +527,7 @@ async def build_order_flow(
         if not review or str(review.get("status") or "").lower() != "denied":
             continue
         brand = str(record.get("brand") or "")
-        if brands and brand not in brands:
+        if brand not in brands:
             continue
         rid = str(record.get("shopifyOrderId") or "")
         store_key = f"{brand}::{rid}"
@@ -568,15 +578,14 @@ async def build_order_flow(
     production.sort(key=sort_key)
     pending.sort(key=sort_risk)
     approved.sort(key=sort_key)
-    denied.sort(key=lambda o: o.get("riskReview", {}).get("decidedAt") or o.get("cancelledAt") or "", reverse=True)
+    denied.sort(
+        key=lambda o: o.get("riskReview", {}).get("decidedAt") or o.get("cancelledAt") or "",
+        reverse=True,
+    )
 
     counts = {stage: 0 for stage in order_flow_store.STAGES}
     for o in production:
         counts[o["stage"]] = counts.get(o["stage"], 0) + 1
-
-    orders = production
-    if stage_filter and stage_filter != "all":
-        orders = [o for o in production if o["stage"] == stage_filter]
 
     return {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -589,7 +598,7 @@ async def build_order_flow(
             }
             for s in order_flow_store.STAGES
         ],
-        "orders": orders,
+        "orders": production,
         "riskQueue": {
             "pending": pending,
             "approved": approved,
@@ -598,3 +607,110 @@ async def build_order_flow(
         },
         "errors": errors,
     }
+
+
+def _filter_order_flow_payload(
+    payload: Dict[str, Any],
+    *,
+    brand_filter: Optional[str],
+    stage_filter: Optional[str],
+) -> Dict[str, Any]:
+    out = copy.deepcopy(payload)
+    brands: Optional[Tuple[str, ...]] = None
+    if brand_filter and brand_filter != "all":
+        key = brand_filter.strip().lower()
+        if key in {"livdon", "live-don"}:
+            brands = ("live-don",)
+        elif key in {"sinners", "sinners-testimony"}:
+            brands = ("sinners-testimony",)
+        else:
+            brands = (key,)
+
+    if brands is not None:
+        brand_set = set(brands)
+        out["orders"] = [o for o in out.get("orders") or [] if o.get("brand") in brand_set]
+        rq = out.get("riskQueue") or {}
+        for bucket in ("pending", "approved", "denied"):
+            rq[bucket] = [o for o in (rq.get(bucket) or []) if o.get("brand") in brand_set]
+        rq["pendingCount"] = len(rq.get("pending") or [])
+        out["riskQueue"] = rq
+        counts = {stage: 0 for stage in order_flow_store.STAGES}
+        for o in out["orders"]:
+            counts[o["stage"]] = counts.get(o["stage"], 0) + 1
+        out["stages"] = [
+            {"id": s, "label": STAGE_LABELS[s], "count": counts.get(s, 0)}
+            for s in order_flow_store.STAGES
+        ]
+        # Drop errors for brands not requested
+        errs = out.get("errors") or {}
+        out["errors"] = {k: v for k, v in errs.items() if k in brand_set}
+
+    if stage_filter and stage_filter != "all":
+        out["orders"] = [o for o in out.get("orders") or [] if o.get("stage") == stage_filter]
+
+    return out
+
+
+async def build_order_flow(
+    *,
+    brand_filter: Optional[str] = None,
+    stage_filter: Optional[str] = None,
+    days: int = 90,
+    persist_auto_shipped: bool = True,
+    refresh: bool = False,
+) -> Dict[str, Any]:
+    days_key = max(1, min(int(days or 90), 120))
+    now = time.monotonic()
+
+    cached = _order_flow_cache.get(days_key)
+    if (
+        not refresh
+        and cached
+        and (now - cached[0]) < _ORDER_FLOW_CACHE_TTL_SEC
+    ):
+        payload = _filter_order_flow_payload(
+            cached[1],
+            brand_filter=brand_filter,
+            stage_filter=stage_filter,
+        )
+        payload["cache"] = {
+            "hit": True,
+            "ageSec": round(now - cached[0], 2),
+            "ttlSec": _ORDER_FLOW_CACHE_TTL_SEC,
+        }
+        return payload
+
+    def _clear(t: asyncio.Task[Dict[str, Any]], key: int = days_key) -> None:
+        current = _order_flow_inflight.get(key)
+        if current is t:
+            _order_flow_inflight.pop(key, None)
+
+    # refresh=true always starts a new build (don't reuse a pre-write inflight).
+    task = None if refresh else _order_flow_inflight.get(days_key)
+    if task is None:
+        task = asyncio.create_task(
+            _build_order_flow_uncached(
+                days=days_key,
+                persist_auto_shipped=persist_auto_shipped,
+            )
+        )
+        _order_flow_inflight[days_key] = task
+        task.add_done_callback(_clear)
+
+    try:
+        full = await task
+    except Exception:
+        raise
+
+    _order_flow_cache[days_key] = (time.monotonic(), full)
+    payload = _filter_order_flow_payload(
+        full,
+        brand_filter=brand_filter,
+        stage_filter=stage_filter,
+    )
+    payload["cache"] = {
+        "hit": False,
+        "ageSec": 0,
+        "ttlSec": _ORDER_FLOW_CACHE_TTL_SEC,
+    }
+    return payload
