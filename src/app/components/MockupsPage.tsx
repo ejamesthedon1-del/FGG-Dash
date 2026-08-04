@@ -155,6 +155,7 @@ export function MockupsPage() {
   };
 
   const canRun = prompt.trim().length > 0 && images.length >= 1 && !loading;
+  const canRemoveBg = images.length >= 1 && !loading;
 
   const saveTemplate = () => {
     const trimmedPrompt = prompt.trim();
@@ -215,16 +216,21 @@ export function MockupsPage() {
     }
   };
 
-  const onRun = async () => {
-    if (!canRun) return;
+  const runGenerate = async (mode: "edit" | "remove_background") => {
+    if (mode === "edit" && !canRun) return;
+    if (mode === "remove_background" && !canRemoveBg) return;
     setLoading(true);
     setResult(null);
     try {
       const data = await generateClothingMockup({
-        prompt: prompt.trim(),
+        prompt:
+          mode === "remove_background"
+            ? prompt.trim() || "remove background"
+            : prompt.trim(),
         images: images.map((i) => i.file),
         aspectRatio,
-        numImages,
+        numImages: mode === "remove_background" ? 1 : numImages,
+        mode,
       });
       setResult(data);
       setHistory(
@@ -232,11 +238,20 @@ export function MockupsPage() {
           prompt: data.prompt,
           seed: data.seed,
           aspectRatio: data.aspectRatio ?? aspectRatio,
-          notes: prompt.trim().slice(0, 120),
+          notes:
+            mode === "remove_background"
+              ? "Background removed"
+              : prompt.trim().slice(0, 120),
           images: data.images.map((img) => ({ url: img.url })),
         }),
       );
-      toast.success(data.images.length > 1 ? `${data.images.length} images ready` : "Image ready");
+      toast.success(
+        mode === "remove_background"
+          ? "Background removed (PNG)"
+          : data.images.length > 1
+            ? `${data.images.length} images ready`
+            : "Image ready",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Generation failed");
     } finally {
@@ -299,6 +314,10 @@ export function MockupsPage() {
                 placeholder='e.g. Swap the hoodie on #1 with the exact product in #2. Keep the same model, pose, and lighting. Fabric in #3 is textile feel only.'
                 className="min-h-[140px] resize-y"
               />
+              <p className="mt-1.5 text-xs text-gray-400">
+                For cutouts, use <span className="font-medium text-gray-600">Remove BG</span>{" "}
+                — Nano can’t do real transparency (it paints fake checkerboards).
+              </p>
               <Button
                 type="button"
                 variant="tertiary"
@@ -447,7 +466,7 @@ export function MockupsPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-5 py-3">
             <Button
               type="button"
               variant="tertiary"
@@ -459,21 +478,36 @@ export function MockupsPage() {
               <RotateCcw className="h-3.5 w-3.5" />
               Reset
             </Button>
-            <Button
-              type="button"
-              className="min-w-[7rem] gap-2"
-              disabled={!canRun}
-              onClick={() => void onRun()}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Running…
-                </>
-              ) : (
-                "Run"
-              )}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={!canRemoveBg}
+                onClick={() => void runGenerate("remove_background")}
+              >
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                Remove BG
+              </Button>
+              <Button
+                type="button"
+                className="min-w-[7rem] gap-2"
+                disabled={!canRun}
+                onClick={() => void runGenerate("edit")}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Running…
+                  </>
+                ) : (
+                  "Run"
+                )}
+              </Button>
+            </div>
           </div>
         </section>
 

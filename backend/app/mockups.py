@@ -471,6 +471,67 @@ def normalize_aspect(value: Optional[str]) -> str:
     return v if v in ALLOWED_ASPECT else "auto"
 
 
+_BG_REMOVE_RE = re.compile(
+    r"\b("
+    r"remove\s+(the\s+)?(green\s+|solid\s+|white\s+|black\s+)?"
+    r"background|remove\s+bg|rmbg|cut\s*out|make\s+transparent|"
+    r"transparent\s+background|knock\s*out\s+background|"
+    r"delete\s+(the\s+)?background|bg\s*remove"
+    r")\b",
+    re.I,
+)
+
+
+def looks_like_background_remove(prompt: str) -> bool:
+    """True when the user is asking for cutout/transparency, not a Nano redraw."""
+    return bool(_BG_REMOVE_RE.search((prompt or "").strip()))
+
+
+def remove_background(
+    *,
+    image_url: str,
+    fal_key: str | None = None,
+) -> dict[str, Any]:
+    """Real alpha cutout via Bria RMBG — not Nano (JPEG invents checkerboards)."""
+    _ensure_fal_key(fal_key)
+    import fal_client
+
+    url = (image_url or "").strip()
+    if not url:
+        raise RuntimeError("image_url is required")
+
+    result = fal_client.subscribe(
+        "fal-ai/bria/background/remove",
+        arguments={"image_url": url},
+        with_logs=False,
+    )
+    payload = result if isinstance(result, dict) else {}
+    image = payload.get("image") if isinstance(payload.get("image"), dict) else None
+    if not image or not image.get("url"):
+        # Some fal variants return images[] 
+        raw = payload.get("images") or []
+        if raw and isinstance(raw[0], dict) and raw[0].get("url"):
+            image = raw[0]
+    if not image or not image.get("url"):
+        raise RuntimeError("Background removal returned no image")
+
+    return {
+        "images": [
+            {
+                "url": str(image["url"]),
+                "contentType": image.get("content_type") or "image/png",
+                "width": image.get("width"),
+                "height": image.get("height"),
+            }
+        ],
+        "prompt": "Remove background (Bria RMBG)",
+        "description": None,
+        "seed": None,
+        "model": "fal-ai/bria/background/remove",
+        "logoComposited": False,
+    }
+
+
 def analysis_summary(analysis: dict[str, Any] | None) -> str:
     if not analysis:
         return ""

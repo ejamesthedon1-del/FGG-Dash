@@ -634,12 +634,13 @@ async def fetch_mockup_image(url: str) -> dict:
 
 @app.post("/api/mockups/generate")
 async def generate_clothing_mockup(
-    prompt: str = Form(..., description="Freeform edit prompt"),
+    prompt: str = Form(default="", description="Freeform edit prompt"),
     images: list[UploadFile] = File(..., description="Reference images in order (#1, #2, …)"),
     aspect_ratio: str = Form(default="auto"),
     num_images: int = Form(default=1),
+    mode: str = Form(default="edit", description="edit | remove_background"),
 ) -> dict:
-    """Freeform multi-image edit via fal Nano Banana Pro Edit."""
+    """Freeform Nano edit, or dedicated Bria background removal (real PNG alpha)."""
     settings = get_settings()
     if not (settings.fal_key or "").strip():
         raise HTTPException(
@@ -648,7 +649,15 @@ async def generate_clothing_mockup(
         )
 
     cleaned_prompt = (prompt or "").strip()
-    if not cleaned_prompt:
+    mode_key = (mode or "edit").strip().lower()
+    want_bg_remove = mode_key in {
+        "remove_background",
+        "remove-background",
+        "rembg",
+        "bg_remove",
+    } or mockups.looks_like_background_remove(cleaned_prompt)
+
+    if not want_bg_remove and not cleaned_prompt:
         raise HTTPException(status_code=400, detail="Prompt is required.")
 
     image_files = [f for f in (images or []) if f and f.filename]
@@ -686,6 +695,20 @@ async def generate_clothing_mockup(
         image_urls = await asyncio.to_thread(_upload_all)
         ratio = mockups.normalize_aspect(aspect_ratio)
 
+        if want_bg_remove:
+            # Dedicated cutout model — Nano JPEG cannot do real transparency.
+            result = await asyncio.to_thread(
+                mockups.remove_background,
+                image_url=image_urls[0],
+                fal_key=settings.fal_key,
+            )
+            return {
+                **result,
+                "aspectRatio": "auto",
+                "imageCount": 1,
+                "mode": "remove_background",
+            }
+
         result = await asyncio.to_thread(
             mockups.generate_mockup,
             image_urls=image_urls,
@@ -700,6 +723,7 @@ async def generate_clothing_mockup(
             **result,
             "aspectRatio": ratio,
             "imageCount": len(image_urls),
+            "mode": "edit",
         }
     except HTTPException:
         raise

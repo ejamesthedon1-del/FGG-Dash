@@ -12,11 +12,14 @@ export type MockupAspectRatio =
   | "9:16"
   | "9:21";
 
+export type MockupGenerateMode = "edit" | "remove_background";
+
 export type MockupGenerateInput = {
   prompt: string;
   images: File[];
   aspectRatio?: MockupAspectRatio;
   numImages?: 1 | 2 | 3 | 4;
+  mode?: MockupGenerateMode;
 };
 
 export type MockupImage = {
@@ -34,6 +37,7 @@ export type MockupGenerateResult = {
   model?: string;
   description?: string;
   imageCount?: number;
+  mode?: MockupGenerateMode | string;
 };
 
 export async function generateClothingMockup(
@@ -46,6 +50,7 @@ export async function generateClothingMockup(
   }
   form.append("aspect_ratio", input.aspectRatio ?? "auto");
   form.append("num_images", String(input.numImages ?? 1));
+  form.append("mode", input.mode ?? "edit");
 
   const res = await fetch(apiUrl("/api/mockups/generate"), {
     method: "POST",
