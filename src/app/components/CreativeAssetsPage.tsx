@@ -12,6 +12,7 @@ import {
   ArrowUp,
   Code2,
   FileText,
+  FolderInput,
   FolderPlus,
   GripVertical,
   ImagePlus,
@@ -26,6 +27,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { FolderIcon } from "./icons/FolderIcon";
 import { MockupsSectionNav } from "./MockupsSectionNav";
 import { PushToShopifyDialog } from "./PushToShopifyDialog";
@@ -34,10 +36,18 @@ import { Input } from "./ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,8 +78,11 @@ import {
   folderPrefersGallery,
   formatBytes,
   isImageItem,
+  isFolderOrDescendant,
+  listAssetFolders,
   loadCreativeAssets,
   moveAsset,
+  moveAssetsToFolder,
   renameAsset,
   reorderInFolder,
   saveCreativeAssets,
@@ -77,6 +90,8 @@ import {
   setQuickAccessMany,
   toggleQuickAccess,
 } from "../lib/creative-assets-storage";
+
+const ROOT_FOLDER_VALUE = "__root__";
 
 function FileTypeIcon({ kind }: { kind: AssetKind }) {
   if (kind === "folder") return <FolderIcon size="sm" />;
@@ -177,6 +192,8 @@ export function CreativeAssetsPage() {
     imageUrls: string[];
     defaultTitle: string;
   } | null>(null);
+  const [moveIds, setMoveIds] = useState<string[] | null>(null);
+  const [moveFolderValue, setMoveFolderValue] = useState(ROOT_FOLDER_VALUE);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const persist = useCallback((next: AssetItem[]) => {
@@ -400,6 +417,15 @@ export function CreativeAssetsPage() {
         >
           <Pencil className="mr-2 h-4 w-4" />
           Rename
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            setMoveIds([item.id]);
+            setMoveFolderValue(ROOT_FOLDER_VALUE);
+          }}
+        >
+          <FolderInput className="mr-2 h-4 w-4" />
+          Move to folder…
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={index === 0}
@@ -670,6 +696,18 @@ export function CreativeAssetsPage() {
             >
               <Star className="mr-1.5 h-3.5 w-3.5" />
               Quick Access
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-blue-200 bg-white"
+              onClick={() => {
+                setMoveIds([...selectedIds]);
+                setMoveFolderValue(ROOT_FOLDER_VALUE);
+              }}
+            >
+              <FolderInput className="mr-1.5 h-3.5 w-3.5" />
+              Move
             </Button>
             <Button
               size="sm"
@@ -1066,6 +1104,102 @@ export function CreativeAssetsPage() {
         imageUrls={shopifyPush?.imageUrls ?? []}
         defaultTitle={shopifyPush?.defaultTitle ?? ""}
       />
+
+      <Dialog
+        open={moveIds != null}
+        onOpenChange={(open) => {
+          if (!open) setMoveIds(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderInput className="h-4 w-4" />
+              Move to folder
+            </DialogTitle>
+            <DialogDescription>
+              {moveIds?.length === 1
+                ? "Send this item to another folder."
+                : `Send ${moveIds?.length ?? 0} items to another folder.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 py-1">
+            <label className="text-xs font-medium text-gray-600">Destination</label>
+            <Select value={moveFolderValue} onValueChange={setMoveFolderValue}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose folder" />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                {listAssetFolders(tree)
+                  .filter((f) => {
+                    if (!f.id) return true;
+                    if (!moveIds?.length) return true;
+                    // Can't move into a selected folder or inside a selected folder.
+                    return !moveIds.some(
+                      (id) =>
+                        id === f.id || isFolderOrDescendant(tree, id, f.id),
+                    );
+                  })
+                  .map((f) => (
+                    <SelectItem
+                      key={f.id || "root"}
+                      value={f.id || ROOT_FOLDER_VALUE}
+                    >
+                      {f.path}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setMoveIds(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!moveIds?.length) return;
+                const dest =
+                  moveFolderValue === ROOT_FOLDER_VALUE || !moveFolderValue
+                    ? null
+                    : moveFolderValue;
+                // Don't no-op move into the folder you're already viewing
+                if ((dest ?? null) === (currentFolderId ?? null)) {
+                  toast.message("Already in that folder");
+                  setMoveIds(null);
+                  return;
+                }
+                try {
+                  const next = moveAssetsToFolder(tree, moveIds, dest);
+                  persist(next);
+                  clearSelection();
+                  const label =
+                    dest == null
+                      ? "Creative Assets (root)"
+                      : listAssetFolders(tree).find((f) => f.id === dest)?.path ||
+                        "folder";
+                  toast.success(
+                    moveIds.length === 1
+                      ? `Moved to ${label}`
+                      : `Moved ${moveIds.length} items to ${label}`,
+                  );
+                  setMoveIds(null);
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : "Could not move items",
+                  );
+                }
+              }}
+            >
+              Move
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -464,6 +464,92 @@ export function listAssetFolders(
   return out;
 }
 
+/** True if `maybeDescendantId` is the folder or nested inside it. */
+export function isFolderOrDescendant(
+  items: AssetItem[],
+  folderId: string,
+  maybeDescendantId: string,
+): boolean {
+  if (folderId === maybeDescendantId) return true;
+  const folder = findAsset(items, folderId);
+  if (!folder || folder.kind !== "folder" || !folder.children?.length) return false;
+  const stack = [...folder.children];
+  while (stack.length) {
+    const node = stack.pop()!;
+    if (node.id === maybeDescendantId) return true;
+    if (node.children?.length) stack.push(...node.children);
+  }
+  return false;
+}
+
+/**
+ * Move one or more assets into `targetFolderId` (null / "" = root).
+ * Removes them from their current parent and prepends into the destination.
+ * Folders cannot be moved into themselves or their descendants.
+ */
+export function moveAssetsToFolder(
+  items: AssetItem[],
+  assetIds: string[],
+  targetFolderId: string | null,
+): AssetItem[] {
+  const ids = [...new Set(assetIds.filter(Boolean))];
+  if (!ids.length) return items;
+
+  const destId =
+    targetFolderId && targetFolderId.trim() ? targetFolderId.trim() : null;
+
+  for (const id of ids) {
+    const asset = findAsset(items, id);
+    if (!asset) continue;
+    if (asset.kind === "folder" && destId) {
+      if (isFolderOrDescendant(items, id, destId)) {
+        throw new Error("Can’t move a folder into itself or a subfolder");
+      }
+    }
+    if (destId && id === destId) {
+      throw new Error("Can’t move a folder into itself");
+    }
+  }
+
+  const idSet = new Set(ids);
+  const extracted: AssetItem[] = [];
+
+  const extract = (list: AssetItem[]): AssetItem[] => {
+    const kept: AssetItem[] = [];
+    for (const item of list) {
+      if (idSet.has(item.id)) {
+        extracted.push(item);
+        continue;
+      }
+      if (item.children?.length) {
+        kept.push({ ...item, children: extract(item.children) });
+      } else {
+        kept.push(item);
+      }
+    }
+    return kept;
+  };
+
+  let next = extract(items);
+  if (!extracted.length) return items;
+
+  // Preserve selection order when possible
+  const byId = new Map(extracted.map((a) => [a.id, a]));
+  const ordered = ids.map((id) => byId.get(id)).filter(Boolean) as AssetItem[];
+  const moved = ordered.length ? ordered : extracted;
+
+  if (destId == null) {
+    return [...moved, ...next];
+  }
+
+  const dest = findAsset(next, destId);
+  if (!dest || dest.kind !== "folder") {
+    throw new Error("Destination folder not found");
+  }
+
+  return mapFolderChildren(next, destId, (children) => [...moved, ...children]);
+}
+
 export function renameAsset(items: AssetItem[], id: string, name: string): AssetItem[] {
   const nextName = name.trim();
   if (!nextName) return items;
