@@ -148,7 +148,7 @@ const PRESETS: Array<{ id: PeriodPreset; label: string }> = [
 
 export function CombinedLiveStoresPanel() {
   const todayIso = toLocalIso(new Date());
-  const [preset, setPreset] = useState<PeriodPreset>("month");
+  const [preset, setPreset] = useState<PeriodPreset>("today");
   const [customStart, setCustomStart] = useState(monthStartIso(todayIso));
   const [customEnd, setCustomEnd] = useState(todayIso);
   const [appliedCustom, setAppliedCustom] = useState<{ start: string; end: string } | null>(
