@@ -38,6 +38,11 @@ class ShopifyClient:
         self._access_token: Optional[str] = None
         self._expires_at: Optional[datetime] = None
 
+    def clear_access_token(self) -> None:
+        """Drop cached client-credentials token (e.g. after scopes change)."""
+        self._access_token = None
+        self._expires_at = None
+
     def _urls(self) -> tuple[str, str, str]:
         base = f"https://{self.store_domain}"
         graphql = f"{base}/admin/api/{self.api_version}/graphql.json"

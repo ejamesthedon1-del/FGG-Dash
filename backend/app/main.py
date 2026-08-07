@@ -1909,13 +1909,38 @@ async def upload_shopify_file(payload: ShopifyFileUploadRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ShopifyGraphQLError as exc:
         detail = str(exc)
-        scope_msg = _shopify_product_scope_error(detail)
-        if scope_msg is None and (
-            "ACCESS_DENIED" in detail.upper() or "write_files" in detail.lower()
+        # Refresh token once — scopes may have been added while an old token was cached.
+        if "ACCESS_DENIED" in detail.upper() or "access denied" in detail.lower():
+            try:
+                client = get_shopify_client(brand_key)
+                client.clear_access_token()
+                result = await upload_image_to_files(
+                    client,
+                    source=payload.source,
+                    filename=payload.filename,
+                    alt=payload.alt,
+                )
+                return {
+                    "brand": brand_key,
+                    "brandLabel": BRAND_LABELS.get(brand_key, brand_key),
+                    **result,
+                }
+            except Exception:
+                pass
+        scope_msg = None
+        lower = detail.lower()
+        if (
+            "stageduploadscreate" in lower
+            or "filecreate" in lower
+            or "write_files" in lower
+            or "access_denied" in lower
+            or "access denied" in lower
         ):
             scope_msg = (
-                "Shopify Files access denied. Add scope write_files on the brand app, "
-                "then reinstall/refresh so the token picks up the scope."
+                "Shopify Files access denied. On the brand custom app, enable Admin API "
+                "scope write_files (and write_products if you also push drafts), save, "
+                "then reinstall/Install app so the token updates. Restart the API if it "
+                "still fails."
             )
         raise HTTPException(status_code=502, detail=scope_msg or detail) from exc
     except httpx.HTTPStatusError as exc:
