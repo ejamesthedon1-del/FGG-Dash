@@ -86,12 +86,13 @@ class ShopifyClient:
         *,
         api_version: Optional[str] = None,
     ) -> Dict[str, Any]:
-        token = await self.get_access_token()
         version = (api_version or self.api_version).strip()
         graphql_url = f"https://{self.store_domain}/admin/api/{version}/graphql.json"
 
         last_errors: Any = None
+        refreshed_after_401 = False
         for attempt in range(5):
+            token = await self.get_access_token()
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     graphql_url,
@@ -101,6 +102,11 @@ class ShopifyClient:
                     },
                     json={"query": query, "variables": variables or {}},
                 )
+                # After app reinstall, cached client-credentials tokens are revoked.
+                if response.status_code == 401 and not refreshed_after_401:
+                    self.clear_access_token()
+                    refreshed_after_401 = True
+                    continue
                 response.raise_for_status()
                 payload = response.json()
 
