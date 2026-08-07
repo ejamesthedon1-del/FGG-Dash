@@ -19,9 +19,11 @@ from .schemas import (
     ProductCostsPutRequest,
     ProductCreateRequest,
     ProductRenameRequest,
+    ShopifyFileUploadRequest,
     ShopifyqlRequest,
 )
 from .shopify import ShopifyGraphQLError, cancel_order_for_fraud, get_shopify_client
+from .shopify_files import upload_image_to_files
 from .shopify_products import create_draft_product
 from .meta import MetaAdsError, meta_ads_client
 from .slack import SlackError, slack_client
@@ -1876,6 +1878,48 @@ async def get_payments_balance(brand: str = "live-don") -> dict:
         raise HTTPException(status_code=502, detail=f"Shopify HTTP error: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/shopify/files/upload")
+async def upload_shopify_file(payload: ShopifyFileUploadRequest) -> dict:
+    """Upload an image into Shopify Content → Files and return the public CDN URL.
+
+    Used by Studio Schedule so Creative Assets (data URLs) can auto-publish to Instagram
+    without a manual Shopify upload. Requires write_files on the brand app.
+    """
+    brand_key = resolve_brand(payload.brand)
+    try:
+        client = get_shopify_client(brand_key)
+        result = await upload_image_to_files(
+            client,
+            source=payload.source,
+            filename=payload.filename,
+            alt=payload.alt,
+        )
+        return {
+            "brand": brand_key,
+            "brandLabel": BRAND_LABELS.get(brand_key, brand_key),
+            **result,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ShopifyGraphQLError as exc:
+        detail = str(exc)
+        scope_msg = _shopify_product_scope_error(detail)
+        if scope_msg is None and (
+            "ACCESS_DENIED" in detail.upper() or "write_files" in detail.lower()
+        ):
+            scope_msg = (
+                "Shopify Files access denied. Add scope write_files on the brand app, "
+                "then reinstall/refresh so the token picks up the scope."
+            )
+        raise HTTPException(status_code=502, detail=scope_msg or detail) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"Shopify HTTP error: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

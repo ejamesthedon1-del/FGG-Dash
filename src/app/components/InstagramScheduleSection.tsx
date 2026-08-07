@@ -49,11 +49,14 @@ import {
   type IgScheduledPost,
 } from "../lib/instagram-schedule-storage";
 import {
+  assetPublishUrl,
   findAsset,
   isImageItem,
   loadCreativeAssets,
   type AssetItem,
 } from "../lib/creative-assets-storage";
+import { hostCreativeAssetsOnShopify } from "../lib/creative-assets-shopify";
+import { uploadShopifyFile } from "../lib/shopify-files-api";
 import { InstagramFeedLayout } from "./InstagramFeedLayout";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -146,6 +149,7 @@ export function InstagramScheduleSection() {
   );
   const [assetId, setAssetId] = React.useState<string>("");
   const [externalUrl, setExternalUrl] = React.useState("");
+  const [hostingAsset, setHostingAsset] = React.useState(false);
   const [slides, setSlides] = React.useState<
     { src: string; name?: string; assetId?: string }[]
   >([]);
@@ -154,13 +158,15 @@ export function InstagramScheduleSection() {
   const [focusedPostId, setFocusedPostId] = React.useState<string | null>(null);
   const queueItemRefs = React.useRef<Map<string, HTMLLIElement>>(new Map());
 
+  const [assetsTick, setAssetsTick] = React.useState(0);
   const images = React.useMemo(
     () => flattenImages(loadCreativeAssets()),
-    [posts],
+    [assetsTick],
   );
 
   const refresh = React.useCallback(() => {
     setPosts(sortIgPosts(loadIgSchedule().posts));
+    setAssetsTick((n) => n + 1);
   }, []);
 
   const syncFromBackend = React.useCallback(async () => {
@@ -260,6 +266,61 @@ export function InstagramScheduleSection() {
     ]);
   };
 
+  /** Prefer stored Shopify CDN URL; only upload if missing. */
+  const addAssetSlide = async (asset: AssetItem) => {
+    if (!asset.src && !asset.shopifyUrl) return;
+    if (kind === "story" && slides.length >= 1) {
+      toast.error("Stories only support one image");
+      return;
+    }
+    if (slides.length >= IG_CAROUSEL_MAX) {
+      toast.error(`Max ${IG_CAROUSEL_MAX} images per carousel`);
+      return;
+    }
+
+    // Fresh copy in case hosting finished after the picker opened.
+    const latest =
+      findAsset(loadCreativeAssets(), asset.id) ?? asset;
+    const ready = assetPublishUrl(latest);
+    if (isPublicHttpsUrl(ready)) {
+      addSlide(ready!, { name: latest.name, assetId: latest.id });
+      return;
+    }
+
+    setHostingAsset(true);
+    const toastId = toast.loading(
+      `Uploading “${latest.name || "image"}” to Shopify Files…`,
+    );
+    try {
+      await hostCreativeAssetsOnShopify([latest], {
+        brand,
+        quiet: true,
+      });
+      const hosted = findAsset(loadCreativeAssets(), latest.id) ?? latest;
+      const url = assetPublishUrl(hosted);
+      if (!isPublicHttpsUrl(url)) {
+        // Last resort: upload for this schedule brand without persisting fail.
+        const result = await uploadShopifyFile({
+          brand,
+          source: latest.src!,
+          filename: latest.name || undefined,
+          alt: latest.name || undefined,
+        });
+        addSlide(result.url, { name: latest.name, assetId: latest.id });
+      } else {
+        addSlide(url!, { name: hosted.name, assetId: hosted.id });
+      }
+      toast.success("Added from Shopify Files", { id: toastId });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Shopify Files upload failed",
+        { id: toastId },
+      );
+    } finally {
+      setHostingAsset(false);
+    }
+  };
+
   const removeSlide = (index: number) => {
     setSlides((prev) => prev.filter((_, i) => i !== index));
   };
@@ -289,7 +350,7 @@ export function InstagramScheduleSection() {
     }
     if (!slides.every((s) => isPublicHttpsUrl(s.src))) {
       toast.error(
-        "Auto-publish needs public https:// image URLs (Shopify Files, CDN, etc.)",
+        "Auto-publish needs public https:// URLs — pick a Creative Asset (auto-uploads to Shopify Files) or paste an https link",
       );
       return;
     }
@@ -544,7 +605,8 @@ export function InstagramScheduleSection() {
             {slides.length > 0 &&
             !slides.every((s) => isPublicHttpsUrl(s.src)) ? (
               <p className="text-[12px] text-amber-700">
-                Needs a public https:// URL
+                Needs a public https:// URL (Creative Assets upload to Shopify
+                Files automatically)
               </p>
             ) : null}
 
@@ -552,24 +614,22 @@ export function InstagramScheduleSection() {
               <label className="block space-y-1.5">
                 <span className="text-[12px] text-gray-400">
                   Asset · carousel
+                  {hostingAsset ? " · uploading…" : ""}
                 </span>
                 <Select
                   value={assetId || "__none__"}
+                  disabled={hostingAsset}
                   onValueChange={(v) => {
                     if (v === "__none__") {
                       setAssetId("");
                       return;
                     }
-                    setAssetId(v);
+                    setAssetId("");
                     const asset =
                       findAsset(loadCreativeAssets(), v) ??
                       images.find((i) => i.id === v);
                     if (asset?.src) {
-                      addSlide(asset.src, {
-                        name: asset.name,
-                        assetId: asset.id,
-                      });
-                      setAssetId("");
+                      void addAssetSlide(asset);
                     }
                   }}
                 >
@@ -577,13 +637,20 @@ export function InstagramScheduleSection() {
                     aria-label="Creative asset"
                     className="h-7 w-full rounded-full px-3 text-[12px]"
                   >
-                    <SelectValue placeholder="Choose to add…" />
+                    <SelectValue
+                      placeholder={
+                        hostingAsset ? "Uploading to Shopify…" : "Choose to add…"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Choose to add…</SelectItem>
                     {images.map((img) => (
                       <SelectItem key={img.id} value={img.id}>
                         {img.name}
+                        {isPublicHttpsUrl(assetPublishUrl(img))
+                          ? " · ready"
+                          : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

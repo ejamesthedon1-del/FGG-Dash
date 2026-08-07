@@ -30,6 +30,7 @@ import {
   loadCreativeAssets,
   saveCreativeAssets,
 } from "../lib/creative-assets-storage";
+import { hostCreativeAssetsOnShopify } from "../lib/creative-assets-shopify";
 
 const LAST_FOLDER_KEY = "fgg.mockups-last-assets-folder.v1";
 const ROOT_FOLDER_VALUE = "__root__";
@@ -165,7 +166,7 @@ export function SaveToCreativeAssetsDialog({
         toast.error("That folder no longer exists — pick another");
         return;
       }
-      const next = addImages(tree, parentId, prepared);
+      const { items: next, added } = addImages(tree, parentId, prepared);
       if (!saveCreativeAssets(next)) {
         toast.error("Could not save to Creative Assets (storage full?)");
         return;
@@ -185,6 +186,8 @@ export function SaveToCreativeAssetsDialog({
           : `Saved ${prepared.length} images to ${folderLabel}`,
       );
       onOpenChange(false);
+      // Background: host on Shopify Files so Schedule has a CDN URL ready.
+      void hostCreativeAssetsOnShopify(added);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Could not save to Creative Assets",

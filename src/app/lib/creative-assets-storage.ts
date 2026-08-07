@@ -28,6 +28,11 @@ export type AssetItem = {
   view?: AssetView;
   /** Image preview (data URL or remote URL) */
   src?: string;
+  /** Public Shopify Files CDN URL (set after auto-host upload) */
+  shopifyUrl?: string;
+  /** Brand store used for Shopify Files hosting */
+  shopifyBrand?: string;
+  shopifyFileId?: string;
 };
 
 function placeholderSvg(label: string, c1: string, c2: string): string {
@@ -311,6 +316,15 @@ function parseItem(v: unknown): AssetItem | null {
     ...(v.quickAccess === true ? { quickAccess: true } : {}),
     ...(view ? { view } : {}),
     ...(typeof v.src === "string" && v.src ? { src: v.src } : {}),
+    ...(typeof v.shopifyUrl === "string" && v.shopifyUrl
+      ? { shopifyUrl: v.shopifyUrl }
+      : {}),
+    ...(typeof v.shopifyBrand === "string" && v.shopifyBrand
+      ? { shopifyBrand: v.shopifyBrand }
+      : {}),
+    ...(typeof v.shopifyFileId === "string" && v.shopifyFileId
+      ? { shopifyFileId: v.shopifyFileId }
+      : {}),
   };
 }
 
@@ -684,8 +698,8 @@ export function addImages(
   items: AssetItem[],
   folderId: string | null,
   images: Array<{ name: string; src: string; sizeLabel: string }>,
-): AssetItem[] {
-  const newItems: AssetItem[] = images.map((img) => ({
+): { items: AssetItem[]; added: AssetItem[] } {
+  const added: AssetItem[] = images.map((img) => ({
     id: newAssetId(),
     name: img.name,
     kind: "image" as const,
@@ -694,7 +708,45 @@ export function addImages(
     sharing: "Public" as const,
     src: img.src,
   }));
-  return mapFolderChildren(items, folderId, (children) => [...newItems, ...children]);
+  return {
+    items: mapFolderChildren(items, folderId, (children) => [
+      ...added,
+      ...children,
+    ]),
+    added,
+  };
+}
+
+/** Patch fields on an asset by id (deep). */
+export function patchAsset(
+  items: AssetItem[],
+  id: string,
+  patch: Partial<
+    Pick<
+      AssetItem,
+      "name" | "src" | "shopifyUrl" | "shopifyBrand" | "shopifyFileId" | "modified"
+    >
+  >,
+): AssetItem[] {
+  const walk = (list: AssetItem[]): AssetItem[] =>
+    list.map((item) => {
+      if (item.id === id) return { ...item, ...patch };
+      if (item.children?.length) {
+        return { ...item, children: walk(item.children) };
+      }
+      return item;
+    });
+  return walk(items);
+}
+
+/** Prefer Shopify CDN for publish; fall back to local/preview src. */
+export function assetPublishUrl(asset: AssetItem | undefined): string | undefined {
+  if (!asset) return undefined;
+  if (asset.shopifyUrl && /^https:\/\//i.test(asset.shopifyUrl)) {
+    return asset.shopifyUrl;
+  }
+  if (asset.src && /^https:\/\//i.test(asset.src)) return asset.src;
+  return asset.src;
 }
 
 export function setFolderView(

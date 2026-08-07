@@ -90,6 +90,7 @@ import {
   setQuickAccessMany,
   toggleQuickAccess,
 } from "../lib/creative-assets-storage";
+import { hostCreativeAssetsOnShopify } from "../lib/creative-assets-shopify";
 
 const ROOT_FOLDER_VALUE = "__root__";
 
@@ -373,8 +374,12 @@ export function CreativeAssetsPage() {
       });
     }
     if (!prepared.length) return;
-    persist(addImages(tree, currentFolderId, prepared));
+    const { items: next, added } = addImages(tree, currentFolderId, prepared);
+    persist(next);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    void hostCreativeAssetsOnShopify(added).then(() => {
+      setTree(loadCreativeAssets());
+    });
   };
 
   const itemMenu = (item: AssetItem, index: number) => (

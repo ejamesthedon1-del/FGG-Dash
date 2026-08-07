@@ -33,6 +33,16 @@ class ShopifyqlRequest(BaseModel):
     query: str = Field(..., min_length=1, description="e.g. FROM sales SHOW total_sales SINCE today")
 
 
+class ShopifyFileUploadRequest(BaseModel):
+    """Upload an image into Shopify Content → Files (for Schedule / CDN URLs)."""
+
+    brand: str = "live-don"
+    # data:image… or already-public http(s) URL
+    source: str = Field(..., min_length=1)
+    filename: Optional[str] = None
+    alt: Optional[str] = None
+
+
 class ProductUnitCostBody(BaseModel):
     garmentCost: float = 0
     laborCost: float = 0
