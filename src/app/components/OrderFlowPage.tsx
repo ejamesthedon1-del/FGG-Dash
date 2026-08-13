@@ -272,8 +272,10 @@ export function OrderFlowPage() {
   const load = useCallback(async (opts?: {
     preserveSelection?: boolean;
     forceRefresh?: boolean;
+    /** Refresh in place without unmounting the table (post-mutation sync). */
+    silent?: boolean;
   }) => {
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     try {
       // Always fetch all stages for accurate counts; filter client-side by stage tab.
       let data = await fetchOrderFlow({
@@ -319,7 +321,7 @@ export function OrderFlowPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load orders");
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [brand]);
 
@@ -383,17 +385,41 @@ export function OrderFlowPage() {
       });
       rememberStages(target, payload);
 
+      // Patch local state before switching tabs so the Ordered view isn't empty
+      // while a full reload would otherwise unmount the table.
+      const movedKeys = new Set(list.map((o) => `${o.brand}::${o.id}`));
+      const countDelta = new Map<string, number>();
+      for (const o of list) {
+        if (o.stage === target) continue;
+        countDelta.set(o.stage, (countDelta.get(o.stage) ?? 0) - 1);
+        countDelta.set(target, (countDelta.get(target) ?? 0) + 1);
+      }
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          movedKeys.has(`${o.brand}::${o.id}`)
+            ? {
+                ...o,
+                stage: target,
+                stageLabel: STAGE_LABELS[target],
+                blanksReceipt: options?.blanksReceipt ?? o.blanksReceipt,
+              }
+            : o,
+        ),
+      );
+      if (countDelta.size > 0) {
+        setStages((prev) =>
+          prev.map((s) => {
+            const delta = countDelta.get(s.id);
+            if (!delta) return s;
+            return { ...s, count: Math.max(0, s.count + delta) };
+          }),
+        );
+      }
+
       const keepSelected: Record<string, boolean> = {};
       for (const o of list) keepSelected[`${o.brand}::${o.id}`] = true;
       setSelected(keepSelected);
-      setStageAndUrl(target);
-
-      toast.success(
-        list.length === 1
-          ? `${list[0].orderNumber} → ${STAGE_LABELS[target]}`
-          : `${list.length} orders → ${STAGE_LABELS[target]}`,
-      );
-      await load({ preserveSelection: true, forceRefresh: true });
       if (detail && list.some((o) => o.id === detail.id && o.brand === detail.brand)) {
         setDetail((d) =>
           d
@@ -406,6 +432,14 @@ export function OrderFlowPage() {
             : d,
         );
       }
+      setStageAndUrl(target);
+
+      toast.success(
+        list.length === 1
+          ? `${list[0].orderNumber} → ${STAGE_LABELS[target]}`
+          : `${list.length} orders → ${STAGE_LABELS[target]}`,
+      );
+      await load({ preserveSelection: true, forceRefresh: true, silent: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update status");
     } finally {
@@ -518,7 +552,7 @@ export function OrderFlowPage() {
         { brand: detail.brand, shopifyOrderId: detail.id, orderName: detail.orderNumber },
       ]);
       toast.success("Notes saved");
-      await load({ preserveSelection: true, forceRefresh: true });
+      await load({ preserveSelection: true, forceRefresh: true, silent: true });
       setDetail((d) => (d ? { ...d, notes: notesDraft } : d));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save notes");
@@ -579,7 +613,7 @@ export function OrderFlowPage() {
         actor: "ops",
       });
       toast.success(`Supplies applied for ${order.orderNumber}`);
-      await load({ preserveSelection: true, forceRefresh: true });
+      await load({ preserveSelection: true, forceRefresh: true, silent: true });
       const at = new Date().toISOString();
       setDetail((prev) =>
         prev && prev.id === order.id && prev.brand === order.brand
@@ -698,7 +732,11 @@ export function OrderFlowPage() {
             riskQueue={riskQueue}
             busy={loading}
             onChanged={() =>
-              void load({ preserveSelection: true, forceRefresh: true })
+              void load({
+                preserveSelection: true,
+                forceRefresh: true,
+                silent: true,
+              })
             }
           />
         </TabsContent>
